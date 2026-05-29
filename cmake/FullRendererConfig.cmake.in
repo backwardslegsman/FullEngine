@@ -1,0 +1,25 @@
+@PACKAGE_INIT@
+
+include(CMakeFindDependencyMacro)
+
+if(@FULL_RENDERER_PACKAGE_USES_BGFX@)
+    find_dependency(bgfx CONFIG)
+endif()
+
+include("${CMAKE_CURRENT_LIST_DIR}/FullRendererTargets.cmake")
+
+get_target_property(_full_renderer_imported_configs FullRenderer::full_renderer IMPORTED_CONFIGURATIONS)
+if(_full_renderer_imported_configs)
+    list(GET _full_renderer_imported_configs 0 _full_renderer_fallback_config)
+    foreach(_full_renderer_config IN ITEMS DEBUG RELEASE RELWITHDEBINFO MINSIZEREL)
+        list(FIND _full_renderer_imported_configs "${_full_renderer_config}" _full_renderer_config_index)
+        if(_full_renderer_config_index EQUAL -1)
+            set_property(
+                TARGET FullRenderer::full_renderer
+                PROPERTY "MAP_IMPORTED_CONFIG_${_full_renderer_config}" "${_full_renderer_fallback_config}"
+            )
+        endif()
+    endforeach()
+endif()
+
+check_required_components(FullRenderer)

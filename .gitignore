@@ -1,0 +1,42 @@
+# Build outputs
+/build/
+/build-*/
+/out/
+
+# Local dependency installs and checkouts
+/vcpkg_installed/
+/build/vcpkg_installed/
+/external/vcpkg/
+/external/vcpkg
+
+# CMake local/user files
+CMakeUserPresets.json
+*.cmake.user
+
+# IDE/editor local state
+.vs/
+.idea/
+.vscode/.browse.VC.db*
+.vscode/ipch/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# Runtime/debug local state
+imgui.ini
+*.log
+
+# Compiled artifacts
+*.obj
+*.o
+*.lib
+*.a
+*.dll
+*.exe
+*.pdb
+*.ilk
+
+# OS files
+Thumbs.db
+.DS_Store

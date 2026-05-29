@@ -1,0 +1,248 @@
+{
+  "version": 6,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 21,
+    "patch": 0
+  },
+  "configurePresets": [
+    {
+      "name": "windows-vs-base",
+      "hidden": true,
+      "generator": "Visual Studio 17 2022",
+      "architecture": {
+        "value": "x64",
+        "strategy": "external"
+      },
+      "binaryDir": "${sourceDir}/out/build/${presetName}",
+      "cacheVariables": {
+        "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/external/vcpkg/scripts/buildsystems/vcpkg.cmake",
+        "VCPKG_INSTALLED_DIR": "${sourceDir}/build/vcpkg_installed",
+        "VCPKG_MANIFEST_MODE": "OFF",
+        "VCPKG_TARGET_TRIPLET": "x64-windows"
+      }
+    },
+    {
+      "name": "dev-debug",
+      "displayName": "Developer Debug",
+      "description": "Windows VS debug development build with sample, tests, bgfx backend, and build-local shaders.",
+      "inherits": "windows-vs-base",
+      "cacheVariables": {
+        "FULL_RENDERER_BUILD_SAMPLE": "ON",
+        "FULL_RENDERER_BUILD_TESTS": "ON",
+        "FULL_RENDERER_ENABLE_BGFX": "ON",
+        "FULL_RENDERER_ENABLE_DEBUG_UI": "OFF",
+        "FULL_RENDERER_ENABLE_SHADER_COMPILE": "ON"
+      }
+    },
+    {
+      "name": "dev-release",
+      "displayName": "Developer Release",
+      "description": "Windows VS release development build with sample, tests, bgfx backend, and build-local shaders.",
+      "inherits": "dev-debug"
+    },
+    {
+      "name": "library-only-debug",
+      "displayName": "Library Only Debug",
+      "description": "Build only the renderer library; no SDL3 sample, tests, ImGui, or shader target.",
+      "inherits": "windows-vs-base",
+      "cacheVariables": {
+        "FULL_RENDERER_BUILD_SAMPLE": "OFF",
+        "FULL_RENDERER_BUILD_TESTS": "OFF",
+        "FULL_RENDERER_ENABLE_BGFX": "ON",
+        "FULL_RENDERER_ENABLE_DEBUG_UI": "OFF",
+        "FULL_RENDERER_ENABLE_SHADER_COMPILE": "OFF"
+      }
+    },
+    {
+      "name": "package-debug",
+      "displayName": "Package Debug",
+      "description": "Configure the installable debug renderer library package.",
+      "inherits": "library-only-debug",
+      "cacheVariables": {
+        "CMAKE_INSTALL_PREFIX": "${sourceDir}/out/install/package-debug"
+      }
+    },
+    {
+      "name": "package-release",
+      "displayName": "Package Release",
+      "description": "Configure the installable release renderer library package.",
+      "inherits": "library-only-debug",
+      "cacheVariables": {
+        "CMAKE_INSTALL_PREFIX": "${sourceDir}/out/install/package-release"
+      }
+    },
+    {
+      "name": "package-no-debug-ui",
+      "displayName": "Package No Debug UI",
+      "description": "Configure the installable library package with sample, tests, ImGui, and shader tooling disabled.",
+      "inherits": "library-only-debug",
+      "cacheVariables": {
+        "FULL_RENDERER_ENABLE_DEBUG_UI": "OFF",
+        "CMAKE_INSTALL_PREFIX": "${sourceDir}/out/install/package-no-debug-ui"
+      }
+    },
+    {
+      "name": "no-debug-ui-debug",
+      "displayName": "No Debug UI Debug",
+      "description": "Build the sample and tests without Dear ImGui/debug UI dependencies.",
+      "inherits": "dev-debug",
+      "cacheVariables": {
+        "FULL_RENDERER_ENABLE_DEBUG_UI": "OFF"
+      }
+    },
+    {
+      "name": "tests-debug",
+      "displayName": "Tests Debug",
+      "description": "Build CPU-side tests without the SDL3 sample or shader target.",
+      "inherits": "windows-vs-base",
+      "cacheVariables": {
+        "FULL_RENDERER_BUILD_SAMPLE": "OFF",
+        "FULL_RENDERER_BUILD_TESTS": "ON",
+        "FULL_RENDERER_ENABLE_BGFX": "ON",
+        "FULL_RENDERER_ENABLE_DEBUG_UI": "OFF",
+        "FULL_RENDERER_ENABLE_SHADER_COMPILE": "OFF"
+      }
+    },
+    {
+      "name": "shader-validation",
+      "displayName": "Shader Validation",
+      "description": "Configure only enough of the sample build to compile the full bgfx shader set.",
+      "inherits": "windows-vs-base",
+      "cacheVariables": {
+        "FULL_RENDERER_BUILD_SAMPLE": "ON",
+        "FULL_RENDERER_BUILD_TESTS": "OFF",
+        "FULL_RENDERER_ENABLE_BGFX": "ON",
+        "FULL_RENDERER_ENABLE_DEBUG_UI": "OFF",
+        "FULL_RENDERER_ENABLE_SHADER_COMPILE": "ON"
+      }
+    },
+    {
+      "name": "ci-debug",
+      "displayName": "CI Debug",
+      "description": "CI-style Windows debug build with sample, tests, and shader validation.",
+      "inherits": "dev-debug"
+    },
+    {
+      "name": "ci-release",
+      "displayName": "CI Release",
+      "description": "CI-style Windows release build with sample, tests, and shader validation.",
+      "inherits": "dev-release"
+    },
+    {
+      "name": "ci-library-only",
+      "displayName": "CI Library Only",
+      "description": "CI-style renderer library-only build.",
+      "inherits": "library-only-debug"
+    },
+    {
+      "name": "ci-no-debug-ui",
+      "displayName": "CI No Debug UI",
+      "description": "CI-style sample and tests build without Dear ImGui/debug UI dependencies.",
+      "inherits": "no-debug-ui-debug"
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "dev-debug",
+      "configurePreset": "dev-debug",
+      "configuration": "Debug"
+    },
+    {
+      "name": "dev-release",
+      "configurePreset": "dev-release",
+      "configuration": "Release"
+    },
+    {
+      "name": "library-only-debug",
+      "configurePreset": "library-only-debug",
+      "configuration": "Debug",
+      "targets": [
+        "full_renderer"
+      ]
+    },
+    {
+      "name": "package-debug",
+      "configurePreset": "package-debug",
+      "configuration": "Debug",
+      "targets": [
+        "full_renderer"
+      ]
+    },
+    {
+      "name": "package-release",
+      "configurePreset": "package-release",
+      "configuration": "Release",
+      "targets": [
+        "full_renderer"
+      ]
+    },
+    {
+      "name": "package-no-debug-ui",
+      "configurePreset": "package-no-debug-ui",
+      "configuration": "Debug",
+      "targets": [
+        "full_renderer"
+      ]
+    },
+    {
+      "name": "no-debug-ui-debug",
+      "configurePreset": "no-debug-ui-debug",
+      "configuration": "Debug"
+    },
+    {
+      "name": "tests-debug",
+      "configurePreset": "tests-debug",
+      "configuration": "Debug"
+    },
+    {
+      "name": "shader-validation",
+      "configurePreset": "shader-validation",
+      "configuration": "Debug",
+      "targets": [
+        "full_renderer_shaders"
+      ]
+    },
+    {
+      "name": "ci-debug",
+      "configurePreset": "ci-debug",
+      "configuration": "Debug"
+    },
+    {
+      "name": "ci-release",
+      "configurePreset": "ci-release",
+      "configuration": "Release"
+    },
+    {
+      "name": "ci-library-only",
+      "configurePreset": "ci-library-only",
+      "configuration": "Debug",
+      "targets": [
+        "full_renderer"
+      ]
+    },
+    {
+      "name": "ci-no-debug-ui",
+      "configurePreset": "ci-no-debug-ui",
+      "configuration": "Debug"
+    }
+  ],
+  "testPresets": [
+    {
+      "name": "tests-debug",
+      "configurePreset": "tests-debug",
+      "configuration": "Debug",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "ci-debug",
+      "configurePreset": "ci-debug",
+      "configuration": "Debug",
+      "output": {
+        "outputOnFailure": true
+      }
+    }
+  ]
+}

@@ -1,0 +1,78 @@
+# FullRenderer
+
+FullRenderer is a C++17 renderer built on bgfx with an SDL3 sample shell. The
+renderer is intended to remain an embeddable library for a future open-world
+engine, with engine-facing APIs documented under `src/renderer/public`.
+
+The repository also reserves `src/engine/` for future engine runtime work. That
+engine area is separate from renderer internals and should consume the renderer
+through the public CMake target `FullRenderer::full_renderer`.
+
+## Current status
+
+- Renderer foundation, open-world terrain basics, and several Phase 3 feature
+  foundations are present.
+- The renderer is suitable for prototype engine integration and package
+  consumer smoke testing.
+- Production open-world readiness work is tracked in
+  `docs/agents/roadmap.md`.
+
+## Repository layout
+
+```text
+src/app/                 SDL3 sample app and validation shell
+src/renderer/            renderer implementation and public API
+src/engine/              future engine runtime area
+src/engine_bridge/       sample/testing adapter, not the real engine
+assets/                  shader, texture, and mesh source assets
+tools/                   shader, asset, and CI tooling
+tests/                   CPU-side tests and consumer smoke checks
+docs/                    architecture, build, and integration docs
+```
+
+## Build
+
+The first supported development environment is Windows with Visual Studio 2022,
+CMake, vcpkg, bgfx, and the D3D11 shader profile.
+
+Developer debug build:
+
+```powershell
+cmake --preset dev-debug
+cmake --build --preset dev-debug
+```
+
+Library-only build:
+
+```powershell
+cmake --preset library-only-debug
+cmake --build --preset library-only-debug
+```
+
+Package validation:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\tools\ci\Run-WindowsPackageValidation.ps1
+```
+
+Use `-InstallDependencies` with that script on a clean machine or CI agent.
+More details are in `docs/build.md`.
+
+## Documentation
+
+- `docs/renderer_overview.md` explains the renderer foundation and readiness.
+- `docs/engine_overview.md` explains the future engine boundary.
+- `docs/engine_integration.md` shows how an engine consumes the renderer.
+- `docs/agents/roadmap.md` tracks renderer phases and the engine expansion
+  track.
+
+## GitHub workflow
+
+The repository includes `.github/workflows/windows-package-validation.yml`,
+which runs the Windows package validation script on pushes, pull requests, and
+manual dispatch.
+
+## License
+
+No license has been selected yet. Add a `LICENSE` file before publishing if the
+repository should be open source or shared outside a private organization.

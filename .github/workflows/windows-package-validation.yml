@@ -1,0 +1,24 @@
+name: Windows Package Validation
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - master
+  workflow_dispatch:
+
+jobs:
+  package-consumer-smoke:
+    name: Package, Tests, And Consumer Smoke
+    runs-on: windows-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Run Windows package validation
+        shell: pwsh
+        run: pwsh -NoProfile -ExecutionPolicy Bypass -File ./tools/ci/Run-WindowsPackageValidation.ps1 -InstallDependencies

@@ -1,0 +1,70 @@
+{
+  "version": 6,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 21,
+    "patch": 0
+  },
+  "configurePresets": [
+    {
+      "name": "windows-vs-base",
+      "hidden": true,
+      "generator": "Visual Studio 17 2022",
+      "architecture": {
+        "value": "x64",
+        "strategy": "external"
+      },
+      "binaryDir": "${sourceDir}/../../out/build/${presetName}",
+      "cacheVariables": {
+        "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/../../external/vcpkg/scripts/buildsystems/vcpkg.cmake",
+        "VCPKG_INSTALLED_DIR": "${sourceDir}/../../build/vcpkg_installed",
+        "VCPKG_MANIFEST_MODE": "OFF",
+        "VCPKG_TARGET_TRIPLET": "x64-windows"
+      }
+    },
+    {
+      "name": "consumer-smoke-debug",
+      "displayName": "Consumer Smoke Debug",
+      "description": "Configure an external-style consumer against the locally staged Debug install prefix.",
+      "inherits": "windows-vs-base",
+      "cacheVariables": {
+        "CMAKE_PREFIX_PATH": "${sourceDir}/../../out/install/package-debug;${sourceDir}/../../build/vcpkg_installed/x64-windows"
+      }
+    },
+    {
+      "name": "consumer-smoke-release",
+      "displayName": "Consumer Smoke Release",
+      "description": "Configure an external-style consumer against the locally staged Release install prefix.",
+      "inherits": "windows-vs-base",
+      "cacheVariables": {
+        "CMAKE_PREFIX_PATH": "${sourceDir}/../../out/install/package-release;${sourceDir}/../../build/vcpkg_installed/x64-windows"
+      }
+    },
+    {
+      "name": "consumer-smoke-no-debug-ui",
+      "displayName": "Consumer Smoke No Debug UI",
+      "description": "Configure an external-style consumer against the no-debug-UI staged install prefix.",
+      "inherits": "windows-vs-base",
+      "cacheVariables": {
+        "CMAKE_PREFIX_PATH": "${sourceDir}/../../out/install/package-no-debug-ui;${sourceDir}/../../build/vcpkg_installed/x64-windows"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "consumer-smoke-debug",
+      "configurePreset": "consumer-smoke-debug",
+      "configuration": "Debug"
+    },
+    {
+      "name": "consumer-smoke-release",
+      "configurePreset": "consumer-smoke-release",
+      "configuration": "Release"
+    },
+    {
+      "name": "consumer-smoke-no-debug-ui",
+      "configurePreset": "consumer-smoke-no-debug-ui",
+      "configuration": "Debug"
+    }
+  ]
+}

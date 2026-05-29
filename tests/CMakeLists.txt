@@ -1,0 +1,40 @@
+function(add_full_renderer_test target source)
+    add_executable(${target}
+        ${source}
+    )
+
+    target_link_libraries(${target} PRIVATE FullRenderer::full_renderer)
+    target_include_directories(${target} PRIVATE ${PROJECT_SOURCE_DIR}/src)
+    target_compile_features(${target} PRIVATE cxx_std_17)
+    set_target_properties(${target} PROPERTIES
+        CXX_EXTENSIONS OFF
+    )
+
+    add_test(NAME ${target} COMMAND ${target})
+endfunction()
+
+add_full_renderer_test(full_renderer_lifecycle_tests renderer_lifecycle_test.cpp)
+add_full_renderer_test(full_renderer_terrain_grid_mesh_tests terrain_grid_mesh_test.cpp)
+add_full_renderer_test(full_renderer_terrain_math_tests terrain_math_test.cpp)
+add_full_renderer_test(full_renderer_culling_diagnostics_tests culling_diagnostics_test.cpp)
+add_full_renderer_test(full_renderer_frame_budget_tests frame_budget_test.cpp)
+add_full_renderer_test(full_renderer_material_policy_tests material_policy_test.cpp)
+add_full_renderer_test(full_renderer_asset_contract_tests asset_contract_test.cpp)
+add_full_renderer_test(full_renderer_terrain_system_tests terrain_system_test.cpp)
+add_full_renderer_test(full_renderer_terrain_debug_tests terrain_debug_test.cpp)
+add_full_renderer_test(full_renderer_shadow_math_tests shadow_math_test.cpp)
+add_full_renderer_test(full_renderer_environment_tests environment_test.cpp)
+add_full_renderer_test(full_renderer_animation_tests animation_test.cpp)
+add_full_renderer_test(full_renderer_ssao_tests ssao_test.cpp)
+add_full_renderer_test(full_renderer_decal_tests decal_test.cpp)
+add_full_renderer_test(full_renderer_particle_tests particle_test.cpp)
+add_full_renderer_test(full_renderer_weather_tests weather_test.cpp)
+add_full_renderer_test(full_renderer_fade_tests fade_test.cpp)
+add_full_renderer_test(full_renderer_color_grading_tests color_grading_test.cpp)
+add_full_renderer_test(full_renderer_post_pass_tests post_pass_test.cpp)
+add_full_renderer_test(full_renderer_validation_tests validation_test.cpp)
+add_full_renderer_test(full_renderer_long_session_churn_tests long_session_churn_test.cpp)
+add_full_renderer_test(full_renderer_engine_streaming_seam_tests engine_streaming_seam_test.cpp)
+target_link_libraries(full_renderer_engine_streaming_seam_tests PRIVATE full_renderer_engine_bridge)
+add_full_renderer_test(full_renderer_resource_lifetime_tests resource_lifetime_test.cpp)
+add_full_renderer_test(full_renderer_public_header_compile_tests public_header_compile_test.cpp)
