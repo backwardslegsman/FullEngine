@@ -60,6 +60,7 @@ Implemented pieces:
 - stable signed 3D chunk IDs
 - chunk residency states: unloaded, loading, resident, and unloading
 - a deterministic CPU-only chunk registry with constrained state transitions
+- a CPU-only FIFO request queue for engine-owned residency intent
 - double-precision world positions, bounds, and camera-relative origin rebasing
 - render-space conversion helpers with conservative float-range validation
 - world render snapshots that combine chunk residency, world bounds, and
@@ -71,8 +72,9 @@ Implemented pieces:
   renderer mesh/material/LOD/splat handles without owning those resources
 - a submission adapter that calls only public terrain APIs and updates
   `ChunkTerrainHandleMap` after successful create/destroy operations
-- sample app terrain wiring that runs startup chunks through the engine
-  integration path while keeping mesh/material/texture creation sample-owned
+- sample app terrain wiring that enqueues debug-UI residency changes and runs
+  them through the engine integration path while keeping mesh/material/texture
+  creation sample-owned
 - CPU and fake-renderer tests for engine lifecycle, world ownership, terrain
   integration seams, and end-to-end terrain pipeline composition
 
@@ -80,7 +82,7 @@ Still future work:
 
 - async loading, streaming jobs, and IO
 - asset catalogs and cooked asset manifests
-- dynamic terrain residency changes in the sample or editor UI
+- production terrain streaming policy and editor-owned residency controls
 - real engine-owned mesh/material/texture creation and lifetime policy
 - renderer descriptor conversion for non-terrain draws and cameras
 - scene/entity ownership, gameplay simulation, persistence, and editor tooling

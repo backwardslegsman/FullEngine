@@ -347,10 +347,15 @@ move gameplay, streaming policy, or editor concepts into renderer internals.
   renderer-shaped descriptor intent, and submitted through public renderer
   terrain APIs. CPU and fake-renderer tests cover the full chain without GPU
   initialization.
-- The sample terrain grid now demonstrates that chain at startup. The sample
-  still creates renderer mesh/material/texture assets directly, but chunk
-  residency, command intent, descriptor building, submission, and handle-map
-  ownership flow through `src/engine/renderer_integration/`.
+- The sample terrain grid now demonstrates that chain at startup and through
+  debug-UI residency toggles. The sample still creates renderer
+  mesh/material/texture assets directly, but chunk residency, command intent,
+  descriptor building, submission, and handle-map ownership flow through
+  `src/engine/renderer_integration/`.
+- Initial engine-owned residency request queuing is in place: debug UI
+  residency changes are represented as ordered world requests, applied to
+  `WorldChunkRegistry` before renderer terrain submission, and covered by
+  CPU tests without adding async IO or streaming jobs.
 - Define engine-owned chunk IDs, streaming regions, residency state, and
   large-world origin policy.
 - Translate world coordinates to renderer-relative frame data in

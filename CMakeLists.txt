@@ -129,6 +129,8 @@ add_library(full_engine STATIC
     src/engine/world/WorldChunkRegistry.hpp
     src/engine/world/WorldOrigin.cpp
     src/engine/world/WorldOrigin.hpp
+    src/engine/world/WorldResidencyRequests.cpp
+    src/engine/world/WorldResidencyRequests.hpp
 )
 
 add_library(full_renderer_engine_bridge STATIC EXCLUDE_FROM_ALL

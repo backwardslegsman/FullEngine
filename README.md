@@ -14,12 +14,12 @@ public CMake target `FullRenderer::full_renderer`.
   foundations are present.
 - A minimal `full_engine` target now exists with lifecycle/tick validation,
   renderer-boundary smoke coverage, engine-owned world chunk state, large-world
-  origin helpers, and a terrain integration chain through descriptor intent and
-  renderer submission.
+  origin helpers, residency request queuing, and a terrain integration chain
+  through descriptor intent and renderer submission.
 - The SDL3 sample keeps renderer mesh/material/texture ownership local, but its
-  startup terrain chunks now flow through engine world snapshots, terrain prep,
+  terrain chunks now flow through engine world snapshots, terrain prep,
   lifecycle planning, renderer command intent, descriptor building, submission,
-  and chunk-handle association.
+  and chunk-handle association, including debug-UI residency toggles.
 - The renderer is suitable for prototype engine integration and package
   consumer smoke testing.
 - Production open-world readiness work is tracked in
