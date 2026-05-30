@@ -61,6 +61,19 @@ std::size_t ChunkTerrainHandleMap::mappedCount() const noexcept
     return handles_.size();
 }
 
+std::vector<ChunkTerrainHandleRecord> ChunkTerrainHandleMap::records() const
+{
+    std::vector<ChunkTerrainHandleRecord> result;
+    result.reserve(handles_.size());
+
+    for (const auto& entry : handles_)
+    {
+        result.push_back(ChunkTerrainHandleRecord{entry.first, entry.second});
+    }
+
+    return result;
+}
+
 void ChunkTerrainHandleMap::clear() noexcept
 {
     handles_.clear();

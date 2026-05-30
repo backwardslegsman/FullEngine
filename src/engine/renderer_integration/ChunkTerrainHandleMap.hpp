@@ -5,6 +5,7 @@
 
 #include <cstddef>
 #include <map>
+#include <vector>
 
 namespace full_engine
 {
@@ -52,6 +53,9 @@ public:
 
     /** @brief Returns the number of chunk-to-handle associations. */
     std::size_t mappedCount() const noexcept;
+
+    /** @brief Returns value snapshots of all mappings in deterministic `ChunkId` order. */
+    std::vector<ChunkTerrainHandleRecord> records() const;
 
     /** @brief Removes all chunk-to-handle associations without touching renderer resources. */
     void clear() noexcept;
