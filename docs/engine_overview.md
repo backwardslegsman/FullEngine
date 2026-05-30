@@ -65,6 +65,7 @@ Implemented pieces:
 - chunk residency states: unloaded, loading, resident, and unloading
 - a deterministic CPU-only chunk registry with constrained state transitions
 - a CPU-only FIFO request queue for engine-owned residency intent
+- a CPU-only FIFO request queue for terrain setup add/remove intent
 - double-precision world positions, bounds, and camera-relative origin rebasing
 - render-space conversion helpers with conservative float-range validation
 - world render snapshots that combine chunk catalog bounds, residency, and
@@ -77,8 +78,9 @@ Implemented pieces:
 - a submission adapter that calls only public terrain APIs and updates
   `ChunkTerrainHandleMap` after successful create/destroy operations
 - sample app terrain wiring that enqueues debug-UI residency changes, runs them
-  through the engine integration path, and removes coordinated terrain setup
-  state during teardown after renderer terrain handles are destroyed
+  through the engine integration path, and applies setup add/remove intent
+  through `TerrainChunkRequestQueue` from single-chunk and ring-batch runtime
+  debug UI controls with last-apply setup diagnostics
 - CPU and fake-renderer tests for engine lifecycle, world ownership, terrain
   integration seams, and end-to-end terrain pipeline composition
 

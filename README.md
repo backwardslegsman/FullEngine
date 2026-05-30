@@ -20,7 +20,8 @@ public CMake target `FullRenderer::full_renderer`.
 - The SDL3 sample keeps renderer mesh/material/texture ownership local, but its
   terrain chunks now flow through engine world snapshots, terrain prep,
   lifecycle planning, renderer command intent, descriptor building, submission,
-  and chunk-handle association, including debug-UI residency toggles.
+  chunk-handle association, debug-UI residency toggles, and terrain setup
+  add/remove controls.
 - The renderer is suitable for prototype engine integration and package
   consumer smoke testing.
 - Production open-world readiness work is tracked in

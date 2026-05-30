@@ -366,6 +366,12 @@ move gameplay, streaming policy, or editor concepts into renderer internals.
   helper pairs world chunk setup with terrain resource catalog entries while
   keeping renderer handles and submission in their existing later seams. The
   sample exercises both setup add and remove during its terrain lifecycle.
+- Initial terrain setup request queuing is in place: add/remove setup intent can
+  be buffered and applied deterministically without touching residency,
+  renderer handles, or renderer submission. The sample now routes startup and
+  teardown terrain setup through this queue and exposes runtime debug UI
+  controls, ring-batch controls, and last-apply diagnostics for setup
+  add/remove intent.
 - Define engine-owned chunk IDs, streaming regions, residency state, and
   large-world origin policy.
 - Translate world coordinates to renderer-relative frame data in
