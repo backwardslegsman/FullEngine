@@ -388,6 +388,11 @@ move gameplay, streaming policy, or editor concepts into renderer internals.
   setup and residency intent are reusable engine-facing queues, diagnostics are
   engine-owned value snapshots, and sample terrain submission now goes through
   an engine-owned runtime update before renderer frame submission.
+- A terrain runtime state object now owns pending setup/residency queues and
+  the latest runtime update result for callers that want a compact engine-owned
+  holder without giving the engine ownership of registries, renderer resources,
+  or sample UI mirrors. It also exposes pending-request checks so callers can
+  drive request-based updates without separate dirty flags.
 - Define engine-owned chunk IDs, streaming regions, residency state, and
   large-world origin policy.
 - Translate world coordinates to renderer-relative frame data in

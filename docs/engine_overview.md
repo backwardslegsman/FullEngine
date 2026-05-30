@@ -78,6 +78,9 @@ Implemented pieces:
 - a stateless terrain runtime controller that applies setup requests, applies
   registered residency requests, runs the terrain pipeline, and returns
   aggregate diagnostics for the caller
+- a terrain runtime state object that owns pending setup/residency queues and
+  the latest runtime update result so callers can keep queue/result plumbing in
+  one engine-owned value
 - terrain resource catalogs that associate chunks with externally supplied
   renderer mesh/material/LOD/splat handles without owning those resources
 - a submission adapter that calls only public terrain APIs and updates
@@ -101,12 +104,17 @@ pipeline, and renderer-submission counters as value snapshots.
 `runTerrainPipeline` owns the ordered translation from world chunk state to
 renderer terrain submission. `updateTerrainRuntime` applies setup requests,
 filters and applies registered residency requests, runs the pipeline, clears
-handled queues, and returns one aggregate update result.
+handled queues, and returns one aggregate update result. `TerrainRuntimeState`
+wraps those queues and the latest result for callers that want a compact
+runtime holder with `hasPendingRequests()` dirty-state checks, without
+transferring ownership of registries, catalogs, renderer handles, or renderer
+resources.
 
 The sample still owns demo UI state and renderer mesh/material/texture
-creation. It queues setup and residency intent, calls the runtime controller
-before renderer frame submission, mirrors display state from engine registries,
-and submits the mapped renderer terrain handles in its render packet.
+creation. It queues setup and residency intent through `TerrainRuntimeState`,
+updates that state before renderer frame submission, mirrors display state from
+engine registries, and submits the mapped renderer terrain handles in its
+render packet.
 
 Still future work:
 

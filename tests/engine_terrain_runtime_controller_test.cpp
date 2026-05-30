@@ -310,6 +310,81 @@ void testRendererFailureReportsPipelineFailure(std::vector<std::string>& failure
     expect(result.diagnostics.pipeline.submission.rendererFailedCount == 1, "diagnostics count renderer failure", failures);
     expect(fixture.handles.mappedCount() == 0, "failed create does not map terrain handle", failures);
 }
+
+void testRuntimeStateOwnsQueuesAndLatestResult(std::vector<std::string>& failures)
+{
+    RuntimeFixture fixture;
+    full_engine::TerrainRuntimeState state;
+    const full_engine::ChunkId id{7, 0, 0};
+
+    expect(state.setupRequestCount() == 0, "default state has no setup requests", failures);
+    expect(state.residencyRequestCount() == 0, "default state has no residency requests", failures);
+    expect(!state.hasPendingRequests(), "default state has no pending requests", failures);
+    expect(state.latestUpdate().status == full_engine::TerrainRuntimeUpdateStatus::Success, "default latest status is success", failures);
+    expect(state.latestDiagnostics().pipeline.handleCount == 0, "default latest diagnostics are empty", failures);
+
+    state.queueSetupAdd(worldDesc(id), terrainResources(id));
+    state.queueMakeResident(id);
+    expect(state.setupRequestCount() == 1, "state queues setup add", failures);
+    expect(state.residencyRequestCount() == 1, "state queues residency request", failures);
+    expect(state.hasPendingRequests(), "state reports pending setup/residency requests", failures);
+
+    const full_engine::TerrainRuntimeUpdateResult& addResult = state.update(
+        fixture.renderer,
+        fixture.registry,
+        fixture.worldCatalog,
+        fixture.resources,
+        fixture.handles);
+    expect(addResult.status == full_engine::TerrainRuntimeUpdateStatus::Success, "state update succeeds", failures);
+    expect(state.setupRequestCount() == 0, "state update clears setup requests", failures);
+    expect(state.residencyRequestCount() == 0, "state update clears residency requests", failures);
+    expect(!state.hasPendingRequests(), "state update clears pending request state", failures);
+    expect(state.latestUpdate().pipeline.submission.summary.createdCount == 1, "state stores latest create result", failures);
+    expect(state.latestDiagnostics().pipeline.handleCount == 1, "state stores latest diagnostics", failures);
+    expect(fixture.handles.contains(id), "state update maps terrain handle", failures);
+
+    state.queueMakeUnloaded(id);
+    expect(state.residencyRequestCount() == 1, "state queues pending unload", failures);
+    expect(state.hasPendingRequests(), "state reports pending unload", failures);
+    state.clearRequests();
+    expect(state.residencyRequestCount() == 0, "state clearRequests clears residency queue", failures);
+    expect(!state.hasPendingRequests(), "state clearRequests clears pending state", failures);
+    expect(state.latestDiagnostics().pipeline.handleCount == 1, "state clearRequests preserves latest diagnostics", failures);
+
+    state.queueSetupRemove(id);
+    const full_engine::TerrainRuntimeUpdateResult& removeResult = state.update(
+        fixture.renderer,
+        fixture.registry,
+        fixture.worldCatalog,
+        fixture.resources,
+        fixture.handles);
+    expect(removeResult.status == full_engine::TerrainRuntimeUpdateStatus::Success, "state remove update succeeds", failures);
+    expect(state.latestUpdate().pipeline.submission.summary.destroyedCount == 1, "state stores latest destroy result", failures);
+    expect(state.latestDiagnostics().pipeline.handleCount == 0, "state diagnostics update after remove", failures);
+    expect(!fixture.handles.contains(id), "state remove releases mapped handle", failures);
+}
+
+void testRuntimeStatePreservesFailureStatus(std::vector<std::string>& failures)
+{
+    RuntimeFixture fixture;
+    full_engine::TerrainRuntimeState state;
+    const full_engine::ChunkId id{8, 0, 0};
+    full_engine::TerrainChunkResourceDesc invalidResources = terrainResources(id);
+    invalidResources.lodCount = 0;
+
+    state.queueSetupAdd(worldDesc(id), invalidResources);
+    const full_engine::TerrainRuntimeUpdateResult& result = state.update(
+        fixture.renderer,
+        fixture.registry,
+        fixture.worldCatalog,
+        fixture.resources,
+        fixture.handles);
+
+    expect(result.status == full_engine::TerrainRuntimeUpdateStatus::SetupFailed, "state update preserves setup failure", failures);
+    expect(state.latestUpdate().status == full_engine::TerrainRuntimeUpdateStatus::SetupFailed, "state latest update stores failure", failures);
+    expect(state.latestDiagnostics().setupRequests.summary.invalidArgumentCount == 1, "state latest diagnostics store failure", failures);
+    expect(state.setupRequestCount() == 0, "state clears setup queue after failure", failures);
+}
 } // namespace
 
 int main()
@@ -322,6 +397,8 @@ int main()
     testInvalidSetupFailsBeforePipeline(failures);
     testUnregisteredResidencyRequestIsDiagnosticNotFailure(failures);
     testRendererFailureReportsPipelineFailure(failures);
+    testRuntimeStateOwnsQueuesAndLatestResult(failures);
+    testRuntimeStatePreservesFailureStatus(failures);
 
     if (!failures.empty())
     {

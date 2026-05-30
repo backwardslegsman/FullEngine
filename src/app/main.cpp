@@ -1131,13 +1131,10 @@ void drawTerrainDiagnosticsPanel(
     int& sampleDecalCount,
     SampleValidationState& validationState,
     SampleOpenWorldChurnState& openWorldChurnState,
-    const full_engine::TerrainIntegrationDiagnostics& terrainDiagnostics,
+    full_engine::TerrainRuntimeState& terrainRuntime,
     std::vector<SampleTerrainChunkState>& sampleTerrainChunks,
-    full_engine::WorldChunkResidencyRequestQueue& terrainResidencyRequests,
-    full_engine::TerrainChunkRequestQueue& terrainSetupRequests,
     SampleTerrainResidencyControls& terrainResidencyControls,
     int terrainGridRadius,
-    bool& engineTerrainPipelineDirty,
     Vec3& cameraPosition,
     Vec3& cameraTarget,
     float& cameraFovYRadians,
@@ -1197,6 +1194,7 @@ void drawTerrainDiagnosticsPanel(
 
     if (ImGui::CollapsingHeader("Engine terrain pipeline"))
     {
+        const full_engine::TerrainIntegrationDiagnostics& terrainDiagnostics = terrainRuntime.latestDiagnostics();
         const full_engine::TerrainPipelineDiagnostics& pipeline = terrainDiagnostics.pipeline;
         const full_engine::TerrainSetupRequestDiagnostics& terrainSetupDiagnostics = terrainDiagnostics.setupRequests;
         const full_engine::TerrainResidencyRequestDiagnostics& terrainResidencyDiagnostics =
@@ -1254,8 +1252,8 @@ void drawTerrainDiagnosticsPanel(
             static_cast<unsigned long long>(countResidentSampleTerrainChunks(sampleTerrainChunks)));
         ImGui::Text(
             "Queued setup/residency requests: %llu / %llu",
-            static_cast<unsigned long long>(terrainSetupRequests.requestCount()),
-            static_cast<unsigned long long>(terrainResidencyRequests.requestCount()));
+            static_cast<unsigned long long>(terrainRuntime.setupRequestCount()),
+            static_cast<unsigned long long>(terrainRuntime.residencyRequestCount()));
         ImGui::Text(
             "Last setup requests: total %llu, add %llu, remove %llu",
             static_cast<unsigned long long>(terrainSetupDiagnostics.requestCount),
@@ -1299,64 +1297,54 @@ void drawTerrainDiagnosticsPanel(
         if (ImGui::Button("Add Setup") && selectedChunk != nullptr && !selectedChunk->setupRegistered)
         {
             selectedChunk->resident = true;
-            terrainSetupRequests.pushAdd(selectedChunk->worldDesc, selectedChunk->resourceDesc);
-            terrainResidencyRequests.push(selectedChunkId, full_engine::WorldChunkResidencyRequestType::MakeResident);
-            engineTerrainPipelineDirty = true;
+            terrainRuntime.queueSetupAdd(selectedChunk->worldDesc, selectedChunk->resourceDesc);
+            terrainRuntime.queueMakeResident(selectedChunkId);
         }
         ImGui::SameLine();
         if (ImGui::Button("Remove Setup") && selectedRegistered)
         {
             selectedChunk->resident = false;
-            terrainSetupRequests.pushRemove(selectedChunkId);
-            engineTerrainPipelineDirty = true;
+            terrainRuntime.queueSetupRemove(selectedChunkId);
         }
         ImGui::InputInt("Ring Radius", &terrainResidencyControls.batchRingRadius);
         terrainResidencyControls.batchRingRadius =
             std::max(0, std::min(terrainGridRadius, terrainResidencyControls.batchRingRadius));
         if (ImGui::Button("Remove Ring"))
         {
-            bool queuedAny = false;
             for (SampleTerrainChunkState& chunk : sampleTerrainChunks)
             {
                 const int ringRadius = std::max(std::abs(chunk.id.x), std::abs(chunk.id.z));
                 if (ringRadius == terrainResidencyControls.batchRingRadius && chunk.setupRegistered)
                 {
                     chunk.resident = false;
-                    terrainSetupRequests.pushRemove(chunk.id);
-                    queuedAny = true;
+                    terrainRuntime.queueSetupRemove(chunk.id);
                 }
             }
-            engineTerrainPipelineDirty = engineTerrainPipelineDirty || queuedAny;
         }
         ImGui::SameLine();
         if (ImGui::Button("Restore Ring"))
         {
-            bool queuedAny = false;
             for (SampleTerrainChunkState& chunk : sampleTerrainChunks)
             {
                 const int ringRadius = std::max(std::abs(chunk.id.x), std::abs(chunk.id.z));
                 if (ringRadius == terrainResidencyControls.batchRingRadius && !chunk.setupRegistered)
                 {
                     chunk.resident = true;
-                    terrainSetupRequests.pushAdd(chunk.worldDesc, chunk.resourceDesc);
-                    terrainResidencyRequests.push(chunk.id, full_engine::WorldChunkResidencyRequestType::MakeResident);
-                    queuedAny = true;
+                    terrainRuntime.queueSetupAdd(chunk.worldDesc, chunk.resourceDesc);
+                    terrainRuntime.queueMakeResident(chunk.id);
                 }
             }
-            engineTerrainPipelineDirty = engineTerrainPipelineDirty || queuedAny;
         }
         if (ImGui::Button("Make Resident") && selectedRegistered)
         {
             selectedChunk->resident = true;
-            terrainResidencyRequests.push(selectedChunkId, full_engine::WorldChunkResidencyRequestType::MakeResident);
-            engineTerrainPipelineDirty = true;
+            terrainRuntime.queueMakeResident(selectedChunkId);
         }
         ImGui::SameLine();
         if (ImGui::Button("Make Unloaded") && selectedRegistered)
         {
             selectedChunk->resident = false;
-            terrainResidencyRequests.push(selectedChunkId, full_engine::WorldChunkResidencyRequestType::MakeUnloaded);
-            engineTerrainPipelineDirty = true;
+            terrainRuntime.queueMakeUnloaded(selectedChunkId);
         }
         if (ImGui::Button("Reload Center"))
         {
@@ -1366,9 +1354,8 @@ void drawTerrainDiagnosticsPanel(
                 if (centerChunk->setupRegistered)
                 {
                     centerChunk->resident = false;
-                    terrainResidencyRequests.push(centerChunkId, full_engine::WorldChunkResidencyRequestType::MakeUnloaded);
+                    terrainRuntime.queueMakeUnloaded(centerChunkId);
                     terrainResidencyControls.reloadCenterAfterUnload = true;
-                    engineTerrainPipelineDirty = true;
                 }
             }
         }
@@ -1380,12 +1367,9 @@ void drawTerrainDiagnosticsPanel(
                 if (chunk.setupRegistered)
                 {
                     chunk.resident = true;
-                    terrainResidencyRequests.push(
-                        chunk.id,
-                        full_engine::WorldChunkResidencyRequestType::MakeResident);
+                    terrainRuntime.queueMakeResident(chunk.id);
                 }
             }
-            engineTerrainPipelineDirty = true;
         }
     }
 
@@ -3195,16 +3179,12 @@ int main(int argc, char** argv)
 
     full_engine::WorldChunkRegistry engineTerrainRegistry;
     full_engine::WorldChunkCatalog engineTerrainCatalog;
-    full_engine::WorldChunkResidencyRequestQueue terrainResidencyRequests;
-    full_engine::TerrainChunkRequestQueue terrainSetupRequests;
     full_engine::TerrainResourceCatalog engineTerrainResources;
     full_engine::ChunkTerrainHandleMap engineTerrainHandles;
-    full_engine::TerrainPipelineRunResult engineTerrainPipeline;
-    full_engine::TerrainIntegrationDiagnostics terrainDiagnostics;
+    full_engine::TerrainRuntimeState terrainRuntime;
     std::vector<SampleTerrainChunkState> sampleTerrainChunks;
     std::vector<full_renderer::TerrainChunkHandle> terrainChunks;
     SampleTerrainResidencyControls terrainResidencyControls;
-    bool engineTerrainPipelineDirty = false;
     const int kGridRadius = static_cast<int>(validationScene.terrainGridRadius);
     terrainResidencyControls.batchRingRadius = kGridRadius;
     const float kChunkSize = validationScene.chunkSizeMeters;
@@ -3373,7 +3353,6 @@ int main(int argc, char** argv)
                 engineTerrainRegistry,
                 engineTerrainCatalog,
                 engineTerrainResources);
-            terrainDiagnostics.setupRequests = full_engine::makeTerrainSetupRequestDiagnostics(setupResult);
             const bool setupApplied =
                 setupResult.records.size() == 1 &&
                 setupResult.records[0].status == full_engine::TerrainChunkRequestStatus::Applied;
@@ -3408,15 +3387,14 @@ int main(int argc, char** argv)
 
     full_engine::TerrainRuntimeUpdateOptions engineTerrainRuntimeOptions;
     engineTerrainRuntimeOptions.pipelineOptions.snapshotOptions.origin = full_engine::makeAbsoluteOrigin();
-    engineTerrainPipeline = full_engine::runTerrainPipeline(
+    const full_engine::TerrainRuntimeUpdateResult& initialTerrainUpdate = terrainRuntime.update(
         *renderer,
         engineTerrainRegistry,
         engineTerrainCatalog,
         engineTerrainResources,
         engineTerrainHandles,
-        engineTerrainRuntimeOptions.pipelineOptions);
-    terrainDiagnostics.pipeline = engineTerrainPipeline.diagnostics;
-    if (!engineTerrainPipeline.succeeded ||
+        engineTerrainRuntimeOptions);
+    if (initialTerrainUpdate.status != full_engine::TerrainRuntimeUpdateStatus::Success ||
         engineTerrainHandles.mappedCount() != sampleTerrainChunks.size())
     {
         std::cerr << "Failed to submit sample terrain through engine integration.\n";
@@ -3713,19 +3691,15 @@ int main(int argc, char** argv)
         }
         frameDesc.deltaSeconds = elapsed.count();
 
-        if (engineTerrainPipelineDirty)
+        if (terrainRuntime.hasPendingRequests())
         {
-            const full_engine::TerrainRuntimeUpdateResult updateResult = full_engine::updateTerrainRuntime(
+            const full_engine::TerrainRuntimeUpdateResult& updateResult = terrainRuntime.update(
                 *renderer,
                 engineTerrainRegistry,
                 engineTerrainCatalog,
                 engineTerrainResources,
                 engineTerrainHandles,
-                terrainSetupRequests,
-                terrainResidencyRequests,
                 engineTerrainRuntimeOptions);
-            terrainDiagnostics = updateResult.diagnostics;
-            engineTerrainPipeline = updateResult.pipeline;
 
             if (updateResult.status == full_engine::TerrainRuntimeUpdateStatus::SetupFailed)
             {
@@ -3748,7 +3722,6 @@ int main(int argc, char** argv)
                 engineTerrainCatalog,
                 engineTerrainResources,
                 sampleTerrainChunks);
-            engineTerrainPipelineDirty = false;
             if (terrainResidencyControls.reloadCenterAfterUnload)
             {
                 const full_engine::ChunkId centerChunkId = {};
@@ -3757,10 +3730,7 @@ int main(int argc, char** argv)
                     if (centerChunk->setupRegistered)
                     {
                         centerChunk->resident = true;
-                        terrainResidencyRequests.push(
-                            centerChunkId,
-                            full_engine::WorldChunkResidencyRequestType::MakeResident);
-                        engineTerrainPipelineDirty = true;
+                        terrainRuntime.queueMakeResident(centerChunkId);
                     }
                 }
                 terrainResidencyControls.reloadCenterAfterUnload = false;
@@ -4259,13 +4229,10 @@ int main(int argc, char** argv)
                 sampleDecalCount,
                 validationState,
                 openWorldChurnState,
-                terrainDiagnostics,
+                terrainRuntime,
                 sampleTerrainChunks,
-                terrainResidencyRequests,
-                terrainSetupRequests,
                 terrainResidencyControls,
                 kGridRadius,
-                engineTerrainPipelineDirty,
                 cameraPosition,
                 cameraTarget,
                 cameraFovYRadians,

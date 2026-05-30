@@ -119,4 +119,77 @@ TerrainRuntimeUpdateResult updateTerrainRuntime(
     result.status = TerrainRuntimeUpdateStatus::Success;
     return result;
 }
+
+void TerrainRuntimeState::queueSetupAdd(
+    const WorldChunkDesc& worldDesc,
+    const TerrainChunkResourceDesc& resourceDesc)
+{
+    setupRequests_.pushAdd(worldDesc, resourceDesc);
+}
+
+void TerrainRuntimeState::queueSetupRemove(const ChunkId& id)
+{
+    setupRequests_.pushRemove(id);
+}
+
+void TerrainRuntimeState::queueMakeResident(const ChunkId& id)
+{
+    residencyRequests_.push(id, WorldChunkResidencyRequestType::MakeResident);
+}
+
+void TerrainRuntimeState::queueMakeUnloaded(const ChunkId& id)
+{
+    residencyRequests_.push(id, WorldChunkResidencyRequestType::MakeUnloaded);
+}
+
+std::size_t TerrainRuntimeState::setupRequestCount() const noexcept
+{
+    return setupRequests_.requestCount();
+}
+
+std::size_t TerrainRuntimeState::residencyRequestCount() const noexcept
+{
+    return residencyRequests_.requestCount();
+}
+
+bool TerrainRuntimeState::hasPendingRequests() const noexcept
+{
+    return setupRequestCount() > 0 || residencyRequestCount() > 0;
+}
+
+const TerrainRuntimeUpdateResult& TerrainRuntimeState::latestUpdate() const noexcept
+{
+    return latestUpdate_;
+}
+
+const TerrainIntegrationDiagnostics& TerrainRuntimeState::latestDiagnostics() const noexcept
+{
+    return latestUpdate_.diagnostics;
+}
+
+void TerrainRuntimeState::clearRequests() noexcept
+{
+    setupRequests_.clear();
+    residencyRequests_.clear();
+}
+
+const TerrainRuntimeUpdateResult& TerrainRuntimeState::update(
+    full_renderer::IRenderer& renderer,
+    WorldChunkRegistry& registry,
+    WorldChunkCatalog& worldCatalog,
+    TerrainResourceCatalog& resources,
+    ChunkTerrainHandleMap& handles,
+    const TerrainRuntimeUpdateOptions& options)
+{
+    latestUpdate_ = updateTerrainRuntime(
+        renderer,
+        registry,
+        worldCatalog,
+        resources,
+        handles,
+        setupRequests_,
+        residencyRequests_,
+        options);
+    return latestUpdate_;
+}
 } // namespace full_engine
