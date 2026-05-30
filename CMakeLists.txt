@@ -121,6 +121,8 @@ add_library(full_engine STATIC
     src/engine/renderer_integration/TerrainResourceCatalog.hpp
     src/engine/renderer_integration/TerrainRenderPrep.cpp
     src/engine/renderer_integration/TerrainRenderPrep.hpp
+    src/engine/renderer_integration/TerrainSubmissionAdapter.cpp
+    src/engine/renderer_integration/TerrainSubmissionAdapter.hpp
     src/engine/renderer_integration/WorldRenderSnapshot.cpp
     src/engine/renderer_integration/WorldRenderSnapshot.hpp
     src/engine/world/WorldChunkRegistry.cpp
