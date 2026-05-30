@@ -1079,6 +1079,7 @@ if(FULL_RENDERER_BUILD_SAMPLE)
     target_link_libraries(full_renderer_sample
         PRIVATE
             FullRenderer::full_renderer
+            full_engine
             full_renderer_engine_bridge
             ${FULL_RENDERER_SDL3_TARGET}
     )

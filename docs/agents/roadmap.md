@@ -147,9 +147,12 @@ milestones before adding more visual effects.
   runs fixed-seed churn through that mapping layer, and demonstrates
   caller-owned camera-relative origin conversion for representative
   large-coordinate diagnostics without moving streaming policy into renderer
-  core. The seam is kept out of the installed renderer package target, while
-  the public renderer API now exposes in-place terrain chunk descriptor updates
-  and terrain shadow-caster debug snapshots for engine integration.
+  core. `src/engine` now owns the first real terrain integration chain through
+  chunk residency, render snapshots, resource catalogs, descriptor intent,
+  submission, and handle associations. The seam is kept out of the installed
+  renderer package target, while the public renderer API now exposes in-place
+  terrain chunk descriptor updates and terrain shadow-caster debug snapshots
+  for engine integration.
 - Harden terrain chunk streaming, LOD transitions, chunk material residency,
   skirts/seams, and large-scene culling stress cases.
 - Add shared culling diagnostics for terrain, static meshes, instancing,
@@ -241,8 +244,10 @@ open-world engine, finish or explicitly defer:
   fixed-seed renderer-facing churn and engine-bridge seam tests now cover
   terrain chunks, engine-to-renderer mapping, materials, textures, LODs,
   decals, particles, skinned palettes, optional passes, post targets, and
-  origin shifts, but they intentionally stop short of background IO, streaming
-  policy, or world persistence.
+  origin shifts. The `src/engine` terrain path now composes from world snapshot
+  through fake-renderer submission and sample startup wiring, but it
+  intentionally stops short of background IO, dynamic streaming policy, or
+  world persistence.
 - a production large-world precision proof beyond the current caller-rebased
   single-precision render-space policy. The engine bridge now documents and
   tests camera-relative origin conversion at representative coordinates, but
@@ -336,6 +341,16 @@ move gameplay, streaming policy, or editor concepts into renderer internals.
   skipped records are counted by status. Renderer terrain descriptors,
   mesh/material/LOD selection, renderer handles, and resource creation remain
   deferred.
+- Initial terrain renderer integration chain is in place: terrain prep records
+  can be diffed against `ChunkTerrainHandleMap`, converted to renderer command
+  intent, paired with terrain resource catalog entries, converted into
+  renderer-shaped descriptor intent, and submitted through public renderer
+  terrain APIs. CPU and fake-renderer tests cover the full chain without GPU
+  initialization.
+- The sample terrain grid now demonstrates that chain at startup. The sample
+  still creates renderer mesh/material/texture assets directly, but chunk
+  residency, command intent, descriptor building, submission, and handle-map
+  ownership flow through `src/engine/renderer_integration/`.
 - Define engine-owned chunk IDs, streaming regions, residency state, and
   large-world origin policy.
 - Translate world coordinates to renderer-relative frame data in

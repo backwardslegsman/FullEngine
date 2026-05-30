@@ -4,16 +4,22 @@ FullRenderer is a C++17 renderer built on bgfx with an SDL3 sample shell. The
 renderer is intended to remain an embeddable library for a future open-world
 engine, with engine-facing APIs documented under `src/renderer/public`.
 
-The repository also reserves `src/engine/` for future engine runtime work. That
-engine area is separate from renderer internals and should consume the renderer
-through the public CMake target `FullRenderer::full_renderer`.
+The repository also contains an initial `src/engine/` foundation. That engine
+area is separate from renderer internals and consumes the renderer through the
+public CMake target `FullRenderer::full_renderer`.
 
 ## Current status
 
 - Renderer foundation, open-world terrain basics, and several Phase 3 feature
   foundations are present.
 - A minimal `full_engine` target now exists with lifecycle/tick validation,
-  renderer-boundary smoke coverage, and an engine-owned world chunk registry.
+  renderer-boundary smoke coverage, engine-owned world chunk state, large-world
+  origin helpers, and a terrain integration chain through descriptor intent and
+  renderer submission.
+- The SDL3 sample keeps renderer mesh/material/texture ownership local, but its
+  startup terrain chunks now flow through engine world snapshots, terrain prep,
+  lifecycle planning, renderer command intent, descriptor building, submission,
+  and chunk-handle association.
 - The renderer is suitable for prototype engine integration and package
   consumer smoke testing.
 - Production open-world readiness work is tracked in
@@ -24,7 +30,7 @@ through the public CMake target `FullRenderer::full_renderer`.
 ```text
 src/app/                 SDL3 sample app and validation shell
 src/renderer/            renderer implementation and public API
-src/engine/              engine core, world ownership, and renderer boundary
+src/engine/              engine core, world ownership, and renderer integration
 src/engine_bridge/       sample/testing adapter, not the real engine
 assets/                  shader, texture, and mesh source assets
 tools/                   shader, asset, and CI tooling
@@ -71,7 +77,7 @@ ctest --test-dir out\build\tests-debug --output-on-failure -C Debug
 ## Documentation
 
 - `docs/renderer_overview.md` explains the renderer foundation and readiness.
-- `docs/engine_overview.md` explains the future engine boundary.
+- `docs/engine_overview.md` explains the current engine boundary.
 - `docs/engine_integration.md` shows how an engine consumes the renderer.
 - `docs/agents/roadmap.md` tracks renderer phases and the engine expansion
   track.

@@ -40,8 +40,9 @@ sample types, Dear ImGui types, or `src/app` demo state.
   handles. The current slice contains a smoke adapter and CPU-side render-space
   conversion from engine-owned double-precision world data to bounded
   single-precision relative values, plus a world render snapshot seam that
-  prepares chunk status records and terrain prep records without creating
-  renderer resources.
+  prepares chunk status records and terrain prep records. It also contains the
+  initial terrain descriptor, lifecycle, command, resource-catalog, submission,
+  and handle-map seams used by the sample terrain setup.
 
 Add these directories only as real work needs them. Empty scaffolding is less
 useful than a small, tested boundary.
@@ -64,14 +65,24 @@ Implemented pieces:
 - world render snapshots that combine chunk residency, world bounds, and
   render-space conversion into diagnostic records
 - terrain prep records filtered from ready world render snapshot records
-- CPU tests for engine lifecycle and world chunk registry behavior
+- terrain lifecycle planning, renderer command intent, and renderer-shaped
+  descriptor intent for ready terrain chunks
+- terrain resource catalogs that associate chunks with externally supplied
+  renderer mesh/material/LOD/splat handles without owning those resources
+- a submission adapter that calls only public terrain APIs and updates
+  `ChunkTerrainHandleMap` after successful create/destroy operations
+- sample app terrain wiring that runs startup chunks through the engine
+  integration path while keeping mesh/material/texture creation sample-owned
+- CPU and fake-renderer tests for engine lifecycle, world ownership, terrain
+  integration seams, and end-to-end terrain pipeline composition
 
 Still future work:
 
-- direct renderer descriptor conversion for terrain, draws, and cameras
-- renderer handle mapping for world chunks
 - async loading, streaming jobs, and IO
 - asset catalogs and cooked asset manifests
+- dynamic terrain residency changes in the sample or editor UI
+- real engine-owned mesh/material/texture creation and lifetime policy
+- renderer descriptor conversion for non-terrain draws and cameras
 - scene/entity ownership, gameplay simulation, persistence, and editor tooling
 
 ## Relationship to `src/engine_bridge`

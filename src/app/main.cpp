@@ -1,5 +1,15 @@
 #include "full_renderer/Renderer.hpp"
 
+#include "engine/renderer_integration/ChunkTerrainHandleMap.hpp"
+#include "engine/renderer_integration/TerrainDescriptorBuilder.hpp"
+#include "engine/renderer_integration/TerrainLifecyclePlan.hpp"
+#include "engine/renderer_integration/TerrainRendererCommands.hpp"
+#include "engine/renderer_integration/TerrainRenderPrep.hpp"
+#include "engine/renderer_integration/TerrainResourceCatalog.hpp"
+#include "engine/renderer_integration/TerrainSubmissionAdapter.hpp"
+#include "engine/renderer_integration/WorldRenderSnapshot.hpp"
+#include "engine/world/WorldChunkRegistry.hpp"
+#include "engine/world/WorldOrigin.hpp"
 #include "engine_bridge/StreamingSeam.hpp"
 #if FULL_RENDERER_ENABLE_DEBUG_UI
 #include "renderer/bgfx/BgfxRenderDevice.hpp"
@@ -29,6 +39,7 @@
 #include <array>
 #include <chrono>
 #include <cmath>
+#include <cstddef>
 #include <cstdint>
 #include <cstring>
 #include <iostream>
@@ -700,6 +711,50 @@ struct SampleOpenWorldChurnState
     full_renderer::engine_bridge::EngineStreamingChurnSummary seamSummary = {};
 };
 
+struct SampleEngineTerrainPipelineState
+{
+    full_engine::WorldRenderSnapshot snapshot = {};
+    full_engine::TerrainRenderPrep prep = {};
+    full_engine::TerrainLifecyclePlan lifecycle = {};
+    full_engine::TerrainRendererCommandList commands = {};
+    full_engine::TerrainDescriptorBuildResult descriptors = {};
+    full_engine::TerrainSubmissionResult submission = {};
+};
+
+full_engine::WorldBounds toEngineWorldBounds(const full_renderer::Aabb& bounds) noexcept
+{
+    full_engine::WorldBounds worldBounds;
+    worldBounds.min.x = bounds.min[0];
+    worldBounds.min.y = bounds.min[1];
+    worldBounds.min.z = bounds.min[2];
+    worldBounds.max.x = bounds.max[0];
+    worldBounds.max.y = bounds.max[1];
+    worldBounds.max.z = bounds.max[2];
+    return worldBounds;
+}
+
+void refreshTerrainSubmitHandles(
+    const full_engine::ChunkTerrainHandleMap& handleMap,
+    std::vector<full_renderer::TerrainChunkHandle>& terrainChunks)
+{
+    terrainChunks.clear();
+    for (const full_engine::ChunkTerrainHandleRecord& record : handleMap.records())
+    {
+        terrainChunks.push_back(record.handle);
+    }
+}
+
+void destroyMappedTerrainChunks(
+    full_renderer::IRenderer& renderer,
+    full_engine::ChunkTerrainHandleMap& handleMap)
+{
+    for (const full_engine::ChunkTerrainHandleRecord& record : handleMap.records())
+    {
+        renderer.destroyTerrainChunk(record.handle);
+    }
+    handleMap.clear();
+}
+
 full_renderer::debug::LongSessionChurnOptions makeOpenWorldChurnOptions(
     const SampleOpenWorldChurnState& state) noexcept
 {
@@ -934,6 +989,8 @@ void drawTerrainDiagnosticsPanel(
     int& sampleDecalCount,
     SampleValidationState& validationState,
     SampleOpenWorldChurnState& openWorldChurnState,
+    const SampleEngineTerrainPipelineState& engineTerrainPipeline,
+    std::size_t engineTerrainHandleCount,
     Vec3& cameraPosition,
     Vec3& cameraTarget,
     float& cameraFovYRadians,
@@ -990,6 +1047,60 @@ void drawTerrainDiagnosticsPanel(
         stats.offCameraShadowCasterChunks);
     ImGui::TextUnformatted("Origin policy: caller-rebased float world coordinates");
     ImGui::TextUnformatted("Layer texture fallbacks: backend-local");
+
+    if (ImGui::CollapsingHeader("Engine terrain pipeline"))
+    {
+        const full_engine::WorldRenderSnapshot& snapshot = engineTerrainPipeline.snapshot;
+        const full_engine::TerrainRenderPrepSummary& prep = engineTerrainPipeline.prep.summary;
+        const full_engine::TerrainLifecyclePlanSummary& lifecycle = engineTerrainPipeline.lifecycle.summary;
+        const full_engine::TerrainRendererCommandSummary& commands = engineTerrainPipeline.commands.summary;
+        const full_engine::TerrainDescriptorBuildSummary& descriptors = engineTerrainPipeline.descriptors.summary;
+        const full_engine::TerrainSubmissionSummary& submission = engineTerrainPipeline.submission.summary;
+
+        ImGui::Text("Handle map: %llu", static_cast<unsigned long long>(engineTerrainHandleCount));
+        ImGui::Text(
+            "Snapshot: ready %llu, not resident %llu, missing %llu, invalid %llu, out of range %llu",
+            static_cast<unsigned long long>(snapshot.readyCount),
+            static_cast<unsigned long long>(snapshot.notResidentCount),
+            static_cast<unsigned long long>(snapshot.missingChunkCount),
+            static_cast<unsigned long long>(snapshot.invalidBoundsCount),
+            static_cast<unsigned long long>(snapshot.outOfRangeCount));
+        ImGui::Text(
+            "Prep: ready %llu, skipped %llu",
+            static_cast<unsigned long long>(prep.readyCount),
+            static_cast<unsigned long long>(
+                prep.skippedNotResidentCount +
+                prep.skippedMissingChunkCount +
+                prep.skippedInvalidBoundsCount +
+                prep.skippedOutOfRangeCount));
+        ImGui::Text(
+            "Lifecycle: create %llu, keep %llu, update %llu, release %llu",
+            static_cast<unsigned long long>(lifecycle.createCount),
+            static_cast<unsigned long long>(lifecycle.keepCount),
+            static_cast<unsigned long long>(lifecycle.updateCount),
+            static_cast<unsigned long long>(lifecycle.releaseCount));
+        ImGui::Text(
+            "Commands: create %llu, keep %llu, update %llu, destroy %llu",
+            static_cast<unsigned long long>(commands.createCount),
+            static_cast<unsigned long long>(commands.keepCount),
+            static_cast<unsigned long long>(commands.updateCount),
+            static_cast<unsigned long long>(commands.destroyCount));
+        ImGui::Text(
+            "Descriptors: ready %llu, missing %llu, invalid %llu, ignored %llu",
+            static_cast<unsigned long long>(descriptors.readyCount),
+            static_cast<unsigned long long>(descriptors.missingResourcesCount),
+            static_cast<unsigned long long>(descriptors.invalidResourcesCount),
+            static_cast<unsigned long long>(descriptors.ignoredCount));
+        ImGui::Text(
+            "Submission: created %llu, updated %llu, destroyed %llu, kept %llu, skipped %llu, failures %llu",
+            static_cast<unsigned long long>(submission.createdCount),
+            static_cast<unsigned long long>(submission.updatedCount),
+            static_cast<unsigned long long>(submission.destroyedCount),
+            static_cast<unsigned long long>(submission.keptCount),
+            static_cast<unsigned long long>(submission.skippedCount),
+            static_cast<unsigned long long>(
+                submission.rendererFailedCount + submission.handleMapFailedCount));
+    }
 
     if (ImGui::BeginTable("Terrain LOD Counts", 3, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg))
     {
@@ -2795,9 +2906,18 @@ int main(int argc, char** argv)
         return 1;
     }
 
+    full_engine::WorldChunkRegistry engineTerrainRegistry;
+    full_engine::TerrainResourceCatalog engineTerrainResources;
+    full_engine::ChunkTerrainHandleMap engineTerrainHandles;
+    SampleEngineTerrainPipelineState engineTerrainPipeline;
+    std::vector<full_engine::WorldChunkRenderDesc> engineTerrainChunkDescs;
     std::vector<full_renderer::TerrainChunkHandle> terrainChunks;
     const int kGridRadius = static_cast<int>(validationScene.terrainGridRadius);
     const float kChunkSize = validationScene.chunkSizeMeters;
+    const std::size_t terrainGridWidth = static_cast<std::size_t>((kGridRadius * 2) + 1);
+    const std::size_t terrainGridChunkCount = terrainGridWidth * terrainGridWidth;
+    engineTerrainChunkDescs.reserve(terrainGridChunkCount);
+    terrainChunks.reserve(terrainGridChunkCount);
     constexpr float kTerrainY = -1.25f;
     constexpr bool kTerrainSkirtsEnabled = true;
     constexpr float kTerrainSkirtDepth = 0.60f;
@@ -2923,40 +3043,84 @@ int main(int argc, char** argv)
     {
         for (int x = -kGridRadius; x <= kGridRadius; ++x)
         {
+            const full_engine::ChunkId chunkId = {
+                static_cast<std::int32_t>(x),
+                0,
+                static_cast<std::int32_t>(z)};
             const float minX = static_cast<float>(x) * kChunkSize;
             const float minZ = static_cast<float>(z) * kChunkSize;
-            full_renderer::TerrainLodDesc lods[full_renderer::kMaxTerrainLodLevels] = {};
-            for (std::uint32_t lodIndex = 0; lodIndex < full_renderer::kMaxTerrainLodLevels; ++lodIndex)
-            {
-                lods[lodIndex].mesh = terrainMeshes[lodIndex];
-                lods[lodIndex].material = terrainMaterial;
-                lods[lodIndex].maxDistanceMeters = kTerrainLodDistances[lodIndex];
-            }
-            full_renderer::TerrainChunkDesc chunkDesc;
-            chunkDesc.bounds = makeBounds(
+            const full_renderer::Aabb chunkBounds = makeBounds(
                 minX,
                 kTerrainY - (kTerrainSkirtsEnabled ? kTerrainSkirtDepth : 0.0f) - 0.10f,
                 minZ,
                 minX + kChunkSize,
                 kTerrainY + 0.80f,
                 minZ + kChunkSize);
-            chunkDesc.lods = lods;
-            chunkDesc.lodCount = full_renderer::kMaxTerrainLodLevels;
-            chunkDesc.splatMap = ((x == 0 && z == 0) || (x == -kGridRadius && z == kGridRadius))
+
+            full_engine::TerrainChunkResourceDesc resourceDesc;
+            resourceDesc.id = chunkId;
+            resourceDesc.lodCount = full_renderer::kMaxTerrainLodLevels;
+            resourceDesc.splatMap = ((x == 0 && z == 0) || (x == -kGridRadius && z == kGridRadius))
                 ? full_renderer::TextureHandle{}
                 : terrainSplatMap;
-
-            const full_renderer::TerrainChunkHandle chunk = renderer->createTerrainChunk(chunkDesc);
-            if (!full_renderer::isValid(chunk))
+            for (std::uint32_t lodIndex = 0; lodIndex < full_renderer::kMaxTerrainLodLevels; ++lodIndex)
             {
-                std::cerr << "Failed to create terrain chunk.\n";
+                resourceDesc.lods[lodIndex].mesh = terrainMeshes[lodIndex];
+                resourceDesc.lods[lodIndex].material = terrainMaterial;
+                resourceDesc.lods[lodIndex].maxDistanceMeters = kTerrainLodDistances[lodIndex];
+            }
+
+            const bool registered =
+                engineTerrainRegistry.createChunk(chunkId) == full_engine::WorldResult::Success &&
+                engineTerrainRegistry.setResidencyState(chunkId, full_engine::ChunkResidencyState::Loading) ==
+                    full_engine::WorldResult::Success &&
+                engineTerrainRegistry.setResidencyState(chunkId, full_engine::ChunkResidencyState::Resident) ==
+                    full_engine::WorldResult::Success;
+            if (!registered ||
+                engineTerrainResources.addChunkResources(resourceDesc) != full_engine::TerrainResourceResult::Success)
+            {
+                std::cerr << "Failed to register sample terrain chunk resources.\n";
                 renderer->shutdown();
                 return 1;
             }
 
-            terrainChunks.push_back(chunk);
+            full_engine::WorldChunkRenderDesc renderDesc;
+            renderDesc.id = chunkId;
+            renderDesc.bounds = toEngineWorldBounds(chunkBounds);
+            engineTerrainChunkDescs.push_back(renderDesc);
         }
     }
+
+    full_engine::WorldRenderSnapshotOptions engineTerrainSnapshotOptions;
+    engineTerrainSnapshotOptions.origin = full_engine::makeAbsoluteOrigin();
+    engineTerrainPipeline.snapshot = full_engine::buildWorldRenderSnapshot(
+        engineTerrainRegistry,
+        engineTerrainChunkDescs.data(),
+        engineTerrainChunkDescs.size(),
+        engineTerrainSnapshotOptions);
+    engineTerrainPipeline.prep = full_engine::prepareTerrainRenderChunks(engineTerrainPipeline.snapshot);
+    engineTerrainPipeline.lifecycle = full_engine::planTerrainLifecycle(
+        engineTerrainPipeline.prep,
+        engineTerrainHandles);
+    engineTerrainPipeline.commands = full_engine::buildTerrainRendererCommands(engineTerrainPipeline.lifecycle);
+    engineTerrainPipeline.descriptors = full_engine::buildTerrainDescriptors(
+        engineTerrainPipeline.commands,
+        engineTerrainResources);
+    engineTerrainPipeline.submission = full_engine::submitTerrainCommands(
+        *renderer,
+        engineTerrainPipeline.descriptors,
+        engineTerrainPipeline.commands,
+        engineTerrainHandles);
+    if (engineTerrainPipeline.submission.summary.rendererFailedCount > 0 ||
+        engineTerrainPipeline.submission.summary.handleMapFailedCount > 0 ||
+        engineTerrainHandles.mappedCount() != engineTerrainChunkDescs.size())
+    {
+        std::cerr << "Failed to submit sample terrain through engine integration.\n";
+        destroyMappedTerrainChunks(*renderer, engineTerrainHandles);
+        renderer->shutdown();
+        return 1;
+    }
+    refreshTerrainSubmitHandles(engineTerrainHandles, terrainChunks);
 
 #if FULL_RENDERER_ENABLE_DEBUG_UI
     IMGUI_CHECKVERSION();
@@ -3674,6 +3838,7 @@ int main(int argc, char** argv)
         packet.animatedDraws = animatedDraws.empty() ? nullptr : animatedDraws.data();
         packet.animatedDrawCount = static_cast<std::uint32_t>(animatedDraws.size());
         packet.animationDebug = animationDebugOptions;
+        refreshTerrainSubmitHandles(engineTerrainHandles, terrainChunks);
         full_renderer::TerrainSubmitDesc terrainSubmit;
         terrainSubmit.chunks = terrainChunks.data();
         terrainSubmit.chunkCount = static_cast<std::uint32_t>(terrainChunks.size());
@@ -3731,6 +3896,8 @@ int main(int argc, char** argv)
                 sampleDecalCount,
                 validationState,
                 openWorldChurnState,
+                engineTerrainPipeline,
+                engineTerrainHandles.mappedCount(),
                 cameraPosition,
                 cameraTarget,
                 cameraFovYRadians,
@@ -3788,10 +3955,7 @@ int main(int argc, char** argv)
         SDL_SetWindowTitle(window.get(), title.c_str());
     }
 
-    for (const full_renderer::TerrainChunkHandle chunk : terrainChunks)
-    {
-        renderer->destroyTerrainChunk(chunk);
-    }
+    destroyMappedTerrainChunks(*renderer, engineTerrainHandles);
     for (const full_renderer::MeshHandle mesh : terrainMeshes)
     {
         renderer->destroyMesh(mesh);
