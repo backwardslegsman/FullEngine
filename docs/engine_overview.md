@@ -39,7 +39,9 @@ sample types, Dear ImGui types, or `src/app` demo state.
 - `renderer_integration/` maps engine state to renderer public descriptors and
   handles. The current slice contains a smoke adapter and CPU-side render-space
   conversion from engine-owned double-precision world data to bounded
-  single-precision relative values.
+  single-precision relative values, plus a world render snapshot seam that
+  prepares chunk status records and terrain prep records without creating
+  renderer resources.
 
 Add these directories only as real work needs them. Empty scaffolding is less
 useful than a small, tested boundary.
@@ -59,6 +61,9 @@ Implemented pieces:
 - a deterministic CPU-only chunk registry with constrained state transitions
 - double-precision world positions, bounds, and camera-relative origin rebasing
 - render-space conversion helpers with conservative float-range validation
+- world render snapshots that combine chunk residency, world bounds, and
+  render-space conversion into diagnostic records
+- terrain prep records filtered from ready world render snapshot records
 - CPU tests for engine lifecycle and world chunk registry behavior
 
 Still future work:

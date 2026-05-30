@@ -105,10 +105,16 @@ add_library(FullRenderer::full_renderer ALIAS full_renderer)
 add_library(full_engine STATIC
     src/engine/core/Engine.cpp
     src/engine/core/Engine.hpp
+    src/engine/renderer_integration/ChunkTerrainHandleMap.cpp
+    src/engine/renderer_integration/ChunkTerrainHandleMap.hpp
     src/engine/renderer_integration/RenderSpace.cpp
     src/engine/renderer_integration/RenderSpace.hpp
     src/engine/renderer_integration/RendererHost.cpp
     src/engine/renderer_integration/RendererHost.hpp
+    src/engine/renderer_integration/TerrainRenderPrep.cpp
+    src/engine/renderer_integration/TerrainRenderPrep.hpp
+    src/engine/renderer_integration/WorldRenderSnapshot.cpp
+    src/engine/renderer_integration/WorldRenderSnapshot.hpp
     src/engine/world/WorldChunkRegistry.cpp
     src/engine/world/WorldChunkRegistry.hpp
     src/engine/world/WorldOrigin.cpp
@@ -154,7 +160,7 @@ target_include_directories(full_engine
 )
 
 target_link_libraries(full_engine
-    PRIVATE
+    PUBLIC
         FullRenderer::full_renderer
 )
 

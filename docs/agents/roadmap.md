@@ -326,6 +326,16 @@ move gameplay, streaming policy, or editor concepts into renderer internals.
   single-precision render-space values after origin rebasing and range
   validation. Direct renderer AABB conversion, terrain mapping, and renderer
   handle ownership remain deferred.
+- Initial world render snapshot seam is in place: engine chunk residency and
+  externally supplied world bounds can be combined into ordered, frame-oriented
+  render-space chunk records with per-record status and counters. Renderer
+  terrain descriptors, renderer handles, asset loading, and async streaming
+  remain deferred.
+- Initial terrain render prep seam is in place: ready world render snapshot
+  records can be filtered into ordered engine-owned terrain prep records while
+  skipped records are counted by status. Renderer terrain descriptors,
+  mesh/material/LOD selection, renderer handles, and resource creation remain
+  deferred.
 - Define engine-owned chunk IDs, streaming regions, residency state, and
   large-world origin policy.
 - Translate world coordinates to renderer-relative frame data in
