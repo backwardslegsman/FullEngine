@@ -30,14 +30,16 @@ sample types, Dear ImGui types, or `src/app` demo state.
   tests.
 - `world/` owns chunk IDs, streaming policy, residency, persistence, and
   large-world origin rules. The current slice implements chunk identity and a
-  CPU-only residency registry, but not async IO, persistence, terrain resource
-  ownership, renderer handles, or origin rebasing.
+  CPU-only residency registry plus double-precision origin rebasing helpers,
+  but not async IO, persistence, terrain resource ownership, renderer handles,
+  or renderer-submission conversion.
 - `scene/` owns transforms and renderable extraction from engine state.
 - `assets/` owns runtime asset catalogs and cooked asset references.
 - `jobs/` owns async loading and work scheduling.
 - `renderer_integration/` maps engine state to renderer public descriptors and
-  handles. The current slice only contains a smoke adapter proving the engine
-  target links against the renderer public API.
+  handles. The current slice contains a smoke adapter and CPU-side render-space
+  conversion from engine-owned double-precision world data to bounded
+  single-precision relative values.
 
 Add these directories only as real work needs them. Empty scaffolding is less
 useful than a small, tested boundary.
@@ -55,11 +57,13 @@ Implemented pieces:
 - stable signed 3D chunk IDs
 - chunk residency states: unloaded, loading, resident, and unloading
 - a deterministic CPU-only chunk registry with constrained state transitions
+- double-precision world positions, bounds, and camera-relative origin rebasing
+- render-space conversion helpers with conservative float-range validation
 - CPU tests for engine lifecycle and world chunk registry behavior
 
 Still future work:
 
-- large-world origin selection and coordinate rebasing
+- direct renderer descriptor conversion for terrain, draws, and cameras
 - renderer handle mapping for world chunks
 - async loading, streaming jobs, and IO
 - asset catalogs and cooked asset manifests

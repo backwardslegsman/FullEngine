@@ -29,7 +29,9 @@ function(add_full_engine_test target source)
 endfunction()
 
 add_full_engine_test(full_engine_core_tests engine_core_test.cpp)
+add_full_engine_test(full_engine_render_space_tests engine_render_space_test.cpp)
 add_full_engine_test(full_engine_world_tests engine_world_test.cpp)
+add_full_engine_test(full_engine_world_origin_tests engine_world_origin_test.cpp)
 
 add_full_renderer_test(full_renderer_lifecycle_tests renderer_lifecycle_test.cpp)
 add_full_renderer_test(full_renderer_terrain_grid_mesh_tests terrain_grid_mesh_test.cpp)

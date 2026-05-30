@@ -105,10 +105,14 @@ add_library(FullRenderer::full_renderer ALIAS full_renderer)
 add_library(full_engine STATIC
     src/engine/core/Engine.cpp
     src/engine/core/Engine.hpp
+    src/engine/renderer_integration/RenderSpace.cpp
+    src/engine/renderer_integration/RenderSpace.hpp
     src/engine/renderer_integration/RendererHost.cpp
     src/engine/renderer_integration/RendererHost.hpp
     src/engine/world/WorldChunkRegistry.cpp
     src/engine/world/WorldChunkRegistry.hpp
+    src/engine/world/WorldOrigin.cpp
+    src/engine/world/WorldOrigin.hpp
 )
 
 add_library(full_renderer_engine_bridge STATIC EXCLUDE_FROM_ALL

@@ -316,6 +316,16 @@ move gameplay, streaming policy, or editor concepts into renderer internals.
   CPU-side registry tests. This intentionally does not perform async IO,
   renderer handle mapping, terrain resource creation, persistence, or
   large-world origin rebasing yet.
+- Initial large-world origin policy is in place: engine world positions and
+  bounds use double precision, origin descriptors support absolute and
+  camera-relative modes, and CPU helpers rebase positions/bounds while
+  rejecting non-finite or inverted inputs. Renderer float conversion and
+  renderer submission wiring remain future integration work.
+- Initial render-space seam is in place: `src/engine/renderer_integration`
+  converts engine-owned double-precision positions/bounds into conservative
+  single-precision render-space values after origin rebasing and range
+  validation. Direct renderer AABB conversion, terrain mapping, and renderer
+  handle ownership remain deferred.
 - Define engine-owned chunk IDs, streaming regions, residency state, and
   large-world origin policy.
 - Translate world coordinates to renderer-relative frame data in
