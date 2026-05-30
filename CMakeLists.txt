@@ -113,6 +113,8 @@ add_library(full_engine STATIC
     src/engine/renderer_integration/RendererHost.hpp
     src/engine/renderer_integration/TerrainDescriptorBuilder.cpp
     src/engine/renderer_integration/TerrainDescriptorBuilder.hpp
+    src/engine/renderer_integration/TerrainChunkSetup.cpp
+    src/engine/renderer_integration/TerrainChunkSetup.hpp
     src/engine/renderer_integration/TerrainLifecyclePlan.cpp
     src/engine/renderer_integration/TerrainLifecyclePlan.hpp
     src/engine/renderer_integration/TerrainRendererCommands.cpp
@@ -125,8 +127,12 @@ add_library(full_engine STATIC
     src/engine/renderer_integration/TerrainSubmissionAdapter.hpp
     src/engine/renderer_integration/WorldRenderSnapshot.cpp
     src/engine/renderer_integration/WorldRenderSnapshot.hpp
+    src/engine/world/WorldChunkCatalog.cpp
+    src/engine/world/WorldChunkCatalog.hpp
     src/engine/world/WorldChunkRegistry.cpp
     src/engine/world/WorldChunkRegistry.hpp
+    src/engine/world/WorldChunkSet.cpp
+    src/engine/world/WorldChunkSet.hpp
     src/engine/world/WorldOrigin.cpp
     src/engine/world/WorldOrigin.hpp
     src/engine/world/WorldResidencyRequests.cpp

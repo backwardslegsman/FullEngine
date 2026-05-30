@@ -1,6 +1,7 @@
 #include "full_renderer/Renderer.hpp"
 
 #include "engine/renderer_integration/ChunkTerrainHandleMap.hpp"
+#include "engine/renderer_integration/TerrainChunkSetup.hpp"
 #include "engine/renderer_integration/TerrainDescriptorBuilder.hpp"
 #include "engine/renderer_integration/TerrainLifecyclePlan.hpp"
 #include "engine/renderer_integration/TerrainRendererCommands.hpp"
@@ -8,6 +9,7 @@
 #include "engine/renderer_integration/TerrainResourceCatalog.hpp"
 #include "engine/renderer_integration/TerrainSubmissionAdapter.hpp"
 #include "engine/renderer_integration/WorldRenderSnapshot.hpp"
+#include "engine/world/WorldChunkCatalog.hpp"
 #include "engine/world/WorldChunkRegistry.hpp"
 #include "engine/world/WorldOrigin.hpp"
 #include "engine/world/WorldResidencyRequests.hpp"
@@ -724,7 +726,7 @@ struct SampleEngineTerrainPipelineState
 
 struct SampleTerrainChunkState
 {
-    full_engine::WorldChunkRenderDesc renderDesc = {};
+    full_engine::ChunkId id = {};
     bool resident = true;
 };
 
@@ -769,13 +771,32 @@ void destroyMappedTerrainChunks(
     handleMap.clear();
 }
 
+void removeSampleTerrainSetup(
+    full_engine::WorldChunkRegistry& registry,
+    full_engine::WorldChunkCatalog& worldCatalog,
+    full_engine::TerrainResourceCatalog& resources,
+    std::vector<SampleTerrainChunkState>& chunks)
+{
+    for (const SampleTerrainChunkState& chunk : chunks)
+    {
+        const full_engine::TerrainChunkSetupRemoveResult result =
+            full_engine::removeTerrainChunk(registry, worldCatalog, resources, chunk.id);
+        if (result.result == full_engine::TerrainChunkSetupResult::PartialFailure)
+        {
+            std::cerr << "Sample terrain setup cleanup repaired drift for chunk ("
+                      << chunk.id.x << ", " << chunk.id.y << ", " << chunk.id.z << ").\n";
+        }
+    }
+    chunks.clear();
+}
+
 SampleTerrainChunkState* findSampleTerrainChunk(
     std::vector<SampleTerrainChunkState>& chunks,
     const full_engine::ChunkId& id) noexcept
 {
     for (SampleTerrainChunkState& chunk : chunks)
     {
-        if (chunk.renderDesc.id == id)
+        if (chunk.id == id)
         {
             return &chunk;
         }
@@ -789,7 +810,7 @@ const SampleTerrainChunkState* findSampleTerrainChunk(
 {
     for (const SampleTerrainChunkState& chunk : chunks)
     {
-        if (chunk.renderDesc.id == id)
+        if (chunk.id == id)
         {
             return &chunk;
         }
@@ -813,24 +834,19 @@ std::size_t countResidentSampleTerrainChunks(const std::vector<SampleTerrainChun
 bool runSampleTerrainPipeline(
     full_renderer::IRenderer& renderer,
     const full_engine::WorldChunkRegistry& registry,
-    const std::vector<SampleTerrainChunkState>& chunks,
+    const full_engine::WorldChunkCatalog& catalog,
     const full_engine::TerrainResourceCatalog& resources,
     full_engine::ChunkTerrainHandleMap& handles,
     SampleEngineTerrainPipelineState& pipeline,
     const full_engine::WorldRenderSnapshotOptions& snapshotOptions,
     const full_engine::TerrainLifecyclePlanOptions& lifecycleOptions = {})
 {
-    std::vector<full_engine::WorldChunkRenderDesc> renderDescs;
-    renderDescs.reserve(chunks.size());
-    for (const SampleTerrainChunkState& chunk : chunks)
-    {
-        renderDescs.push_back(chunk.renderDesc);
-    }
+    const std::vector<full_engine::WorldChunkDesc> chunkDescs = catalog.descs();
 
     pipeline.snapshot = full_engine::buildWorldRenderSnapshot(
         registry,
-        renderDescs.data(),
-        renderDescs.size(),
+        chunkDescs.data(),
+        chunkDescs.size(),
         snapshotOptions);
     pipeline.prep = full_engine::prepareTerrainRenderChunks(pipeline.snapshot);
     pipeline.lifecycle = full_engine::planTerrainLifecycle(pipeline.prep, handles, lifecycleOptions);
@@ -1258,7 +1274,7 @@ void drawTerrainDiagnosticsPanel(
             for (SampleTerrainChunkState& chunk : sampleTerrainChunks)
             {
                 terrainResidencyRequests.push(
-                    chunk.renderDesc.id,
+                    chunk.id,
                     full_engine::WorldChunkResidencyRequestType::MakeResident);
             }
             engineTerrainPipelineDirty = true;
@@ -3070,6 +3086,7 @@ int main(int argc, char** argv)
     }
 
     full_engine::WorldChunkRegistry engineTerrainRegistry;
+    full_engine::WorldChunkCatalog engineTerrainCatalog;
     full_engine::WorldChunkResidencyRequestQueue terrainResidencyRequests;
     full_engine::TerrainResourceCatalog engineTerrainResources;
     full_engine::ChunkTerrainHandleMap engineTerrainHandles;
@@ -3236,23 +3253,36 @@ int main(int argc, char** argv)
                 resourceDesc.lods[lodIndex].maxDistanceMeters = kTerrainLodDistances[lodIndex];
             }
 
-            const bool registered =
-                engineTerrainRegistry.createChunk(chunkId) == full_engine::WorldResult::Success &&
+            full_engine::WorldChunkDesc chunkDesc;
+            chunkDesc.id = chunkId;
+            chunkDesc.bounds = toEngineWorldBounds(chunkBounds);
+            const full_engine::TerrainChunkSetupAddResult setupResult = full_engine::addTerrainChunk(
+                engineTerrainRegistry,
+                engineTerrainCatalog,
+                engineTerrainResources,
+                chunkDesc,
+                resourceDesc);
+            const bool resident =
+                setupResult.result == full_engine::TerrainChunkSetupResult::Success &&
                 engineTerrainRegistry.setResidencyState(chunkId, full_engine::ChunkResidencyState::Loading) ==
                     full_engine::WorldResult::Success &&
                 engineTerrainRegistry.setResidencyState(chunkId, full_engine::ChunkResidencyState::Resident) ==
                     full_engine::WorldResult::Success;
-            if (!registered ||
-                engineTerrainResources.addChunkResources(resourceDesc) != full_engine::TerrainResourceResult::Success)
+
+            if (!resident)
             {
-                std::cerr << "Failed to register sample terrain chunk resources.\n";
+                std::cerr << "Failed to register sample terrain chunk setup.\n";
+                removeSampleTerrainSetup(
+                    engineTerrainRegistry,
+                    engineTerrainCatalog,
+                    engineTerrainResources,
+                    sampleTerrainChunks);
                 renderer->shutdown();
                 return 1;
             }
 
             SampleTerrainChunkState chunkState;
-            chunkState.renderDesc.id = chunkId;
-            chunkState.renderDesc.bounds = toEngineWorldBounds(chunkBounds);
+            chunkState.id = chunkId;
             chunkState.resident = true;
             sampleTerrainChunks.push_back(chunkState);
         }
@@ -3263,7 +3293,7 @@ int main(int argc, char** argv)
     if (!runSampleTerrainPipeline(
             *renderer,
             engineTerrainRegistry,
-            sampleTerrainChunks,
+            engineTerrainCatalog,
             engineTerrainResources,
             engineTerrainHandles,
             engineTerrainPipeline,
@@ -3272,6 +3302,11 @@ int main(int argc, char** argv)
     {
         std::cerr << "Failed to submit sample terrain through engine integration.\n";
         destroyMappedTerrainChunks(*renderer, engineTerrainHandles);
+        removeSampleTerrainSetup(
+            engineTerrainRegistry,
+            engineTerrainCatalog,
+            engineTerrainResources,
+            sampleTerrainChunks);
         renderer->shutdown();
         return 1;
     }
@@ -3577,7 +3612,7 @@ int main(int argc, char** argv)
             if (!runSampleTerrainPipeline(
                     *renderer,
                     engineTerrainRegistry,
-                    sampleTerrainChunks,
+                    engineTerrainCatalog,
                     engineTerrainResources,
                     engineTerrainHandles,
                     engineTerrainPipeline,
@@ -4159,6 +4194,11 @@ int main(int argc, char** argv)
     }
 
     destroyMappedTerrainChunks(*renderer, engineTerrainHandles);
+    removeSampleTerrainSetup(
+        engineTerrainRegistry,
+        engineTerrainCatalog,
+        engineTerrainResources,
+        sampleTerrainChunks);
     for (const full_renderer::MeshHandle mesh : terrainMeshes)
     {
         renderer->destroyMesh(mesh);

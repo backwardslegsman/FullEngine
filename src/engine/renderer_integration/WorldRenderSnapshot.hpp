@@ -1,6 +1,7 @@
 #pragma once
 
 #include "engine/renderer_integration/RenderSpace.hpp"
+#include "engine/world/WorldChunkCatalog.hpp"
 #include "engine/world/WorldChunkRegistry.hpp"
 
 #include <cstddef>
@@ -8,12 +9,8 @@
 
 namespace full_engine
 {
-/** @brief Engine-owned chunk render input for one frame snapshot build. */
-struct WorldChunkRenderDesc
-{
-    ChunkId id = {};
-    WorldBounds bounds = {};
-};
+/** @brief Compatibility alias for chunk metadata consumed by render snapshots. */
+using WorldChunkRenderDesc = WorldChunkDesc;
 
 /** @brief Per-chunk result of preparing engine world data for renderer integration. */
 enum class RenderChunkStatus

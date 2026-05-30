@@ -356,6 +356,16 @@ move gameplay, streaming policy, or editor concepts into renderer internals.
   residency changes are represented as ordered world requests, applied to
   `WorldChunkRegistry` before renderer terrain submission, and covered by
   CPU tests without adding async IO or streaming jobs.
+- Initial chunk metadata cataloging is in place: stable chunk bounds are
+  engine-owned world descriptors that feed render snapshots while residency
+  stays in `WorldChunkRegistry`.
+- Initial coordinated chunk setup is in place: a world-only helper creates and
+  removes matching registry/catalog state and reports repaired drift without
+  touching terrain resources or renderer handles.
+- Initial terrain chunk setup coordination is in place: a renderer-integration
+  helper pairs world chunk setup with terrain resource catalog entries while
+  keeping renderer handles and submission in their existing later seams. The
+  sample exercises both setup add and remove during its terrain lifecycle.
 - Define engine-owned chunk IDs, streaming regions, residency state, and
   large-world origin policy.
 - Translate world coordinates to renderer-relative frame data in

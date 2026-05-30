@@ -58,12 +58,16 @@ Implemented pieces:
 - a renderer boundary object that keeps renderer public headers out of engine
   core/world headers
 - stable signed 3D chunk IDs
+- a CPU-only chunk metadata catalog for stable world bounds
+- a coordinated world chunk set helper for registry/catalog creation and removal
+- a terrain setup helper that coordinates world chunk setup with terrain
+  resource metadata while leaving renderer handles and submission separate
 - chunk residency states: unloaded, loading, resident, and unloading
 - a deterministic CPU-only chunk registry with constrained state transitions
 - a CPU-only FIFO request queue for engine-owned residency intent
 - double-precision world positions, bounds, and camera-relative origin rebasing
 - render-space conversion helpers with conservative float-range validation
-- world render snapshots that combine chunk residency, world bounds, and
+- world render snapshots that combine chunk catalog bounds, residency, and
   render-space conversion into diagnostic records
 - terrain prep records filtered from ready world render snapshot records
 - terrain lifecycle planning, renderer command intent, and renderer-shaped
@@ -72,9 +76,9 @@ Implemented pieces:
   renderer mesh/material/LOD/splat handles without owning those resources
 - a submission adapter that calls only public terrain APIs and updates
   `ChunkTerrainHandleMap` after successful create/destroy operations
-- sample app terrain wiring that enqueues debug-UI residency changes and runs
-  them through the engine integration path while keeping mesh/material/texture
-  creation sample-owned
+- sample app terrain wiring that enqueues debug-UI residency changes, runs them
+  through the engine integration path, and removes coordinated terrain setup
+  state during teardown after renderer terrain handles are destroyed
 - CPU and fake-renderer tests for engine lifecycle, world ownership, terrain
   integration seams, and end-to-end terrain pipeline composition
 
