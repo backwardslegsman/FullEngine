@@ -113,6 +113,8 @@ add_library(full_engine STATIC
     src/engine/renderer_integration/RendererHost.hpp
     src/engine/renderer_integration/TerrainDescriptorBuilder.cpp
     src/engine/renderer_integration/TerrainDescriptorBuilder.hpp
+    src/engine/renderer_integration/TerrainIntegrationDiagnostics.cpp
+    src/engine/renderer_integration/TerrainIntegrationDiagnostics.hpp
     src/engine/renderer_integration/TerrainChunkSetup.cpp
     src/engine/renderer_integration/TerrainChunkSetup.hpp
     src/engine/renderer_integration/TerrainChunkRequests.cpp

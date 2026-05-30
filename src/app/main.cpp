@@ -3,6 +3,7 @@
 #include "engine/renderer_integration/ChunkTerrainHandleMap.hpp"
 #include "engine/renderer_integration/TerrainChunkRequests.hpp"
 #include "engine/renderer_integration/TerrainDescriptorBuilder.hpp"
+#include "engine/renderer_integration/TerrainIntegrationDiagnostics.hpp"
 #include "engine/renderer_integration/TerrainLifecyclePlan.hpp"
 #include "engine/renderer_integration/TerrainRendererCommands.hpp"
 #include "engine/renderer_integration/TerrainRenderPrep.hpp"
@@ -724,14 +725,6 @@ struct SampleEngineTerrainPipelineState
     full_engine::TerrainSubmissionResult submission = {};
 };
 
-struct SampleTerrainSetupDiagnostics
-{
-    std::size_t requestCount = 0;
-    std::size_t addCount = 0;
-    std::size_t removeCount = 0;
-    full_engine::TerrainChunkRequestApplySummary summary = {};
-};
-
 struct SampleTerrainChunkState
 {
     full_engine::ChunkId id = {};
@@ -900,26 +893,6 @@ void mirrorSampleTerrainSetupState(
     chunk.resident = info != nullptr && info->residency == full_engine::ChunkResidencyState::Resident;
 }
 
-void recordSampleTerrainSetupDiagnostics(
-    const full_engine::TerrainChunkRequestApplyResult& result,
-    SampleTerrainSetupDiagnostics& diagnostics)
-{
-    diagnostics = {};
-    diagnostics.requestCount = result.records.size();
-    diagnostics.summary = result.summary;
-    for (const full_engine::TerrainChunkRequestRecord& record : result.records)
-    {
-        if (record.request.type == full_engine::TerrainChunkRequestType::Add)
-        {
-            ++diagnostics.addCount;
-        }
-        else
-        {
-            ++diagnostics.removeCount;
-        }
-    }
-}
-
 bool applySampleTerrainSetupRequests(
     full_engine::TerrainChunkRequestQueue& setupRequests,
     full_engine::WorldChunkRegistry& registry,
@@ -927,7 +900,7 @@ bool applySampleTerrainSetupRequests(
     full_engine::TerrainResourceCatalog& resources,
     std::vector<SampleTerrainChunkState>& chunks,
     full_engine::WorldChunkResidencyRequestQueue& residencyRequests,
-    SampleTerrainSetupDiagnostics& diagnostics)
+    full_engine::TerrainSetupRequestDiagnostics& diagnostics)
 {
     if (setupRequests.requestCount() == 0)
     {
@@ -936,7 +909,7 @@ bool applySampleTerrainSetupRequests(
 
     const full_engine::TerrainChunkRequestApplyResult result = setupRequests.applyTo(registry, worldCatalog, resources);
     setupRequests.clear();
-    recordSampleTerrainSetupDiagnostics(result, diagnostics);
+    diagnostics = full_engine::makeTerrainSetupRequestDiagnostics(result);
 
     for (const full_engine::TerrainChunkRequestRecord& record : result.records)
     {
@@ -1000,6 +973,7 @@ bool runSampleTerrainPipeline(
     full_engine::ChunkTerrainHandleMap& handles,
     SampleEngineTerrainPipelineState& pipeline,
     const full_engine::WorldRenderSnapshotOptions& snapshotOptions,
+    full_engine::TerrainPipelineDiagnostics& diagnostics,
     const full_engine::TerrainLifecyclePlanOptions& lifecycleOptions = {})
 {
     const std::vector<full_engine::WorldChunkDesc> chunkDescs = catalog.descs();
@@ -1014,6 +988,14 @@ bool runSampleTerrainPipeline(
     pipeline.commands = full_engine::buildTerrainRendererCommands(pipeline.lifecycle);
     pipeline.descriptors = full_engine::buildTerrainDescriptors(pipeline.commands, resources);
     pipeline.submission = full_engine::submitTerrainCommands(renderer, pipeline.descriptors, pipeline.commands, handles);
+    diagnostics = full_engine::makeTerrainPipelineDiagnostics(
+        pipeline.snapshot,
+        pipeline.prep,
+        pipeline.lifecycle,
+        pipeline.commands,
+        pipeline.descriptors,
+        pipeline.submission,
+        handles.mappedCount());
 
     return pipeline.submission.summary.rendererFailedCount == 0 &&
         pipeline.submission.summary.handleMapFailedCount == 0;
@@ -1272,9 +1254,7 @@ void drawTerrainDiagnosticsPanel(
     int& sampleDecalCount,
     SampleValidationState& validationState,
     SampleOpenWorldChurnState& openWorldChurnState,
-    const SampleEngineTerrainPipelineState& engineTerrainPipeline,
-    const SampleTerrainSetupDiagnostics& terrainSetupDiagnostics,
-    std::size_t engineTerrainHandleCount,
+    const full_engine::TerrainIntegrationDiagnostics& terrainDiagnostics,
     std::vector<SampleTerrainChunkState>& sampleTerrainChunks,
     full_engine::WorldChunkResidencyRequestQueue& terrainResidencyRequests,
     full_engine::TerrainChunkRequestQueue& terrainSetupRequests,
@@ -1340,56 +1320,54 @@ void drawTerrainDiagnosticsPanel(
 
     if (ImGui::CollapsingHeader("Engine terrain pipeline"))
     {
-        const full_engine::WorldRenderSnapshot& snapshot = engineTerrainPipeline.snapshot;
-        const full_engine::TerrainRenderPrepSummary& prep = engineTerrainPipeline.prep.summary;
-        const full_engine::TerrainLifecyclePlanSummary& lifecycle = engineTerrainPipeline.lifecycle.summary;
-        const full_engine::TerrainRendererCommandSummary& commands = engineTerrainPipeline.commands.summary;
-        const full_engine::TerrainDescriptorBuildSummary& descriptors = engineTerrainPipeline.descriptors.summary;
-        const full_engine::TerrainSubmissionSummary& submission = engineTerrainPipeline.submission.summary;
+        const full_engine::TerrainPipelineDiagnostics& pipeline = terrainDiagnostics.pipeline;
+        const full_engine::TerrainSetupRequestDiagnostics& terrainSetupDiagnostics = terrainDiagnostics.setupRequests;
+        const full_engine::TerrainResidencyRequestDiagnostics& terrainResidencyDiagnostics =
+            terrainDiagnostics.residencyRequests;
 
-        ImGui::Text("Handle map: %llu", static_cast<unsigned long long>(engineTerrainHandleCount));
+        ImGui::Text("Handle map: %llu", static_cast<unsigned long long>(pipeline.handleCount));
         ImGui::Text(
             "Snapshot: ready %llu, not resident %llu, missing %llu, invalid %llu, out of range %llu",
-            static_cast<unsigned long long>(snapshot.readyCount),
-            static_cast<unsigned long long>(snapshot.notResidentCount),
-            static_cast<unsigned long long>(snapshot.missingChunkCount),
-            static_cast<unsigned long long>(snapshot.invalidBoundsCount),
-            static_cast<unsigned long long>(snapshot.outOfRangeCount));
+            static_cast<unsigned long long>(pipeline.snapshotReadyCount),
+            static_cast<unsigned long long>(pipeline.snapshotNotResidentCount),
+            static_cast<unsigned long long>(pipeline.snapshotMissingChunkCount),
+            static_cast<unsigned long long>(pipeline.snapshotInvalidBoundsCount),
+            static_cast<unsigned long long>(pipeline.snapshotOutOfRangeCount));
         ImGui::Text(
             "Prep: ready %llu, skipped %llu",
-            static_cast<unsigned long long>(prep.readyCount),
+            static_cast<unsigned long long>(pipeline.prep.readyCount),
             static_cast<unsigned long long>(
-                prep.skippedNotResidentCount +
-                prep.skippedMissingChunkCount +
-                prep.skippedInvalidBoundsCount +
-                prep.skippedOutOfRangeCount));
+                pipeline.prep.skippedNotResidentCount +
+                pipeline.prep.skippedMissingChunkCount +
+                pipeline.prep.skippedInvalidBoundsCount +
+                pipeline.prep.skippedOutOfRangeCount));
         ImGui::Text(
             "Lifecycle: create %llu, keep %llu, update %llu, release %llu",
-            static_cast<unsigned long long>(lifecycle.createCount),
-            static_cast<unsigned long long>(lifecycle.keepCount),
-            static_cast<unsigned long long>(lifecycle.updateCount),
-            static_cast<unsigned long long>(lifecycle.releaseCount));
+            static_cast<unsigned long long>(pipeline.lifecycle.createCount),
+            static_cast<unsigned long long>(pipeline.lifecycle.keepCount),
+            static_cast<unsigned long long>(pipeline.lifecycle.updateCount),
+            static_cast<unsigned long long>(pipeline.lifecycle.releaseCount));
         ImGui::Text(
             "Commands: create %llu, keep %llu, update %llu, destroy %llu",
-            static_cast<unsigned long long>(commands.createCount),
-            static_cast<unsigned long long>(commands.keepCount),
-            static_cast<unsigned long long>(commands.updateCount),
-            static_cast<unsigned long long>(commands.destroyCount));
+            static_cast<unsigned long long>(pipeline.commands.createCount),
+            static_cast<unsigned long long>(pipeline.commands.keepCount),
+            static_cast<unsigned long long>(pipeline.commands.updateCount),
+            static_cast<unsigned long long>(pipeline.commands.destroyCount));
         ImGui::Text(
             "Descriptors: ready %llu, missing %llu, invalid %llu, ignored %llu",
-            static_cast<unsigned long long>(descriptors.readyCount),
-            static_cast<unsigned long long>(descriptors.missingResourcesCount),
-            static_cast<unsigned long long>(descriptors.invalidResourcesCount),
-            static_cast<unsigned long long>(descriptors.ignoredCount));
+            static_cast<unsigned long long>(pipeline.descriptors.readyCount),
+            static_cast<unsigned long long>(pipeline.descriptors.missingResourcesCount),
+            static_cast<unsigned long long>(pipeline.descriptors.invalidResourcesCount),
+            static_cast<unsigned long long>(pipeline.descriptors.ignoredCount));
         ImGui::Text(
             "Submission: created %llu, updated %llu, destroyed %llu, kept %llu, skipped %llu, failures %llu",
-            static_cast<unsigned long long>(submission.createdCount),
-            static_cast<unsigned long long>(submission.updatedCount),
-            static_cast<unsigned long long>(submission.destroyedCount),
-            static_cast<unsigned long long>(submission.keptCount),
-            static_cast<unsigned long long>(submission.skippedCount),
+            static_cast<unsigned long long>(pipeline.submission.createdCount),
+            static_cast<unsigned long long>(pipeline.submission.updatedCount),
+            static_cast<unsigned long long>(pipeline.submission.destroyedCount),
+            static_cast<unsigned long long>(pipeline.submission.keptCount),
+            static_cast<unsigned long long>(pipeline.submission.skippedCount),
             static_cast<unsigned long long>(
-                submission.rendererFailedCount + submission.handleMapFailedCount));
+                pipeline.submission.rendererFailedCount + pipeline.submission.handleMapFailedCount));
 
         ImGui::Separator();
         ImGui::Text(
@@ -1413,6 +1391,17 @@ void drawTerrainDiagnosticsPanel(
             static_cast<unsigned long long>(terrainSetupDiagnostics.summary.notFoundCount),
             static_cast<unsigned long long>(terrainSetupDiagnostics.summary.invalidArgumentCount),
             static_cast<unsigned long long>(terrainSetupDiagnostics.summary.partialFailureCount));
+        ImGui::Text(
+            "Last residency requests: total %llu, resident %llu, unloaded %llu",
+            static_cast<unsigned long long>(terrainResidencyDiagnostics.requestCount),
+            static_cast<unsigned long long>(terrainResidencyDiagnostics.makeResidentCount),
+            static_cast<unsigned long long>(terrainResidencyDiagnostics.makeUnloadedCount));
+        ImGui::Text(
+            "Last residency results: applied %llu, satisfied %llu, missing %llu, invalid %llu",
+            static_cast<unsigned long long>(terrainResidencyDiagnostics.summary.appliedCount),
+            static_cast<unsigned long long>(terrainResidencyDiagnostics.summary.alreadySatisfiedCount),
+            static_cast<unsigned long long>(terrainResidencyDiagnostics.summary.notFoundCount),
+            static_cast<unsigned long long>(terrainResidencyDiagnostics.summary.invalidTransitionCount));
         ImGui::InputInt("Chunk X", &terrainResidencyControls.selectedChunkX);
         ImGui::InputInt("Chunk Z", &terrainResidencyControls.selectedChunkZ);
         terrainResidencyControls.selectedChunkX =
@@ -3332,7 +3321,7 @@ int main(int argc, char** argv)
     full_engine::TerrainResourceCatalog engineTerrainResources;
     full_engine::ChunkTerrainHandleMap engineTerrainHandles;
     SampleEngineTerrainPipelineState engineTerrainPipeline;
-    SampleTerrainSetupDiagnostics terrainSetupDiagnostics;
+    full_engine::TerrainIntegrationDiagnostics terrainDiagnostics;
     std::vector<SampleTerrainChunkState> sampleTerrainChunks;
     std::vector<full_renderer::TerrainChunkHandle> terrainChunks;
     SampleTerrainResidencyControls terrainResidencyControls;
@@ -3505,7 +3494,7 @@ int main(int argc, char** argv)
                 engineTerrainRegistry,
                 engineTerrainCatalog,
                 engineTerrainResources);
-            recordSampleTerrainSetupDiagnostics(setupResult, terrainSetupDiagnostics);
+            terrainDiagnostics.setupRequests = full_engine::makeTerrainSetupRequestDiagnostics(setupResult);
             const bool setupApplied =
                 setupResult.records.size() == 1 &&
                 setupResult.records[0].status == full_engine::TerrainChunkRequestStatus::Applied;
@@ -3547,7 +3536,8 @@ int main(int argc, char** argv)
             engineTerrainResources,
             engineTerrainHandles,
             engineTerrainPipeline,
-            engineTerrainSnapshotOptions) ||
+            engineTerrainSnapshotOptions,
+            terrainDiagnostics.pipeline) ||
         engineTerrainHandles.mappedCount() != sampleTerrainChunks.size())
     {
         std::cerr << "Failed to submit sample terrain through engine integration.\n";
@@ -3853,7 +3843,7 @@ int main(int argc, char** argv)
                     engineTerrainResources,
                     sampleTerrainChunks,
                     terrainResidencyRequests,
-                    terrainSetupDiagnostics))
+                    terrainDiagnostics.setupRequests))
             {
                 std::cerr << "Sample terrain setup request failed.\n";
                 break;
@@ -3872,6 +3862,8 @@ int main(int argc, char** argv)
                 }
                 const full_engine::WorldChunkResidencyApplyResult applyResult =
                     registeredResidencyRequests.applyTo(engineTerrainRegistry);
+                terrainDiagnostics.residencyRequests =
+                    full_engine::makeTerrainResidencyRequestDiagnostics(applyResult);
                 mirrorSampleTerrainResidencyApplyResult(applyResult, sampleTerrainChunks);
                 terrainResidencyRequests.clear();
                 if (applyResult.summary.invalidTransitionCount > 0)
@@ -3888,7 +3880,8 @@ int main(int argc, char** argv)
                     engineTerrainResources,
                     engineTerrainHandles,
                     engineTerrainPipeline,
-                    engineTerrainSnapshotOptions))
+                    engineTerrainSnapshotOptions,
+                    terrainDiagnostics.pipeline))
             {
                 std::cerr << "Failed to update sample terrain residency through engine integration.\n";
                 break;
@@ -4404,9 +4397,7 @@ int main(int argc, char** argv)
                 sampleDecalCount,
                 validationState,
                 openWorldChurnState,
-                engineTerrainPipeline,
-                terrainSetupDiagnostics,
-                engineTerrainHandles.mappedCount(),
+                terrainDiagnostics,
                 sampleTerrainChunks,
                 terrainResidencyRequests,
                 terrainSetupRequests,

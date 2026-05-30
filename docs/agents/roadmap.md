@@ -370,8 +370,12 @@ move gameplay, streaming policy, or editor concepts into renderer internals.
   be buffered and applied deterministically without touching residency,
   renderer handles, or renderer submission. The sample now routes startup and
   teardown terrain setup through this queue and exposes runtime debug UI
-  controls, ring-batch controls, and last-apply diagnostics for setup
-  add/remove intent.
+  controls, ring-batch controls, and last-apply diagnostics for setup and
+  residency intent.
+- Initial terrain integration diagnostics are reusable engine-owned values:
+  setup request results, residency request results, terrain pipeline counters,
+  and renderer submission summaries can be copied into debug UI or tooling
+  surfaces without depending on sample-local state.
 - Define engine-owned chunk IDs, streaming regions, residency state, and
   large-world origin policy.
 - Translate world coordinates to renderer-relative frame data in

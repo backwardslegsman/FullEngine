@@ -80,7 +80,11 @@ Implemented pieces:
 - sample app terrain wiring that enqueues debug-UI residency changes, runs them
   through the engine integration path, and applies setup add/remove intent
   through `TerrainChunkRequestQueue` from single-chunk and ring-batch runtime
-  debug UI controls with last-apply setup diagnostics
+  debug UI controls with engine-owned last-apply setup, residency, and pipeline
+  diagnostics
+- reusable terrain integration diagnostics that snapshot setup requests,
+  residency requests, pipeline counters, and renderer-submission outcomes as
+  value-only engine data for debug UI or tooling surfaces
 - CPU and fake-renderer tests for engine lifecycle, world ownership, terrain
   integration seams, and end-to-end terrain pipeline composition
 
