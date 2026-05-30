@@ -12,6 +12,8 @@ through the public CMake target `FullRenderer::full_renderer`.
 
 - Renderer foundation, open-world terrain basics, and several Phase 3 feature
   foundations are present.
+- A minimal `full_engine` target now exists with lifecycle/tick validation,
+  renderer-boundary smoke coverage, and an engine-owned world chunk registry.
 - The renderer is suitable for prototype engine integration and package
   consumer smoke testing.
 - Production open-world readiness work is tracked in
@@ -22,7 +24,7 @@ through the public CMake target `FullRenderer::full_renderer`.
 ```text
 src/app/                 SDL3 sample app and validation shell
 src/renderer/            renderer implementation and public API
-src/engine/              future engine runtime area
+src/engine/              engine core, world ownership, and renderer boundary
 src/engine_bridge/       sample/testing adapter, not the real engine
 assets/                  shader, texture, and mesh source assets
 tools/                   shader, asset, and CI tooling
@@ -57,6 +59,14 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\tools\ci\Run-WindowsPackag
 
 Use `-InstallDependencies` with that script on a clean machine or CI agent.
 More details are in `docs/build.md`.
+
+CPU tests, including the engine foundation tests, can be configured with:
+
+```powershell
+cmake --preset tests-debug
+cmake --build --preset tests-debug
+ctest --test-dir out\build\tests-debug --output-on-failure -C Debug
+```
 
 ## Documentation
 

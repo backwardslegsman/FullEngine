@@ -14,7 +14,9 @@ Files/directories likely involved.
 
 ### Roadmap phase
 
-Which phase from `docs/agents/roadmap.md` this belongs to. If the task does not fit the roadmap, state that explicitly.
+Which renderer phase or Engine Expansion Track milestone from
+`docs/agents/roadmap.md` this belongs to. If the task does not fit the roadmap,
+state that explicitly.
 
 ### Engine-readiness milestone
 

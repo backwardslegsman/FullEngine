@@ -102,6 +102,15 @@ add_library(full_renderer STATIC
 
 add_library(FullRenderer::full_renderer ALIAS full_renderer)
 
+add_library(full_engine STATIC
+    src/engine/core/Engine.cpp
+    src/engine/core/Engine.hpp
+    src/engine/renderer_integration/RendererHost.cpp
+    src/engine/renderer_integration/RendererHost.hpp
+    src/engine/world/WorldChunkRegistry.cpp
+    src/engine/world/WorldChunkRegistry.hpp
+)
+
 add_library(full_renderer_engine_bridge STATIC EXCLUDE_FROM_ALL
     src/engine_bridge/StreamingSeam.cpp
     src/engine_bridge/StreamingSeam.hpp
@@ -114,6 +123,11 @@ set_target_properties(full_renderer PROPERTIES
 
 target_compile_features(full_renderer_engine_bridge PUBLIC cxx_std_17)
 set_target_properties(full_renderer_engine_bridge PROPERTIES
+    CXX_EXTENSIONS OFF
+)
+
+target_compile_features(full_engine PUBLIC cxx_std_17)
+set_target_properties(full_engine PROPERTIES
     CXX_EXTENSIONS OFF
 )
 
@@ -130,6 +144,16 @@ target_include_directories(full_renderer_engine_bridge
         ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
 
+target_include_directories(full_engine
+    PUBLIC
+        ${CMAKE_CURRENT_SOURCE_DIR}/src
+)
+
+target_link_libraries(full_engine
+    PRIVATE
+        FullRenderer::full_renderer
+)
+
 target_link_libraries(full_renderer_engine_bridge
     PUBLIC
         FullRenderer::full_renderer
@@ -144,16 +168,20 @@ endif()
 
 if(MSVC)
     target_compile_options(full_renderer PRIVATE /W4 /permissive-)
+    target_compile_options(full_engine PRIVATE /W4 /permissive-)
     target_compile_options(full_renderer_engine_bridge PRIVATE /W4 /permissive-)
     if(FULL_RENDERER_WARNINGS_AS_ERRORS)
         target_compile_options(full_renderer PRIVATE /WX)
+        target_compile_options(full_engine PRIVATE /WX)
         target_compile_options(full_renderer_engine_bridge PRIVATE /WX)
     endif()
 else()
     target_compile_options(full_renderer PRIVATE -Wall -Wextra -Wpedantic)
+    target_compile_options(full_engine PRIVATE -Wall -Wextra -Wpedantic)
     target_compile_options(full_renderer_engine_bridge PRIVATE -Wall -Wextra -Wpedantic)
     if(FULL_RENDERER_WARNINGS_AS_ERRORS)
         target_compile_options(full_renderer PRIVATE -Werror)
+        target_compile_options(full_engine PRIVATE -Werror)
         target_compile_options(full_renderer_engine_bridge PRIVATE -Werror)
     endif()
 endif()

@@ -299,6 +299,10 @@ move gameplay, streaming policy, or editor concepts into renderer internals.
 
 ### E1 - Minimal engine core skeleton
 
+- Implemented first slice: `full_engine` is a compileable static target with a
+  minimal lifecycle core, copied engine config, lifecycle/tick diagnostics,
+  explicit initialize/shutdown/tick results, a renderer public API boundary
+  smoke adapter under `src/engine/renderer_integration/`, and CPU tests.
 - Add the first compileable engine target only when requested.
 - Establish engine lifecycle, time step, configuration, and diagnostics
   ownership without taking over renderer lifecycle internals.
@@ -306,6 +310,12 @@ move gameplay, streaming policy, or editor concepts into renderer internals.
 
 ### E2 - World and streaming ownership
 
+- Initial E2-lite world ownership is in place: `src/engine/world` defines
+  engine-owned 3D chunk IDs, residency states, deterministic registry lookup,
+  create/remove/update operations, constrained residency transitions, and
+  CPU-side registry tests. This intentionally does not perform async IO,
+  renderer handle mapping, terrain resource creation, persistence, or
+  large-world origin rebasing yet.
 - Define engine-owned chunk IDs, streaming regions, residency state, and
   large-world origin policy.
 - Translate world coordinates to renderer-relative frame data in

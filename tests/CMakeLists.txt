@@ -13,6 +13,24 @@ function(add_full_renderer_test target source)
     add_test(NAME ${target} COMMAND ${target})
 endfunction()
 
+function(add_full_engine_test target source)
+    add_executable(${target}
+        ${source}
+    )
+
+    target_link_libraries(${target} PRIVATE full_engine)
+    target_include_directories(${target} PRIVATE ${PROJECT_SOURCE_DIR}/src)
+    target_compile_features(${target} PRIVATE cxx_std_17)
+    set_target_properties(${target} PROPERTIES
+        CXX_EXTENSIONS OFF
+    )
+
+    add_test(NAME ${target} COMMAND ${target})
+endfunction()
+
+add_full_engine_test(full_engine_core_tests engine_core_test.cpp)
+add_full_engine_test(full_engine_world_tests engine_world_test.cpp)
+
 add_full_renderer_test(full_renderer_lifecycle_tests renderer_lifecycle_test.cpp)
 add_full_renderer_test(full_renderer_terrain_grid_mesh_tests terrain_grid_mesh_test.cpp)
 add_full_renderer_test(full_renderer_terrain_math_tests terrain_math_test.cpp)
