@@ -5,9 +5,11 @@
 #include "engine/renderer_integration/TerrainDescriptorBuilder.hpp"
 #include "engine/renderer_integration/TerrainIntegrationDiagnostics.hpp"
 #include "engine/renderer_integration/TerrainLifecyclePlan.hpp"
+#include "engine/renderer_integration/TerrainPipeline.hpp"
 #include "engine/renderer_integration/TerrainRendererCommands.hpp"
 #include "engine/renderer_integration/TerrainRenderPrep.hpp"
 #include "engine/renderer_integration/TerrainResourceCatalog.hpp"
+#include "engine/renderer_integration/TerrainRuntimeController.hpp"
 #include "engine/renderer_integration/TerrainSubmissionAdapter.hpp"
 #include "engine/renderer_integration/WorldRenderSnapshot.hpp"
 #include "engine/world/WorldChunkCatalog.hpp"
@@ -715,16 +717,6 @@ struct SampleOpenWorldChurnState
     full_renderer::engine_bridge::EngineStreamingChurnSummary seamSummary = {};
 };
 
-struct SampleEngineTerrainPipelineState
-{
-    full_engine::WorldRenderSnapshot snapshot = {};
-    full_engine::TerrainRenderPrep prep = {};
-    full_engine::TerrainLifecyclePlan lifecycle = {};
-    full_engine::TerrainRendererCommandList commands = {};
-    full_engine::TerrainDescriptorBuildResult descriptors = {};
-    full_engine::TerrainSubmissionResult submission = {};
-};
-
 struct SampleTerrainChunkState
 {
     full_engine::ChunkId id = {};
@@ -893,130 +885,15 @@ void mirrorSampleTerrainSetupState(
     chunk.resident = info != nullptr && info->residency == full_engine::ChunkResidencyState::Resident;
 }
 
-bool applySampleTerrainSetupRequests(
-    full_engine::TerrainChunkRequestQueue& setupRequests,
+void mirrorSampleTerrainState(
     full_engine::WorldChunkRegistry& registry,
     full_engine::WorldChunkCatalog& worldCatalog,
     full_engine::TerrainResourceCatalog& resources,
-    std::vector<SampleTerrainChunkState>& chunks,
-    full_engine::WorldChunkResidencyRequestQueue& residencyRequests,
-    full_engine::TerrainSetupRequestDiagnostics& diagnostics)
-{
-    if (setupRequests.requestCount() == 0)
-    {
-        return true;
-    }
-
-    const full_engine::TerrainChunkRequestApplyResult result = setupRequests.applyTo(registry, worldCatalog, resources);
-    setupRequests.clear();
-    diagnostics = full_engine::makeTerrainSetupRequestDiagnostics(result);
-
-    for (const full_engine::TerrainChunkRequestRecord& record : result.records)
-    {
-        SampleTerrainChunkState* chunk = findSampleTerrainChunk(chunks, record.request.id);
-        if (chunk == nullptr)
-        {
-            continue;
-        }
-
-        switch (record.status)
-        {
-        case full_engine::TerrainChunkRequestStatus::Applied:
-        case full_engine::TerrainChunkRequestStatus::AlreadySatisfied:
-            if (record.request.type == full_engine::TerrainChunkRequestType::Add)
-            {
-                chunk->setupRegistered = true;
-                if (chunk->resident)
-                {
-                    residencyRequests.push(chunk->id, full_engine::WorldChunkResidencyRequestType::MakeResident);
-                }
-            }
-            else
-            {
-                chunk->setupRegistered = false;
-                chunk->resident = false;
-            }
-            break;
-        case full_engine::TerrainChunkRequestStatus::NotFound:
-            if (record.request.type == full_engine::TerrainChunkRequestType::Remove)
-            {
-                chunk->setupRegistered = false;
-                chunk->resident = false;
-            }
-            break;
-        case full_engine::TerrainChunkRequestStatus::PartialFailure:
-            std::cerr << "Sample terrain setup request repaired drift for chunk ("
-                      << record.request.id.x << ", " << record.request.id.y << ", " << record.request.id.z << ").\n";
-            mirrorSampleTerrainSetupState(registry, worldCatalog, resources, *chunk);
-            if (record.request.type == full_engine::TerrainChunkRequestType::Add &&
-                chunk->setupRegistered &&
-                chunk->resident)
-            {
-                residencyRequests.push(chunk->id, full_engine::WorldChunkResidencyRequestType::MakeResident);
-            }
-            break;
-        case full_engine::TerrainChunkRequestStatus::InvalidArgument:
-            std::cerr << "Sample terrain setup request failed for chunk ("
-                      << record.request.id.x << ", " << record.request.id.y << ", " << record.request.id.z << ").\n";
-            return false;
-        }
-    }
-
-    return true;
-}
-
-bool runSampleTerrainPipeline(
-    full_renderer::IRenderer& renderer,
-    const full_engine::WorldChunkRegistry& registry,
-    const full_engine::WorldChunkCatalog& catalog,
-    const full_engine::TerrainResourceCatalog& resources,
-    full_engine::ChunkTerrainHandleMap& handles,
-    SampleEngineTerrainPipelineState& pipeline,
-    const full_engine::WorldRenderSnapshotOptions& snapshotOptions,
-    full_engine::TerrainPipelineDiagnostics& diagnostics,
-    const full_engine::TerrainLifecyclePlanOptions& lifecycleOptions = {})
-{
-    const std::vector<full_engine::WorldChunkDesc> chunkDescs = catalog.descs();
-
-    pipeline.snapshot = full_engine::buildWorldRenderSnapshot(
-        registry,
-        chunkDescs.data(),
-        chunkDescs.size(),
-        snapshotOptions);
-    pipeline.prep = full_engine::prepareTerrainRenderChunks(pipeline.snapshot);
-    pipeline.lifecycle = full_engine::planTerrainLifecycle(pipeline.prep, handles, lifecycleOptions);
-    pipeline.commands = full_engine::buildTerrainRendererCommands(pipeline.lifecycle);
-    pipeline.descriptors = full_engine::buildTerrainDescriptors(pipeline.commands, resources);
-    pipeline.submission = full_engine::submitTerrainCommands(renderer, pipeline.descriptors, pipeline.commands, handles);
-    diagnostics = full_engine::makeTerrainPipelineDiagnostics(
-        pipeline.snapshot,
-        pipeline.prep,
-        pipeline.lifecycle,
-        pipeline.commands,
-        pipeline.descriptors,
-        pipeline.submission,
-        handles.mappedCount());
-
-    return pipeline.submission.summary.rendererFailedCount == 0 &&
-        pipeline.submission.summary.handleMapFailedCount == 0;
-}
-
-void mirrorSampleTerrainResidencyApplyResult(
-    const full_engine::WorldChunkResidencyApplyResult& result,
     std::vector<SampleTerrainChunkState>& chunks)
 {
-    for (const full_engine::WorldChunkResidencyRequestRecord& record : result.records)
+    for (SampleTerrainChunkState& chunk : chunks)
     {
-        if (record.status != full_engine::WorldChunkResidencyRequestStatus::Applied &&
-            record.status != full_engine::WorldChunkResidencyRequestStatus::AlreadySatisfied)
-        {
-            continue;
-        }
-
-        if (SampleTerrainChunkState* chunk = findSampleTerrainChunk(chunks, record.request.id))
-        {
-            chunk->resident = record.finalState == full_engine::ChunkResidencyState::Resident;
-        }
+        mirrorSampleTerrainSetupState(registry, worldCatalog, resources, chunk);
     }
 }
 
@@ -1423,6 +1300,7 @@ void drawTerrainDiagnosticsPanel(
         {
             selectedChunk->resident = true;
             terrainSetupRequests.pushAdd(selectedChunk->worldDesc, selectedChunk->resourceDesc);
+            terrainResidencyRequests.push(selectedChunkId, full_engine::WorldChunkResidencyRequestType::MakeResident);
             engineTerrainPipelineDirty = true;
         }
         ImGui::SameLine();
@@ -1461,6 +1339,7 @@ void drawTerrainDiagnosticsPanel(
                 {
                     chunk.resident = true;
                     terrainSetupRequests.pushAdd(chunk.worldDesc, chunk.resourceDesc);
+                    terrainResidencyRequests.push(chunk.id, full_engine::WorldChunkResidencyRequestType::MakeResident);
                     queuedAny = true;
                 }
             }
@@ -3320,7 +3199,7 @@ int main(int argc, char** argv)
     full_engine::TerrainChunkRequestQueue terrainSetupRequests;
     full_engine::TerrainResourceCatalog engineTerrainResources;
     full_engine::ChunkTerrainHandleMap engineTerrainHandles;
-    SampleEngineTerrainPipelineState engineTerrainPipeline;
+    full_engine::TerrainPipelineRunResult engineTerrainPipeline;
     full_engine::TerrainIntegrationDiagnostics terrainDiagnostics;
     std::vector<SampleTerrainChunkState> sampleTerrainChunks;
     std::vector<full_renderer::TerrainChunkHandle> terrainChunks;
@@ -3527,17 +3406,17 @@ int main(int argc, char** argv)
         }
     }
 
-    full_engine::WorldRenderSnapshotOptions engineTerrainSnapshotOptions;
-    engineTerrainSnapshotOptions.origin = full_engine::makeAbsoluteOrigin();
-    if (!runSampleTerrainPipeline(
-            *renderer,
-            engineTerrainRegistry,
-            engineTerrainCatalog,
-            engineTerrainResources,
-            engineTerrainHandles,
-            engineTerrainPipeline,
-            engineTerrainSnapshotOptions,
-            terrainDiagnostics.pipeline) ||
+    full_engine::TerrainRuntimeUpdateOptions engineTerrainRuntimeOptions;
+    engineTerrainRuntimeOptions.pipelineOptions.snapshotOptions.origin = full_engine::makeAbsoluteOrigin();
+    engineTerrainPipeline = full_engine::runTerrainPipeline(
+        *renderer,
+        engineTerrainRegistry,
+        engineTerrainCatalog,
+        engineTerrainResources,
+        engineTerrainHandles,
+        engineTerrainRuntimeOptions.pipelineOptions);
+    terrainDiagnostics.pipeline = engineTerrainPipeline.diagnostics;
+    if (!engineTerrainPipeline.succeeded ||
         engineTerrainHandles.mappedCount() != sampleTerrainChunks.size())
     {
         std::cerr << "Failed to submit sample terrain through engine integration.\n";
@@ -3836,56 +3715,39 @@ int main(int argc, char** argv)
 
         if (engineTerrainPipelineDirty)
         {
-            if (!applySampleTerrainSetupRequests(
-                    terrainSetupRequests,
-                    engineTerrainRegistry,
-                    engineTerrainCatalog,
-                    engineTerrainResources,
-                    sampleTerrainChunks,
-                    terrainResidencyRequests,
-                    terrainDiagnostics.setupRequests))
+            const full_engine::TerrainRuntimeUpdateResult updateResult = full_engine::updateTerrainRuntime(
+                *renderer,
+                engineTerrainRegistry,
+                engineTerrainCatalog,
+                engineTerrainResources,
+                engineTerrainHandles,
+                terrainSetupRequests,
+                terrainResidencyRequests,
+                engineTerrainRuntimeOptions);
+            terrainDiagnostics = updateResult.diagnostics;
+            engineTerrainPipeline = updateResult.pipeline;
+
+            if (updateResult.status == full_engine::TerrainRuntimeUpdateStatus::SetupFailed)
             {
                 std::cerr << "Sample terrain setup request failed.\n";
                 break;
             }
-
-            if (terrainResidencyRequests.requestCount() > 0)
+            if (updateResult.status == full_engine::TerrainRuntimeUpdateStatus::ResidencyFailed)
             {
-                full_engine::WorldChunkResidencyRequestQueue registeredResidencyRequests;
-                for (const full_engine::WorldChunkResidencyRequest& request : terrainResidencyRequests.requests())
-                {
-                    const SampleTerrainChunkState* chunk = findSampleTerrainChunk(sampleTerrainChunks, request.id);
-                    if (chunk != nullptr && chunk->setupRegistered)
-                    {
-                        registeredResidencyRequests.push(request);
-                    }
-                }
-                const full_engine::WorldChunkResidencyApplyResult applyResult =
-                    registeredResidencyRequests.applyTo(engineTerrainRegistry);
-                terrainDiagnostics.residencyRequests =
-                    full_engine::makeTerrainResidencyRequestDiagnostics(applyResult);
-                mirrorSampleTerrainResidencyApplyResult(applyResult, sampleTerrainChunks);
-                terrainResidencyRequests.clear();
-                if (applyResult.summary.invalidTransitionCount > 0)
-                {
-                    std::cerr << "Sample terrain residency request failed with an invalid transition.\n";
-                    break;
-                }
+                std::cerr << "Sample terrain residency request failed with an invalid transition.\n";
+                break;
             }
-
-            if (!runSampleTerrainPipeline(
-                    *renderer,
-                    engineTerrainRegistry,
-                    engineTerrainCatalog,
-                    engineTerrainResources,
-                    engineTerrainHandles,
-                    engineTerrainPipeline,
-                    engineTerrainSnapshotOptions,
-                    terrainDiagnostics.pipeline))
+            if (updateResult.status == full_engine::TerrainRuntimeUpdateStatus::PipelineFailed)
             {
                 std::cerr << "Failed to update sample terrain residency through engine integration.\n";
                 break;
             }
+
+            mirrorSampleTerrainState(
+                engineTerrainRegistry,
+                engineTerrainCatalog,
+                engineTerrainResources,
+                sampleTerrainChunks);
             engineTerrainPipelineDirty = false;
             if (terrainResidencyControls.reloadCenterAfterUnload)
             {

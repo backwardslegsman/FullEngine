@@ -376,6 +376,18 @@ move gameplay, streaming policy, or editor concepts into renderer internals.
   setup request results, residency request results, terrain pipeline counters,
   and renderer submission summaries can be copied into debug UI or tooling
   surfaces without depending on sample-local state.
+- Initial terrain pipeline coordination is engine-owned: the reusable
+  renderer-integration coordinator now runs world snapshot, terrain prep,
+  lifecycle planning, command building, descriptor building, submission, and
+  diagnostics for the sample terrain path.
+- Initial terrain runtime coordination is engine-owned: a stateless controller
+  now applies setup requests, filters and applies registered residency requests,
+  runs the terrain pipeline, and returns aggregate diagnostics while the sample
+  keeps UI state and renderer resource creation local.
+- Together these terrain runtime slices form the current engine milestone:
+  setup and residency intent are reusable engine-facing queues, diagnostics are
+  engine-owned value snapshots, and sample terrain submission now goes through
+  an engine-owned runtime update before renderer frame submission.
 - Define engine-owned chunk IDs, streaming regions, residency state, and
   large-world origin policy.
 - Translate world coordinates to renderer-relative frame data in

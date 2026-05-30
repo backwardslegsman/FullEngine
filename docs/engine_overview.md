@@ -73,6 +73,11 @@ Implemented pieces:
 - terrain prep records filtered from ready world render snapshot records
 - terrain lifecycle planning, renderer command intent, and renderer-shaped
   descriptor intent for ready terrain chunks
+- a reusable terrain pipeline coordinator that runs the world snapshot, terrain
+  prep, lifecycle, command, descriptor, submission, and diagnostics sequence
+- a stateless terrain runtime controller that applies setup requests, applies
+  registered residency requests, runs the terrain pipeline, and returns
+  aggregate diagnostics for the caller
 - terrain resource catalogs that associate chunks with externally supplied
   renderer mesh/material/LOD/splat handles without owning those resources
 - a submission adapter that calls only public terrain APIs and updates
@@ -87,6 +92,21 @@ Implemented pieces:
   value-only engine data for debug UI or tooling surfaces
 - CPU and fake-renderer tests for engine lifecycle, world ownership, terrain
   integration seams, and end-to-end terrain pipeline composition
+
+## Terrain runtime milestone
+
+The terrain runtime path is now an engine-owned composition layer rather than
+sample-only glue. `TerrainIntegrationDiagnostics` captures setup, residency,
+pipeline, and renderer-submission counters as value snapshots.
+`runTerrainPipeline` owns the ordered translation from world chunk state to
+renderer terrain submission. `updateTerrainRuntime` applies setup requests,
+filters and applies registered residency requests, runs the pipeline, clears
+handled queues, and returns one aggregate update result.
+
+The sample still owns demo UI state and renderer mesh/material/texture
+creation. It queues setup and residency intent, calls the runtime controller
+before renderer frame submission, mirrors display state from engine registries,
+and submits the mapped renderer terrain handles in its render packet.
 
 Still future work:
 
