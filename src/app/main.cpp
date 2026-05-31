@@ -1,5 +1,6 @@
 #include "full_renderer/Renderer.hpp"
 
+#include "engine/assets/CookedAssetManifest.hpp"
 #include "engine/assets/TerrainAssetDependencyValidator.hpp"
 #include "engine/renderer_integration/ChunkTerrainHandleMap.hpp"
 #include "engine/renderer_integration/TerrainAssetResolver.hpp"
@@ -812,6 +813,27 @@ const char* terrainAssetDependencyValidationResultName(
         return "MissingSplatMapAsset";
     case full_engine::TerrainAssetDependencyValidationResult::WrongSplatMapAssetKind:
         return "WrongSplatMapAssetKind";
+    }
+    return "Unknown";
+}
+
+const char* cookedAssetManifestValidationResultName(
+    const full_engine::CookedAssetManifestValidationResult result) noexcept
+{
+    switch (result)
+    {
+    case full_engine::CookedAssetManifestValidationResult::Success:
+        return "Success";
+    case full_engine::CookedAssetManifestValidationResult::InvalidAssetRecord:
+        return "InvalidAssetRecord";
+    case full_engine::CookedAssetManifestValidationResult::DuplicateAssetId:
+        return "DuplicateAssetId";
+    case full_engine::CookedAssetManifestValidationResult::InvalidTerrainAssets:
+        return "InvalidTerrainAssets";
+    case full_engine::CookedAssetManifestValidationResult::DuplicateTerrainChunk:
+        return "DuplicateTerrainChunk";
+    case full_engine::CookedAssetManifestValidationResult::InvalidTerrainDependencies:
+        return "InvalidTerrainDependencies";
     }
     return "Unknown";
 }
@@ -3585,76 +3607,23 @@ int main(int argc, char** argv)
         return 1;
     }
 
-    bool terrainAssetMetadataRegistered = true;
+    full_engine::CookedAssetManifest sampleTerrainManifest;
     for (std::uint32_t lodIndex = 0; lodIndex < full_renderer::kMaxTerrainLodLevels; ++lodIndex)
     {
         full_engine::AssetRecord meshRecord;
         meshRecord.id = sampleTerrainMeshAssetId(lodIndex);
         meshRecord.kind = full_engine::AssetKind::Mesh;
-        terrainAssetMetadataRegistered = terrainAssetMetadataRegistered &&
-            engineAssetCatalog.addAsset(meshRecord) == full_engine::AssetCatalogResult::Success;
+        sampleTerrainManifest.assets.push_back(meshRecord);
     }
     full_engine::AssetRecord materialRecord;
     materialRecord.id = sampleTerrainMaterialAssetId();
     materialRecord.kind = full_engine::AssetKind::Material;
-    terrainAssetMetadataRegistered = terrainAssetMetadataRegistered &&
-        engineAssetCatalog.addAsset(materialRecord) == full_engine::AssetCatalogResult::Success;
+    sampleTerrainManifest.assets.push_back(materialRecord);
 
     full_engine::AssetRecord splatRecord;
     splatRecord.id = sampleTerrainSplatAssetId();
     splatRecord.kind = full_engine::AssetKind::Texture;
-    terrainAssetMetadataRegistered = terrainAssetMetadataRegistered &&
-        engineAssetCatalog.addAsset(splatRecord) == full_engine::AssetCatalogResult::Success;
-
-    bool terrainAssetHandlesRegistered = terrainAssetMetadataRegistered;
-    for (std::uint32_t lodIndex = 0; lodIndex < full_renderer::kMaxTerrainLodLevels; ++lodIndex)
-    {
-        terrainAssetHandlesRegistered = terrainAssetHandlesRegistered &&
-            engineTerrainAssetHandles.addMeshHandle(sampleTerrainMeshAssetId(lodIndex), terrainMeshes[lodIndex]) ==
-                full_engine::RendererAssetHandleCatalogResult::Success;
-    }
-    terrainAssetHandlesRegistered = terrainAssetHandlesRegistered &&
-        engineTerrainAssetHandles.addMaterialHandle(sampleTerrainMaterialAssetId(), terrainMaterial) ==
-            full_engine::RendererAssetHandleCatalogResult::Success &&
-        engineTerrainAssetHandles.addTextureHandle(sampleTerrainSplatAssetId(), terrainSplatMap) ==
-            full_engine::RendererAssetHandleCatalogResult::Success;
-    if (!terrainAssetHandlesRegistered)
-    {
-        std::cerr << (terrainAssetMetadataRegistered
-            ? "Failed to register sample terrain asset handles.\n"
-            : "Failed to register sample terrain asset metadata.\n");
-        for (const full_renderer::MeshHandle mesh : terrainMeshes)
-        {
-            renderer->destroyMesh(mesh);
-        }
-        renderer->destroyMaterial(terrainMaterial);
-        renderer->destroyTexture(terrainSplatMap);
-        for (const full_renderer::TextureHandle texture : decalTextures)
-        {
-            if (full_renderer::isValid(texture))
-            {
-                renderer->destroyTexture(texture);
-            }
-        }
-        if (full_renderer::isValid(particleTexture))
-        {
-            renderer->destroyTexture(particleTexture);
-        }
-        for (const full_renderer::TextureHandle texture : layerTextures)
-        {
-            renderer->destroyTexture(texture);
-        }
-        for (const full_renderer::TextureHandle texture : normalTextures)
-        {
-            renderer->destroyTexture(texture);
-        }
-        renderer->destroySkinnedMesh(sampleSkinnedMesh);
-        renderer->destroySkeleton(sampleSkeleton);
-        renderer->destroyMaterial(cubeMaterial);
-        renderer->destroyMesh(cubeMesh);
-        renderer->shutdown();
-        return 1;
-    }
+    sampleTerrainManifest.assets.push_back(splatRecord);
 
     for (int z = -kGridRadius; z <= kGridRadius; ++z)
     {
@@ -3690,76 +3659,173 @@ int main(int argc, char** argv)
             full_engine::WorldChunkDesc chunkDesc;
             chunkDesc.id = chunkId;
             chunkDesc.bounds = toEngineWorldBounds(chunkBounds);
-            const full_engine::TerrainAssetCatalogResult assetAddResult =
-                engineTerrainAssets.addChunkAssets(assetDesc);
-            const full_engine::TerrainAssetDependencyValidation dependencyValidation =
-                full_engine::validateTerrainAssetDependencies(assetDesc, engineAssetCatalog);
-            full_engine::TerrainAssetResolveResult resolvedResources;
-            if (dependencyValidation.result == full_engine::TerrainAssetDependencyValidationResult::Success)
-            {
-                resolvedResources = full_engine::resolveTerrainChunkResources(
-                    engineTerrainAssets,
-                    chunkId,
-                    engineTerrainAssetHandles);
-            }
-            full_engine::TerrainChunkRequestQueue setupRequests;
-            if (assetAddResult == full_engine::TerrainAssetCatalogResult::Success &&
-                dependencyValidation.result == full_engine::TerrainAssetDependencyValidationResult::Success &&
-                resolvedResources.status == full_engine::TerrainAssetResolveStatus::Success)
-            {
-                setupRequests.pushAdd(chunkDesc, resolvedResources.resources);
-            }
-            const full_engine::TerrainChunkRequestApplyResult setupResult = setupRequests.applyTo(
-                engineTerrainRegistry,
-                engineTerrainCatalog,
-                engineTerrainResources);
-            const bool setupApplied =
-                setupResult.records.size() == 1 &&
-                setupResult.records[0].status == full_engine::TerrainChunkRequestStatus::Applied;
-            const bool resident =
-                setupApplied &&
-                engineTerrainRegistry.setResidencyState(chunkId, full_engine::ChunkResidencyState::Loading) ==
-                    full_engine::WorldResult::Success &&
-                engineTerrainRegistry.setResidencyState(chunkId, full_engine::ChunkResidencyState::Resident) ==
-                    full_engine::WorldResult::Success;
-
-            if (!resident)
-            {
-                std::cerr << "Failed to register sample terrain chunk setup.\n";
-                if (assetAddResult != full_engine::TerrainAssetCatalogResult::Success)
-                {
-                    std::cerr << "Sample terrain asset catalog add failed for chunk ("
-                              << chunkId.x << ", " << chunkId.y << ", " << chunkId.z << ").\n";
-                }
-                if (dependencyValidation.result != full_engine::TerrainAssetDependencyValidationResult::Success)
-                {
-                    std::cerr << "Sample terrain asset dependency validation failed for chunk ("
-                              << chunkId.x << ", " << chunkId.y << ", " << chunkId.z
-                              << "): " << terrainAssetDependencyValidationResultName(dependencyValidation.result) << ".\n";
-                }
-                if (resolvedResources.status != full_engine::TerrainAssetResolveStatus::Success)
-                {
-                    std::cerr << "Sample terrain asset resolution failed for chunk ("
-                              << chunkId.x << ", " << chunkId.y << ", " << chunkId.z
-                              << "): " << terrainAssetResolveStatusName(resolvedResources.status) << ".\n";
-                }
-                removeSampleTerrainSetup(
-                    engineTerrainRegistry,
-                    engineTerrainCatalog,
-                    engineTerrainResources,
-                    sampleTerrainChunks);
-                renderer->shutdown();
-                return 1;
-            }
+            sampleTerrainManifest.terrainChunks.push_back(assetDesc);
 
             SampleTerrainChunkState chunkState;
             chunkState.id = chunkId;
             chunkState.worldDesc = chunkDesc;
             chunkState.assetDesc = assetDesc;
-            chunkState.setupRegistered = true;
-            chunkState.resident = true;
+            chunkState.setupRegistered = false;
+            chunkState.resident = false;
             sampleTerrainChunks.push_back(chunkState);
         }
+    }
+
+    const full_engine::CookedAssetManifestBuildResult manifestBuild =
+        full_engine::buildCatalogsFromCookedAssetManifest(sampleTerrainManifest);
+    if (manifestBuild.validation.result != full_engine::CookedAssetManifestValidationResult::Success)
+    {
+        std::cerr << "Failed to build sample terrain cooked asset manifest: "
+                  << cookedAssetManifestValidationResultName(manifestBuild.validation.result) << ".\n";
+        if (manifestBuild.validation.assetIndex != full_engine::CookedAssetManifestValidation::invalidIndex)
+        {
+            std::cerr << "Manifest asset index: " << manifestBuild.validation.assetIndex << ".\n";
+        }
+        if (manifestBuild.validation.terrainChunkIndex != full_engine::CookedAssetManifestValidation::invalidIndex)
+        {
+            std::cerr << "Manifest terrain chunk index: " << manifestBuild.validation.terrainChunkIndex << ".\n";
+        }
+        for (const full_renderer::MeshHandle mesh : terrainMeshes)
+        {
+            renderer->destroyMesh(mesh);
+        }
+        renderer->destroyMaterial(terrainMaterial);
+        renderer->destroyTexture(terrainSplatMap);
+        for (const full_renderer::TextureHandle texture : decalTextures)
+        {
+            if (full_renderer::isValid(texture))
+            {
+                renderer->destroyTexture(texture);
+            }
+        }
+        if (full_renderer::isValid(particleTexture))
+        {
+            renderer->destroyTexture(particleTexture);
+        }
+        for (const full_renderer::TextureHandle texture : layerTextures)
+        {
+            renderer->destroyTexture(texture);
+        }
+        for (const full_renderer::TextureHandle texture : normalTextures)
+        {
+            renderer->destroyTexture(texture);
+        }
+        renderer->destroySkinnedMesh(sampleSkinnedMesh);
+        renderer->destroySkeleton(sampleSkeleton);
+        renderer->destroyMaterial(cubeMaterial);
+        renderer->destroyMesh(cubeMesh);
+        renderer->shutdown();
+        return 1;
+    }
+    engineAssetCatalog = manifestBuild.catalogs.assets;
+    engineTerrainAssets = manifestBuild.catalogs.terrainAssets;
+
+    bool terrainAssetHandlesRegistered = true;
+    for (std::uint32_t lodIndex = 0; lodIndex < full_renderer::kMaxTerrainLodLevels; ++lodIndex)
+    {
+        terrainAssetHandlesRegistered = terrainAssetHandlesRegistered &&
+            engineTerrainAssetHandles.addMeshHandle(sampleTerrainMeshAssetId(lodIndex), terrainMeshes[lodIndex]) ==
+                full_engine::RendererAssetHandleCatalogResult::Success;
+    }
+    terrainAssetHandlesRegistered = terrainAssetHandlesRegistered &&
+        engineTerrainAssetHandles.addMaterialHandle(sampleTerrainMaterialAssetId(), terrainMaterial) ==
+            full_engine::RendererAssetHandleCatalogResult::Success &&
+        engineTerrainAssetHandles.addTextureHandle(sampleTerrainSplatAssetId(), terrainSplatMap) ==
+            full_engine::RendererAssetHandleCatalogResult::Success;
+    if (!terrainAssetHandlesRegistered)
+    {
+        std::cerr << "Failed to register sample terrain asset handles.\n";
+        for (const full_renderer::MeshHandle mesh : terrainMeshes)
+        {
+            renderer->destroyMesh(mesh);
+        }
+        renderer->destroyMaterial(terrainMaterial);
+        renderer->destroyTexture(terrainSplatMap);
+        for (const full_renderer::TextureHandle texture : decalTextures)
+        {
+            if (full_renderer::isValid(texture))
+            {
+                renderer->destroyTexture(texture);
+            }
+        }
+        if (full_renderer::isValid(particleTexture))
+        {
+            renderer->destroyTexture(particleTexture);
+        }
+        for (const full_renderer::TextureHandle texture : layerTextures)
+        {
+            renderer->destroyTexture(texture);
+        }
+        for (const full_renderer::TextureHandle texture : normalTextures)
+        {
+            renderer->destroyTexture(texture);
+        }
+        renderer->destroySkinnedMesh(sampleSkinnedMesh);
+        renderer->destroySkeleton(sampleSkeleton);
+        renderer->destroyMaterial(cubeMaterial);
+        renderer->destroyMesh(cubeMesh);
+        renderer->shutdown();
+        return 1;
+    }
+
+    for (SampleTerrainChunkState& chunk : sampleTerrainChunks)
+    {
+        const full_engine::TerrainAssetDependencyValidation dependencyValidation =
+            full_engine::validateTerrainAssetDependencies(chunk.assetDesc, engineAssetCatalog);
+        full_engine::TerrainAssetResolveResult resolvedResources;
+        if (dependencyValidation.result == full_engine::TerrainAssetDependencyValidationResult::Success)
+        {
+            resolvedResources = full_engine::resolveTerrainChunkResources(
+                engineTerrainAssets,
+                chunk.id,
+                engineTerrainAssetHandles);
+        }
+        full_engine::TerrainChunkRequestQueue setupRequests;
+        if (dependencyValidation.result == full_engine::TerrainAssetDependencyValidationResult::Success &&
+            resolvedResources.status == full_engine::TerrainAssetResolveStatus::Success)
+        {
+            setupRequests.pushAdd(chunk.worldDesc, resolvedResources.resources);
+        }
+        const full_engine::TerrainChunkRequestApplyResult setupResult = setupRequests.applyTo(
+            engineTerrainRegistry,
+            engineTerrainCatalog,
+            engineTerrainResources);
+        const bool setupApplied =
+            setupResult.records.size() == 1 &&
+            setupResult.records[0].status == full_engine::TerrainChunkRequestStatus::Applied;
+        const bool resident =
+            setupApplied &&
+            engineTerrainRegistry.setResidencyState(chunk.id, full_engine::ChunkResidencyState::Loading) ==
+                full_engine::WorldResult::Success &&
+            engineTerrainRegistry.setResidencyState(chunk.id, full_engine::ChunkResidencyState::Resident) ==
+                full_engine::WorldResult::Success;
+
+        if (!resident)
+        {
+            std::cerr << "Failed to register sample terrain chunk setup.\n";
+            if (dependencyValidation.result != full_engine::TerrainAssetDependencyValidationResult::Success)
+            {
+                std::cerr << "Sample terrain asset dependency validation failed for chunk ("
+                          << chunk.id.x << ", " << chunk.id.y << ", " << chunk.id.z
+                          << "): " << terrainAssetDependencyValidationResultName(dependencyValidation.result) << ".\n";
+            }
+            if (resolvedResources.status != full_engine::TerrainAssetResolveStatus::Success)
+            {
+                std::cerr << "Sample terrain asset resolution failed for chunk ("
+                          << chunk.id.x << ", " << chunk.id.y << ", " << chunk.id.z
+                          << "): " << terrainAssetResolveStatusName(resolvedResources.status) << ".\n";
+            }
+            removeSampleTerrainSetup(
+                engineTerrainRegistry,
+                engineTerrainCatalog,
+                engineTerrainResources,
+                sampleTerrainChunks);
+            renderer->shutdown();
+            return 1;
+        }
+
+        chunk.setupRegistered = true;
+        chunk.resident = true;
     }
 
     full_engine::TerrainRuntimeUpdateOptions engineTerrainRuntimeOptions;

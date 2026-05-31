@@ -436,6 +436,17 @@ move gameplay, streaming policy, or editor concepts into renderer internals.
   mesh/material/texture kinds before renderer-handle resolution, without IO or
   renderer resource ownership. The sample terrain setup now registers generic
   asset metadata and runs that validation before resolving renderer handles.
+- Initial in-memory cooked asset manifest conventions are in place: generic
+  asset records and terrain chunk asset descriptors can be grouped into a
+  renderer-free manifest value, validated deterministically, and built into
+  generic/terrain catalogs without file IO, parsing, importers, async loading,
+  renderer handles, or renderer resource creation. The sample terrain setup now
+  declares its metadata through that manifest path before renderer-handle
+  resolution and terrain setup queuing.
+- Deterministic cooked manifest JSON Lines import/export is in place for
+  lightweight tooling and schema round-trip tests. It remains standard-library
+  only and does not add production asset loading, importers, async loading, or
+  renderer-resource creation.
 - Define engine-owned asset IDs, manifests, dependency lookup, and cooked asset
   responsibilities.
 - Map engine assets to renderer mesh, texture, material, skeleton, terrain, and

@@ -85,6 +85,12 @@ Implemented pieces:
 - a generic asset identity catalog for renderer-free asset kind and dependency
   metadata, used as the shared convention beneath specialized asset reference
   catalogs
+- an in-memory cooked asset manifest value model that groups generic asset
+  records and terrain chunk asset descriptors into validated catalogs without
+  file IO or renderer-resource ownership
+- deterministic JSON Lines import/export for cooked asset manifests, used as
+  lightweight schema and tooling support without introducing production asset
+  loading policy
 - terrain asset dependency validation that checks terrain mesh/material/texture
   references against generic asset metadata before renderer-handle resolution
 - initial terrain asset identity catalogs that describe chunk mesh/material/LOD
@@ -141,20 +147,21 @@ JSON Lines, matching the event diagnostics tooling while keeping the data
 CPU-only, value-owned, and independent of renderer resources or sample UI state.
 
 The sample still owns demo UI state and renderer mesh/material/texture
-creation. It registers sample terrain asset IDs and generic asset metadata,
-validates terrain asset dependencies, resolves them through externally supplied
-renderer handle catalogs into terrain resource descriptors, queues setup and
-residency intent through `TerrainRuntimeState`, updates that state before
-renderer frame submission, mirrors display state from engine registries,
-displays the retained runtime snapshot/diff in its debug panel, exports
-event/diff diagnostics on demand, and submits the mapped renderer terrain
-handles in its render packet.
+creation. It declares sample terrain asset IDs, generic asset metadata, and
+terrain chunk asset references through an in-memory cooked manifest, builds
+generic and terrain asset catalogs from that manifest, validates terrain asset
+dependencies, resolves them through externally supplied renderer handle
+catalogs into terrain resource descriptors, queues setup and residency intent
+through `TerrainRuntimeState`, updates that state before renderer frame
+submission, mirrors display state from engine registries, displays the retained
+runtime snapshot/diff in its debug panel, exports event/diff diagnostics on
+demand, and submits the mapped renderer terrain handles in its render packet.
 
 Still future work:
 
 - async loading, streaming jobs, and IO
-- cooked asset manifests, importers, and production renderer-resource creation
-  policy
+- production cooked manifest formats, importers, and renderer-resource
+  creation policy
 - production terrain streaming policy and editor-owned residency controls
 - real engine-owned mesh/material/texture creation and lifetime policy
 - renderer descriptor conversion for non-terrain draws and cameras
