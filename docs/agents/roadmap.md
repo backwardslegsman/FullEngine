@@ -475,6 +475,21 @@ move gameplay, streaming policy, or editor concepts into renderer internals.
   can be converted into renderer-free asset ID/kind load intent records,
   creating an explicit bridge toward loading without adding IO, async work, or
   renderer-resource creation.
+- Manifest asset load request queueing is in place: load intent records can be
+  retained and deduplicated over time in `TerrainManifestLoadState`, exposing
+  pending queue counters while still avoiding IO, async work, and renderer
+  resource creation.
+- Manifest asset load adapter consumption is in place: pending load intent can
+  be satisfied by externally supplied renderer handle catalogs and copied into
+  runtime handle catalogs with all-or-nothing queue clearing and ordered
+  diagnostics, still without IO, async work, renderer calls, or renderer
+  resource creation.
+- Manifest load state consume diagnostics are in place: `TerrainManifestLoadState`
+  can consume its retained pending load queue through the adapter and store the
+  latest consume result while source/destination handle catalogs remain
+  caller-owned. The sample debug panel exposes a diagnostic consume button and
+  latest load consume counters using its existing renderer handle catalog as
+  the externally supplied handle source.
 - Initial terrain asset dependency validation is in place: terrain chunk asset
   descriptors can be checked against generic asset metadata for expected
   mesh/material/texture kinds before renderer-handle resolution, without IO or

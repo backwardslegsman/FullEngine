@@ -90,6 +90,20 @@ matrices, and skinned vertices with integer joint indices and normalized
 weights. Invalid descriptors fail resource creation before backend resources
 are allocated.
 
+The current `full_engine` asset path defines a renderer-free cooked manifest
+shape for generic asset metadata and terrain chunk asset references. Engine
+tools can validate that manifest, summarize declared dependencies, compare
+mesh/material/texture asset IDs with an externally supplied
+`RendererAssetHandleCatalog`, and convert missing handles into retained
+renderer-free load intent. `TerrainManifestLoadState` owns the retained
+manifest value, latest readiness/load/staging diagnostics, and a pending load
+request queue; it still does not own file IO, async jobs, renderer resources,
+or renderer handle catalogs. Once an external loader or test seam creates
+renderer handles, `consumeTerrainManifestAssetLoadRequests` can copy those
+caller-owned handles into a runtime handle catalog with ordered diagnostics and
+all-or-nothing queue clearing. This is the current loading shape, not a
+production importer or background streaming system.
+
 Basic mesh materials expose a small alpha policy through `MaterialDesc`.
 `MaterialAlphaMode::Opaque` is the default and writes depth in the normal
 forward path. `MaterialAlphaMode::AlphaTest` uses

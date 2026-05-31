@@ -1323,7 +1323,7 @@ void drawTerrainDiagnosticsPanel(
     const full_engine::WorldChunkCatalog& engineTerrainCatalog,
     const full_engine::AssetCatalog& engineAssetCatalog,
     const full_engine::TerrainAssetCatalog& engineTerrainAssets,
-    const full_engine::RendererAssetHandleCatalog& engineTerrainAssetHandles,
+    full_engine::RendererAssetHandleCatalog& engineTerrainAssetHandles,
     const full_engine::TerrainResourceCatalog& engineTerrainResources,
     const full_engine::ChunkTerrainHandleMap& engineTerrainHandles,
     const full_engine::CookedAssetManifest& sampleTerrainManifest,
@@ -1462,6 +1462,7 @@ void drawTerrainDiagnosticsPanel(
                 terrainResidencyControls.manifestLoad.setManifest(importedManifest.manifest);
                 (void)terrainResidencyControls.manifestLoad.planAssetReadiness(engineTerrainAssetHandles);
                 (void)terrainResidencyControls.manifestLoad.planAssetLoadRequests();
+                (void)terrainResidencyControls.manifestLoad.queueLatestAssetLoadRequests();
 
                 const std::vector<full_engine::WorldChunkDesc> sampleWorldDescs =
                     sampleTerrainWorldDescs(sampleTerrainChunks);
@@ -1517,6 +1518,35 @@ void drawTerrainDiagnosticsPanel(
                 terrainResidencyControls.manifestLoad.latestLoadRequests().summary.materialRequestCount),
             static_cast<unsigned long long>(
                 terrainResidencyControls.manifestLoad.latestLoadRequests().summary.textureRequestCount));
+        ImGui::Text(
+            "Manifest load queue: pending %llu, queued/already/invalid %llu/%llu/%llu",
+            static_cast<unsigned long long>(terrainResidencyControls.manifestLoad.pendingLoadRequestCount()),
+            static_cast<unsigned long long>(
+                terrainResidencyControls.manifestLoad.latestLoadRequestQueueResult().summary.queuedCount),
+            static_cast<unsigned long long>(
+                terrainResidencyControls.manifestLoad.latestLoadRequestQueueResult().summary.alreadyQueuedCount),
+            static_cast<unsigned long long>(
+                terrainResidencyControls.manifestLoad.latestLoadRequestQueueResult().summary.invalidArgumentCount));
+        if (ImGui::Button("Consume Load Requests"))
+        {
+            (void)terrainResidencyControls.manifestLoad.consumePendingAssetLoadRequests(
+                engineTerrainAssetHandles,
+                engineTerrainAssetHandles);
+            (void)terrainResidencyControls.manifestLoad.planAssetReadiness(engineTerrainAssetHandles);
+            (void)terrainResidencyControls.manifestLoad.planAssetLoadRequests();
+        }
+        ImGui::SameLine();
+        ImGui::Text(
+            "Load consume: loaded/already/missing/rejected %llu/%llu/%llu/%llu%s",
+            static_cast<unsigned long long>(
+                terrainResidencyControls.manifestLoad.latestLoadConsumeResult().summary.loadedCount),
+            static_cast<unsigned long long>(
+                terrainResidencyControls.manifestLoad.latestLoadConsumeResult().summary.alreadyLoadedCount),
+            static_cast<unsigned long long>(
+                terrainResidencyControls.manifestLoad.latestLoadConsumeResult().summary.missingHandleCount),
+            static_cast<unsigned long long>(
+                terrainResidencyControls.manifestLoad.latestLoadConsumeResult().summary.catalogRejectedCount),
+            terrainResidencyControls.manifestLoad.latestLoadConsumeResult().consumed ? ", consumed" : "");
         ImGui::Text(
             "Manifest stage: %s, add %llu, keep %llu, remove %llu, changed %llu",
             full_engine::terrainManifestRuntimeStageStatusName(

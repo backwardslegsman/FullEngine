@@ -90,6 +90,8 @@ void testDefaultState(std::vector<std::string>& failures)
     expect(state.latestDiagnostics().stage.addCount == 0, "default diagnostics are empty", failures);
     expect(state.latestReadiness().records.empty(), "default readiness is empty", failures);
     expect(state.latestLoadRequests().requests.empty(), "default load requests are empty", failures);
+    expect(state.pendingLoadRequestCount() == 0, "default pending load queue is empty", failures);
+    expect(state.latestLoadConsumeResult().records.empty(), "default consume diagnostics are empty", failures);
     expect(
         full_engine::terrainManifestLoadStageStatusName(full_engine::TerrainManifestLoadStageStatus::NoManifest) ==
             std::string("NoManifest"),
@@ -181,6 +183,117 @@ void testMissingReadinessBuildsLoadRequests(std::vector<std::string>& failures)
     expect(state.latestLoadRequests().requests.size() == 3, "load requests are retained", failures);
 }
 
+void testLoadRequestsCanBeQueuedAndReset(std::vector<std::string>& failures)
+{
+    full_engine::TerrainManifestLoadState state;
+    state.setManifest(validManifest());
+
+    (void)state.planAssetReadiness({});
+    (void)state.planAssetLoadRequests();
+
+    const full_engine::TerrainManifestAssetLoadQueuePushResult& firstQueue =
+        state.queueLatestAssetLoadRequests();
+    expect(firstQueue.summary.queuedCount == 3, "first load request queue records new requests", failures);
+    expect(firstQueue.summary.alreadyQueuedCount == 0, "first load request queue has no duplicates", failures);
+    expect(state.pendingLoadRequestCount() == 3, "load state retains pending load queue", failures);
+    expect(state.loadRequestQueue().summary().requestCount == 3, "load queue exposes summary", failures);
+
+    const full_engine::TerrainManifestAssetLoadQueuePushResult& secondQueue =
+        state.queueLatestAssetLoadRequests();
+    expect(secondQueue.summary.queuedCount == 0, "second load request queue adds no duplicates", failures);
+    expect(secondQueue.summary.alreadyQueuedCount == 3, "second load request queue reports duplicates", failures);
+    expect(state.pendingLoadRequestCount() == 3, "duplicate queue preserves pending count", failures);
+
+    state.setManifest(validManifest());
+    expect(state.pendingLoadRequestCount() == 0, "setManifest clears pending load queue", failures);
+    expect(state.latestLoadRequestQueueResult().records.empty(), "setManifest clears latest queue diagnostics", failures);
+    expect(state.latestLoadConsumeResult().records.empty(), "setManifest clears latest consume diagnostics", failures);
+
+    (void)state.planAssetReadiness({});
+    (void)state.planAssetLoadRequests();
+    (void)state.queueLatestAssetLoadRequests();
+    full_engine::RendererAssetHandleCatalog source = handles();
+    full_engine::RendererAssetHandleCatalog destination;
+    (void)state.consumePendingAssetLoadRequests(source, destination);
+    state.clearManifest();
+    expect(state.pendingLoadRequestCount() == 0, "clearManifest clears pending load queue", failures);
+    expect(state.latestLoadRequestQueueResult().records.empty(), "clearManifest clears queue diagnostics", failures);
+    expect(state.latestLoadConsumeResult().records.empty(), "clearManifest clears consume diagnostics", failures);
+}
+
+void testLoadRequestsCanBeConsumed(std::vector<std::string>& failures)
+{
+    full_engine::TerrainManifestLoadState state;
+    state.setManifest(validManifest());
+
+    (void)state.planAssetReadiness({});
+    (void)state.planAssetLoadRequests();
+    (void)state.queueLatestAssetLoadRequests();
+
+    full_engine::RendererAssetHandleCatalog destination;
+    const full_engine::TerrainManifestAssetLoadResult& consumed =
+        state.consumePendingAssetLoadRequests(handles(), destination);
+
+    expect(consumed.consumed, "state consume clears satisfied pending requests", failures);
+    expect(consumed.summary.loadedCount == 3, "state consume counts loaded handles", failures);
+    expect(consumed.records.size() == 3, "state consume stores ordered records", failures);
+    expect(state.pendingLoadRequestCount() == 0, "state consume clears owned pending queue", failures);
+    expect(destination.findMeshHandle(asset(1)) != nullptr, "state consume copies mesh handle", failures);
+    expect(destination.findMaterialHandle(asset(2)) != nullptr, "state consume copies material handle", failures);
+    expect(destination.findTextureHandle(asset(3)) != nullptr, "state consume copies texture handle", failures);
+    expect(state.latestLoadConsumeResult().summary.loadedCount == 3, "state retains consume diagnostics", failures);
+}
+
+void testLoadConsumeMissingHandlesCanRetry(std::vector<std::string>& failures)
+{
+    full_engine::TerrainManifestLoadState state;
+    state.setManifest(validManifest());
+
+    (void)state.planAssetReadiness({});
+    (void)state.planAssetLoadRequests();
+    (void)state.queueLatestAssetLoadRequests();
+
+    full_engine::RendererAssetHandleCatalog missingMaterial = handles();
+    (void)missingMaterial.removeMaterialHandle(asset(2));
+    full_engine::RendererAssetHandleCatalog destination;
+
+    const full_engine::TerrainManifestAssetLoadResult& failed =
+        state.consumePendingAssetLoadRequests(missingMaterial, destination);
+    expect(!failed.consumed, "missing handle consume leaves queue pending", failures);
+    expect(failed.summary.missingHandleCount == 1, "missing handle consume records miss", failures);
+    expect(state.pendingLoadRequestCount() == 3, "missing handle consume keeps pending requests", failures);
+    expect(destination.meshHandleCount() == 0, "missing handle consume does not partially mutate destination", failures);
+
+    const full_engine::TerrainManifestAssetLoadResult& retried =
+        state.consumePendingAssetLoadRequests(handles(), destination);
+    expect(retried.consumed, "state consume can retry after handles appear", failures);
+    expect(state.pendingLoadRequestCount() == 0, "retry consume clears pending queue", failures);
+    expect(destination.materialHandleCount() == 1, "retry consume copies material handle", failures);
+}
+
+void testLoadConsumeAlreadyLoadedPreservesDestination(std::vector<std::string>& failures)
+{
+    full_engine::TerrainManifestLoadState state;
+    state.setManifest(validManifest());
+
+    (void)state.planAssetReadiness({});
+    (void)state.planAssetLoadRequests();
+    (void)state.queueLatestAssetLoadRequests();
+
+    full_engine::RendererAssetHandleCatalog destination;
+    (void)destination.addMeshHandle(asset(1), {99});
+
+    const full_engine::TerrainManifestAssetLoadResult& consumed =
+        state.consumePendingAssetLoadRequests(handles(), destination);
+
+    expect(consumed.consumed, "already loaded destination can consume queue", failures);
+    expect(consumed.summary.alreadyLoadedCount == 1, "already loaded destination is counted", failures);
+    expect(consumed.summary.loadedCount == 2, "remaining destination handles are loaded", failures);
+    const full_renderer::MeshHandle* mesh = destination.findMeshHandle(asset(1));
+    expect(mesh != nullptr && mesh->id == 99, "already loaded destination handle is preserved", failures);
+    expect(state.pendingLoadRequestCount() == 0, "already loaded consume clears queue", failures);
+}
+
 void testQueueStageQueuesRuntimeIntent(std::vector<std::string>& failures)
 {
     full_engine::TerrainManifestLoadState state;
@@ -259,6 +372,10 @@ int main()
     testSetManifestStagesWithoutQueueing(failures);
     testReadinessIsStoredAndReset(failures);
     testMissingReadinessBuildsLoadRequests(failures);
+    testLoadRequestsCanBeQueuedAndReset(failures);
+    testLoadRequestsCanBeConsumed(failures);
+    testLoadConsumeMissingHandlesCanRetry(failures);
+    testLoadConsumeAlreadyLoadedPreservesDestination(failures);
     testQueueStageQueuesRuntimeIntent(failures);
     testInvalidManifestStoresFailure(failures);
     testClearAndReplaceResetState(failures);

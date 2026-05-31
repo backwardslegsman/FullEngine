@@ -25,6 +25,9 @@ void TerrainManifestLoadState::setManifest(CookedAssetManifest manifest)
     latestDiagnostics_ = {};
     latestReadiness_ = {};
     latestLoadRequests_ = {};
+    loadRequestQueue_.clear();
+    latestLoadRequestQueueResult_ = {};
+    latestLoadConsumeResult_ = {};
 }
 
 void TerrainManifestLoadState::clearManifest()
@@ -35,6 +38,9 @@ void TerrainManifestLoadState::clearManifest()
     latestDiagnostics_ = {};
     latestReadiness_ = {};
     latestLoadRequests_ = {};
+    loadRequestQueue_.clear();
+    latestLoadRequestQueueResult_ = {};
+    latestLoadConsumeResult_ = {};
 }
 
 bool TerrainManifestLoadState::hasManifest() const noexcept
@@ -67,6 +73,26 @@ const TerrainManifestAssetLoadRequestPlan& TerrainManifestLoadState::latestLoadR
     return latestLoadRequests_;
 }
 
+const TerrainManifestAssetLoadRequestQueue& TerrainManifestLoadState::loadRequestQueue() const noexcept
+{
+    return loadRequestQueue_;
+}
+
+const TerrainManifestAssetLoadQueuePushResult& TerrainManifestLoadState::latestLoadRequestQueueResult() const noexcept
+{
+    return latestLoadRequestQueueResult_;
+}
+
+const TerrainManifestAssetLoadResult& TerrainManifestLoadState::latestLoadConsumeResult() const noexcept
+{
+    return latestLoadConsumeResult_;
+}
+
+std::size_t TerrainManifestLoadState::pendingLoadRequestCount() const noexcept
+{
+    return loadRequestQueue_.requestCount();
+}
+
 const TerrainManifestAssetReadinessPlan& TerrainManifestLoadState::planAssetReadiness(
     const RendererAssetHandleCatalog& handles)
 {
@@ -80,6 +106,21 @@ const TerrainManifestAssetLoadRequestPlan& TerrainManifestLoadState::planAssetLo
 {
     latestLoadRequests_ = buildTerrainManifestAssetLoadRequestPlan(latestReadiness_);
     return latestLoadRequests_;
+}
+
+const TerrainManifestAssetLoadQueuePushResult& TerrainManifestLoadState::queueLatestAssetLoadRequests()
+{
+    latestLoadRequestQueueResult_ = loadRequestQueue_.pushPlan(latestLoadRequests_);
+    return latestLoadRequestQueueResult_;
+}
+
+const TerrainManifestAssetLoadResult& TerrainManifestLoadState::consumePendingAssetLoadRequests(
+    const RendererAssetHandleCatalog& sourceHandles,
+    RendererAssetHandleCatalog& destinationHandles)
+{
+    latestLoadConsumeResult_ =
+        consumeTerrainManifestAssetLoadRequests(loadRequestQueue_, sourceHandles, destinationHandles);
+    return latestLoadConsumeResult_;
 }
 
 TerrainManifestLoadStageResult TerrainManifestLoadState::stage(

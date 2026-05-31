@@ -18,13 +18,17 @@ public CMake target `FullRenderer::full_renderer`.
   request queuing, and a terrain runtime path through reusable diagnostics,
   pipeline coordination, descriptor intent, renderer submission, retained
   snapshot diffs, JSON Lines diagnostics export/import, renderer-free asset
-  identity/catalog validation, and cooked manifest schema/tooling support.
+  identity/catalog validation, cooked manifest schema/tooling support, and the
+  first manifest load-intent/handle-readiness adapter contracts without
+  production IO.
 - The SDL3 sample keeps renderer mesh/material/texture ownership local, but its
   terrain chunks now flow through engine world snapshots, terrain prep,
   lifecycle planning, renderer command intent, descriptor building, submission,
   chunk-handle association, runtime setup/residency request application,
   debug-UI residency toggles, terrain setup add/remove controls, and
-  snapshot-diff inspection.
+  snapshot-diff inspection. Its diagnostics panel can also export/validate the
+  generated cooked manifest and inspect manifest handle readiness, pending load
+  intent, and load-consume counters.
 - The renderer is suitable for prototype engine integration and package
   consumer smoke testing.
 - Production open-world readiness work is tracked in

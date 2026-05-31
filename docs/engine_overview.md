@@ -133,6 +133,16 @@ Implemented pieces:
 - renderer-free manifest asset load request planning that converts missing
   readiness records into asset ID/kind load intent without IO, async jobs, or
   renderer-resource creation
+- retained manifest asset load request queues that deduplicate pending
+  mesh/material/texture load intent over repeated readiness scans without
+  consuming requests or creating renderer resources
+- a production-facing manifest asset load adapter contract that consumes
+  pending load intent by copying externally supplied renderer handles into a
+  runtime handle catalog with ordered diagnostics, while still avoiding IO,
+  async work, renderer calls, and renderer-resource creation
+- manifest load state consume diagnostics that let callers consume the
+  state-owned pending load queue through the adapter while keeping source and
+  destination renderer handle catalogs externally owned
 - manifest runtime staging diagnostics that expose coordinator status, asset
   resolution counters, staging counters, and queued-request counters as
   reusable value snapshots
@@ -192,10 +202,12 @@ inspection, validates that exported manifest back through the engine importer
 and catalog builder, stores the imported value in `TerrainManifestLoadState`,
 reports renderer-handle readiness for declared mesh/material/texture
 references, converts missing handle readiness into renderer-free load intent
-counts, dry-runs a terrain setup staging plan through the reusable manifest
-staging coordinator, can queue safe add/remove staging operations through the
-terrain runtime controller, and
-submits the mapped renderer terrain handles in its render packet.
+counts, retains pending load intent in a deduplicated queue, can consume that
+intent once externally supplied handles are available, exposes the latest load
+consume counters in the debug panel, dry-runs a terrain setup staging plan
+through the reusable manifest staging coordinator, can queue safe add/remove
+staging operations through the terrain runtime controller, and submits the
+mapped renderer terrain handles in its render packet.
 
 Still future work:
 
