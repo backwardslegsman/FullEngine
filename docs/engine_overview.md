@@ -124,6 +124,15 @@ Implemented pieces:
   manifest values, resolves terrain resources through externally supplied
   renderer handle catalogs, builds staging plans from caller-provided world
   descriptors, and can queue safe plans without applying them
+- manifest load state that owns an imported cooked manifest value plus latest
+  staging results/diagnostics, giving callers a small engine-side loading shape
+  before file IO, async loading, or renderer-resource creation are introduced
+- manifest asset readiness planning that compares retained manifest
+  mesh/material/texture references with externally supplied renderer handle
+  catalogs and reports ready or missing handle mappings without loading assets
+- renderer-free manifest asset load request planning that converts missing
+  readiness records into asset ID/kind load intent without IO, async jobs, or
+  renderer-resource creation
 - manifest runtime staging diagnostics that expose coordinator status, asset
   resolution counters, staging counters, and queued-request counters as
   reusable value snapshots
@@ -180,9 +189,12 @@ submission, mirrors display state from engine registries, displays the retained
 runtime snapshot/diff in its debug panel, exports event/diff diagnostics on
 demand, displays and exports its generated cooked manifest for schema/tooling
 inspection, validates that exported manifest back through the engine importer
-and catalog builder, dry-runs a terrain setup staging plan from the imported
-catalogs through the reusable manifest staging coordinator, can queue safe
-add/remove staging operations through the terrain runtime controller, and
+and catalog builder, stores the imported value in `TerrainManifestLoadState`,
+reports renderer-handle readiness for declared mesh/material/texture
+references, converts missing handle readiness into renderer-free load intent
+counts, dry-runs a terrain setup staging plan through the reusable manifest
+staging coordinator, can queue safe add/remove staging operations through the
+terrain runtime controller, and
 submits the mapped renderer terrain handles in its render packet.
 
 Still future work:

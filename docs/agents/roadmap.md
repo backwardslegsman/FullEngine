@@ -463,6 +463,18 @@ move gameplay, streaming policy, or editor concepts into renderer internals.
   manifest counts, asset resolve counters, stage plan counters, and queued
   request counters can be copied into reusable value snapshots for sample UI
   and future tools.
+- Manifest load state is in place: `TerrainManifestLoadState` owns an imported
+  cooked manifest value plus latest staging results and diagnostics, so callers
+  can dry-run or queue safe manifest staging without owning file IO, async
+  loading, renderer handles, or renderer resources in that state object.
+- Manifest asset readiness planning is in place: retained cooked manifest
+  mesh/material/texture references can be compared with externally supplied
+  renderer handle catalogs to report ready and missing handle mappings before
+  real asset loading or renderer-resource creation exists.
+- Manifest asset load request planning is in place: missing readiness records
+  can be converted into renderer-free asset ID/kind load intent records,
+  creating an explicit bridge toward loading without adding IO, async work, or
+  renderer-resource creation.
 - Initial terrain asset dependency validation is in place: terrain chunk asset
   descriptors can be checked against generic asset metadata for expected
   mesh/material/texture kinds before renderer-handle resolution, without IO or
