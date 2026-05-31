@@ -103,8 +103,12 @@ add_library(full_renderer STATIC
 add_library(FullRenderer::full_renderer ALIAS full_renderer)
 
 add_library(full_engine STATIC
+    src/engine/assets/AssetCatalog.cpp
+    src/engine/assets/AssetCatalog.hpp
     src/engine/assets/TerrainAssetCatalog.cpp
     src/engine/assets/TerrainAssetCatalog.hpp
+    src/engine/assets/TerrainAssetDependencyValidator.cpp
+    src/engine/assets/TerrainAssetDependencyValidator.hpp
     src/engine/core/Engine.cpp
     src/engine/core/Engine.hpp
     src/engine/renderer_integration/ChunkTerrainHandleMap.cpp

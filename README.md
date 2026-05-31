@@ -17,7 +17,8 @@ public CMake target `FullRenderer::full_renderer`.
   coordinated world/terrain chunk setup, large-world origin helpers, residency
   request queuing, and a terrain runtime path through reusable diagnostics,
   pipeline coordination, descriptor intent, renderer submission, retained
-  snapshot diffs, and JSON Lines diagnostics export/import.
+  snapshot diffs, JSON Lines diagnostics export/import, and renderer-free asset
+  identity/catalog validation.
 - The SDL3 sample keeps renderer mesh/material/texture ownership local, but its
   terrain chunks now flow through engine world snapshots, terrain prep,
   lifecycle planning, renderer command intent, descriptor building, submission,

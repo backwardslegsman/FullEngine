@@ -414,6 +414,11 @@ move gameplay, streaming policy, or editor concepts into renderer internals.
 
 ### E3 - Asset catalog and cooked runtime asset conventions
 
+- Initial generic asset catalog conventions are in place: `src/engine/assets`
+  now owns renderer-free `AssetId`, asset kind metadata, fixed dependency
+  references, validation, and a deterministic CPU-only catalog. This layer
+  deliberately avoids file IO, manifest parsing, importers, async loading,
+  renderer handles, and renderer resource creation.
 - Initial E3-lite terrain asset identity is in place: `src/engine/assets`
   defines opaque engine `AssetId` values plus CPU-only terrain chunk asset
   descriptors and catalogs for mesh/material/LOD/splat-map references. These
@@ -422,7 +427,15 @@ move gameplay, streaming policy, or editor concepts into renderer internals.
 - Initial terrain asset resolution is in place: `src/engine/renderer_integration`
   can map terrain chunk asset IDs through externally supplied renderer handle
   catalogs into the existing `TerrainChunkResourceDesc` contract without
-  creating renderer resources or mutating terrain setup/submission state.
+  creating renderer resources or mutating terrain setup/submission state. The
+  sample terrain setup now demonstrates that seam by registering asset
+  descriptors, resolving them to renderer handles supplied by the sample, and
+  feeding the existing terrain setup request queue.
+- Initial terrain asset dependency validation is in place: terrain chunk asset
+  descriptors can be checked against generic asset metadata for expected
+  mesh/material/texture kinds before renderer-handle resolution, without IO or
+  renderer resource ownership. The sample terrain setup now registers generic
+  asset metadata and runs that validation before resolving renderer handles.
 - Define engine-owned asset IDs, manifests, dependency lookup, and cooked asset
   responsibilities.
 - Map engine assets to renderer mesh, texture, material, skeleton, terrain, and

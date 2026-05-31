@@ -1,5 +1,6 @@
 #pragma once
 
+#include "engine/assets/AssetCatalog.hpp"
 #include "engine/world/WorldChunkRegistry.hpp"
 
 #include <array>
@@ -11,27 +12,6 @@ namespace full_engine
 {
 /** @brief Maximum terrain LOD asset references accepted by engine terrain asset descriptors. */
 constexpr std::uint32_t kMaxTerrainAssetLodLevels = 4;
-
-/**
- * @brief Opaque engine-owned runtime asset identity.
- *
- * Asset IDs identify engine catalog entries or cooked asset references. A
- * default value is invalid. This type does not reference renderer handles,
- * files, importer objects, or live renderer resources.
- */
-struct AssetId
-{
-    std::uint64_t value = 0;
-};
-
-/** @brief Returns whether an engine asset ID is non-default. */
-bool isValid(AssetId id) noexcept;
-
-/** @brief Compares asset IDs for equality. */
-bool operator==(AssetId lhs, AssetId rhs) noexcept;
-
-/** @brief Orders asset IDs deterministically for maps and diagnostics. */
-bool operator<(AssetId lhs, AssetId rhs) noexcept;
 
 /** @brief One terrain LOD reference expressed in engine asset IDs. */
 struct TerrainAssetLodRef

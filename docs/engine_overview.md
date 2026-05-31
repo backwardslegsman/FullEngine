@@ -82,6 +82,11 @@ Implemented pieces:
   the latest runtime update result, retained event diagnostics, and optional
   snapshot/diff tracking so callers can keep terrain runtime plumbing in one
   engine-owned value
+- a generic asset identity catalog for renderer-free asset kind and dependency
+  metadata, used as the shared convention beneath specialized asset reference
+  catalogs
+- terrain asset dependency validation that checks terrain mesh/material/texture
+  references against generic asset metadata before renderer-handle resolution
 - initial terrain asset identity catalogs that describe chunk mesh/material/LOD
   and optional splat-map asset references without storing renderer handles
 - a terrain asset resolver that maps engine terrain asset IDs through
@@ -136,11 +141,14 @@ JSON Lines, matching the event diagnostics tooling while keeping the data
 CPU-only, value-owned, and independent of renderer resources or sample UI state.
 
 The sample still owns demo UI state and renderer mesh/material/texture
-creation. It queues setup and residency intent through `TerrainRuntimeState`,
-updates that state before renderer frame submission, mirrors display state from
-engine registries, displays the retained runtime snapshot/diff in its debug
-panel, exports event/diff diagnostics on demand, and submits the mapped
-renderer terrain handles in its render packet.
+creation. It registers sample terrain asset IDs and generic asset metadata,
+validates terrain asset dependencies, resolves them through externally supplied
+renderer handle catalogs into terrain resource descriptors, queues setup and
+residency intent through `TerrainRuntimeState`, updates that state before
+renderer frame submission, mirrors display state from engine registries,
+displays the retained runtime snapshot/diff in its debug panel, exports
+event/diff diagnostics on demand, and submits the mapped renderer terrain
+handles in its render packet.
 
 Still future work:
 

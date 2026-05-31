@@ -4,21 +4,6 @@
 
 namespace full_engine
 {
-bool isValid(const AssetId id) noexcept
-{
-    return id.value != 0;
-}
-
-bool operator==(const AssetId lhs, const AssetId rhs) noexcept
-{
-    return lhs.value == rhs.value;
-}
-
-bool operator<(const AssetId lhs, const AssetId rhs) noexcept
-{
-    return lhs.value < rhs.value;
-}
-
 TerrainAssetValidationResult validateTerrainChunkAssets(const TerrainChunkAssetDesc& desc)
 {
     if (desc.lodCount == 0 || desc.lodCount > kMaxTerrainAssetLodLevels)
