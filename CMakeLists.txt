@@ -135,6 +135,8 @@ add_library(full_engine STATIC
     src/engine/renderer_integration/TerrainRuntimeEventExport.hpp
     src/engine/renderer_integration/TerrainRuntimeEventImport.cpp
     src/engine/renderer_integration/TerrainRuntimeEventImport.hpp
+    src/engine/renderer_integration/TerrainRuntimeStateDiff.cpp
+    src/engine/renderer_integration/TerrainRuntimeStateDiff.hpp
     src/engine/renderer_integration/TerrainRuntimeStateSnapshot.cpp
     src/engine/renderer_integration/TerrainRuntimeStateSnapshot.hpp
     src/engine/renderer_integration/TerrainSubmissionAdapter.cpp

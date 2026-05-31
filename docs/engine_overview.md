@@ -118,7 +118,9 @@ surface for chunk setup, residency, resources, and terrain handle readiness, so
 sample and editor UI can query one engine-owned summary instead of probing each
 owner independently. The sample diagnostics panel displays those readiness
 counters directly alongside the existing request and renderer-submission
-counters.
+counters. `TerrainRuntimeStateDiff` compares two snapshots and reports added,
+removed, and changed chunk state in deterministic order for future diagnostics
+or editor tooling.
 
 The sample still owns demo UI state and renderer mesh/material/texture
 creation. It queues setup and residency intent through `TerrainRuntimeState`,

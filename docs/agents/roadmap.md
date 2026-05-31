@@ -152,10 +152,11 @@ milestones before adding more visual effects.
   submission, handle associations, runtime request coordination, and compact
   recent-update event diagnostics with sample UI inspection, JSON Lines
   export/import tests, and chunk readiness snapshots for setup/residency/
-  resource/handle status displayed in the sample diagnostics panel. The seam is
-  kept out of the installed renderer package target, while the public renderer
-  API now exposes in-place terrain chunk descriptor updates and terrain
-  shadow-caster debug snapshots for engine integration.
+  resource/handle status displayed in the sample diagnostics panel. Snapshot
+  diff planning now reports added, removed, and changed chunk status without
+  renderer calls. The seam is kept out of the installed renderer package target,
+  while the public renderer API now exposes in-place terrain chunk descriptor
+  updates and terrain shadow-caster debug snapshots for engine integration.
 - Harden terrain chunk streaming, LOD transitions, chunk material residency,
   skirts/seams, and large-scene culling stress cases.
 - Add shared culling diagnostics for terrain, static meshes, instancing,
