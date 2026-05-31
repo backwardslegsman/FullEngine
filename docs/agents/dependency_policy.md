@@ -48,10 +48,10 @@ build/test workflows. Do not add runtime dependencies solely for diagnostics if
 the same readiness goal can be met by backend-private renderer code or existing
 debug tooling.
 
-Terrain runtime event export currently uses standard-library JSON Lines
-serialization instead of a third-party JSON dependency. Reconsider a maintained
-JSON library only if future tooling needs round-trip parsing, schema migration,
-or richer nested document generation.
+Terrain runtime event export/import currently uses standard-library JSON Lines
+serialization and narrow schema parsing instead of a third-party JSON
+dependency. Reconsider a maintained JSON library only if future tooling needs
+broader parsing, schema migration, or richer nested document generation.
 
 ## Current optional debug dependencies
 

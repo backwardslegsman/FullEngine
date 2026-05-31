@@ -110,7 +110,9 @@ runtime holder with `hasPendingRequests()` dirty-state checks and a compact
 fixed-capacity event log of recent update diagnostics, without transferring
 ownership of registries, catalogs, renderer handles, or renderer resources.
 The retained event log can be inspected by the sample debug UI and exported as
-deterministic JSON Lines for lightweight tooling or bug reports.
+deterministic JSON Lines for lightweight tooling or bug reports. A matching
+standard-library importer reads that exported schema back into value snapshots
+for tests and future diagnostics tooling.
 
 The sample still owns demo UI state and renderer mesh/material/texture
 creation. It queues setup and residency intent through `TerrainRuntimeState`,
