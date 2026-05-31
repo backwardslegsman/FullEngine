@@ -9,6 +9,7 @@
 #include "engine/renderer_integration/TerrainDescriptorBuilder.hpp"
 #include "engine/renderer_integration/TerrainIntegrationDiagnostics.hpp"
 #include "engine/renderer_integration/TerrainLifecyclePlan.hpp"
+#include "engine/renderer_integration/TerrainManifestRuntimeStaging.hpp"
 #include "engine/renderer_integration/TerrainPipeline.hpp"
 #include "engine/renderer_integration/TerrainRendererCommands.hpp"
 #include "engine/renderer_integration/TerrainRenderPrep.hpp"
@@ -17,6 +18,7 @@
 #include "engine/renderer_integration/TerrainRuntimeEventExport.hpp"
 #include "engine/renderer_integration/TerrainRuntimeStateDiffExport.hpp"
 #include "engine/renderer_integration/TerrainRuntimeStateSnapshot.hpp"
+#include "engine/renderer_integration/TerrainSetupStaging.hpp"
 #include "engine/renderer_integration/TerrainSubmissionAdapter.hpp"
 #include "engine/renderer_integration/WorldRenderSnapshot.hpp"
 #include "engine/world/WorldChunkCatalog.hpp"
@@ -746,6 +748,19 @@ struct SampleTerrainResidencyControls
         full_engine::TerrainRuntimeStateDiffExportResult::Success;
     full_engine::CookedAssetManifestExportResult lastManifestExportResult =
         full_engine::CookedAssetManifestExportResult::Success;
+    full_engine::CookedAssetManifestImportResult lastManifestImportResult =
+        full_engine::CookedAssetManifestImportResult::Success;
+    full_engine::CookedAssetManifestValidationResult lastManifestImportValidationResult =
+        full_engine::CookedAssetManifestValidationResult::Success;
+    full_engine::CookedAssetManifest lastImportedManifest = {};
+    bool hasLastImportedManifest = false;
+    std::size_t lastImportedManifestAssetCount = 0;
+    std::size_t lastImportedManifestTerrainChunkCount = 0;
+    std::size_t lastImportedAssetCatalogCount = 0;
+    std::size_t lastImportedTerrainAssetCatalogCount = 0;
+    full_engine::TerrainManifestRuntimeStageDiagnostics lastManifestStage = {};
+    full_engine::TerrainSetupStagePlan lastManifestStagePlan = {};
+    bool lastManifestStageApplyBlocked = false;
     full_engine::TerrainAssetBatchResolveDiagnostics lastAssetBatchResolve = {};
 };
 
@@ -1018,6 +1033,17 @@ std::vector<full_engine::ChunkId> sampleTerrainChunkIds(const std::vector<Sample
         ids.push_back(chunk.id);
     }
     return ids;
+}
+
+std::vector<full_engine::WorldChunkDesc> sampleTerrainWorldDescs(const std::vector<SampleTerrainChunkState>& chunks)
+{
+    std::vector<full_engine::WorldChunkDesc> descs;
+    descs.reserve(chunks.size());
+    for (const SampleTerrainChunkState& chunk : chunks)
+    {
+        descs.push_back(chunk.worldDesc);
+    }
+    return descs;
 }
 
 const full_engine::TerrainRuntimeChunkState* findTerrainRuntimeChunkState(
@@ -1416,6 +1442,132 @@ void drawTerrainDiagnosticsPanel(
             "Manifest: %s",
             full_engine::cookedAssetManifestExportResultName(
                 terrainResidencyControls.lastManifestExportResult));
+        ImGui::SameLine();
+        if (ImGui::Button("Validate Exported Manifest"))
+        {
+            terrainResidencyControls.lastImportedManifestAssetCount = 0;
+            terrainResidencyControls.lastImportedManifestTerrainChunkCount = 0;
+            terrainResidencyControls.lastImportedAssetCatalogCount = 0;
+            terrainResidencyControls.lastImportedTerrainAssetCatalogCount = 0;
+            terrainResidencyControls.lastImportedManifest = {};
+            terrainResidencyControls.hasLastImportedManifest = false;
+            terrainResidencyControls.lastManifestStage = {};
+            terrainResidencyControls.lastManifestStagePlan = {};
+            terrainResidencyControls.lastManifestStageApplyBlocked = false;
+
+            const full_engine::CookedAssetManifestImport importedManifest =
+                full_engine::importCookedAssetManifestJsonLines("sample_cooked_asset_manifest.jsonl");
+            terrainResidencyControls.lastManifestImportResult = importedManifest.result;
+            terrainResidencyControls.lastManifestImportValidationResult = importedManifest.validation.result;
+            if (importedManifest.result == full_engine::CookedAssetManifestImportResult::Success)
+            {
+                terrainResidencyControls.lastImportedManifest = importedManifest.manifest;
+                terrainResidencyControls.hasLastImportedManifest = true;
+                terrainResidencyControls.lastImportedManifestAssetCount = importedManifest.manifest.assets.size();
+                terrainResidencyControls.lastImportedManifestTerrainChunkCount =
+                    importedManifest.manifest.terrainChunks.size();
+
+                const std::vector<full_engine::WorldChunkDesc> sampleWorldDescs =
+                    sampleTerrainWorldDescs(sampleTerrainChunks);
+                const full_engine::TerrainManifestRuntimeStageResult stageResult =
+                    full_engine::stageTerrainManifestRuntime(
+                        importedManifest.manifest,
+                        engineTerrainAssetHandles,
+                        engineTerrainRegistry,
+                        engineTerrainCatalog,
+                        engineTerrainResources,
+                        sampleWorldDescs.data(),
+                        sampleWorldDescs.size());
+                terrainResidencyControls.lastManifestStage =
+                    full_engine::makeTerrainManifestRuntimeStageDiagnostics(stageResult);
+                terrainResidencyControls.lastManifestImportValidationResult =
+                    stageResult.manifestBuild.validation.result;
+                if (stageResult.manifestBuild.validation.result ==
+                    full_engine::CookedAssetManifestValidationResult::Success)
+                {
+                    terrainResidencyControls.lastImportedAssetCatalogCount =
+                        stageResult.manifestBuild.catalogs.assets.assetCount();
+                    terrainResidencyControls.lastImportedTerrainAssetCatalogCount =
+                        stageResult.manifestBuild.catalogs.terrainAssets.assetCount();
+                    terrainResidencyControls.lastManifestStagePlan = stageResult.stagePlan;
+                }
+            }
+        }
+        ImGui::Text(
+            "Manifest import: %s, validation %s, records %llu/%llu, catalogs %llu/%llu",
+            full_engine::cookedAssetManifestImportResultName(
+                terrainResidencyControls.lastManifestImportResult),
+            cookedAssetManifestValidationResultName(
+                terrainResidencyControls.lastManifestImportValidationResult),
+            static_cast<unsigned long long>(terrainResidencyControls.lastImportedManifestAssetCount),
+            static_cast<unsigned long long>(terrainResidencyControls.lastImportedManifestTerrainChunkCount),
+            static_cast<unsigned long long>(terrainResidencyControls.lastImportedAssetCatalogCount),
+            static_cast<unsigned long long>(terrainResidencyControls.lastImportedTerrainAssetCatalogCount));
+        ImGui::Text(
+            "Manifest stage: %s, add %llu, keep %llu, remove %llu, changed %llu",
+            full_engine::terrainManifestRuntimeStageStatusName(
+                terrainResidencyControls.lastManifestStage.status),
+            static_cast<unsigned long long>(terrainResidencyControls.lastManifestStage.stage.addCount),
+            static_cast<unsigned long long>(terrainResidencyControls.lastManifestStage.stage.keepCount),
+            static_cast<unsigned long long>(terrainResidencyControls.lastManifestStage.stage.removeCount),
+            static_cast<unsigned long long>(
+                terrainResidencyControls.lastManifestStage.stage.changedUnsupportedCount));
+        ImGui::Text(
+            "Manifest staging inputs: resolved %llu, missing world %llu, desired setup %llu",
+            static_cast<unsigned long long>(terrainResidencyControls.lastManifestStage.resolvedResourceCount),
+            static_cast<unsigned long long>(terrainResidencyControls.lastManifestStage.missingWorldDescCount),
+            static_cast<unsigned long long>(terrainResidencyControls.lastManifestStage.desiredSetupCount));
+        if (ImGui::Button("Apply Manifest Stage"))
+        {
+            terrainResidencyControls.lastManifestStageApplyBlocked =
+                !terrainResidencyControls.hasLastImportedManifest;
+            if (terrainResidencyControls.hasLastImportedManifest)
+            {
+                const std::vector<full_engine::WorldChunkDesc> sampleWorldDescs =
+                    sampleTerrainWorldDescs(sampleTerrainChunks);
+                const full_engine::TerrainManifestRuntimeStageOptions stageOptions{
+                    true,
+                    true};
+                const full_engine::TerrainManifestRuntimeStageResult stageResult =
+                    full_engine::stageTerrainManifestRuntime(
+                        terrainResidencyControls.lastImportedManifest,
+                        engineTerrainAssetHandles,
+                        engineTerrainRegistry,
+                        engineTerrainCatalog,
+                        engineTerrainResources,
+                        sampleWorldDescs.data(),
+                        sampleWorldDescs.size(),
+                        &terrainRuntime,
+                        stageOptions);
+                terrainResidencyControls.lastManifestStage =
+                    full_engine::makeTerrainManifestRuntimeStageDiagnostics(stageResult);
+                terrainResidencyControls.lastManifestStagePlan = stageResult.stagePlan;
+                terrainResidencyControls.lastManifestStageApplyBlocked =
+                    stageResult.status == full_engine::TerrainManifestRuntimeStageStatus::QueueBlocked;
+                if (!terrainResidencyControls.lastManifestStageApplyBlocked)
+                {
+                    for (const full_engine::TerrainSetupStageOp& op :
+                         terrainResidencyControls.lastManifestStagePlan.operations)
+                    {
+                        if (op.action == full_engine::TerrainSetupStageAction::Add)
+                        {
+                            if (SampleTerrainChunkState* const sampleChunk =
+                                    findSampleTerrainChunk(sampleTerrainChunks, op.id))
+                            {
+                                sampleChunk->resident = true;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        ImGui::SameLine();
+        ImGui::Text(
+            "Stage apply: queued %llu%s",
+            static_cast<unsigned long long>(
+                terrainResidencyControls.lastManifestStage.queue.queuedSetupCount +
+                terrainResidencyControls.lastManifestStage.queue.queuedMakeResidentCount),
+            terrainResidencyControls.lastManifestStageApplyBlocked ? ", blocked" : "");
         ImGui::Text(
             "Manifest assets: %llu records, terrain chunks %llu, mesh/material/texture %llu/%llu/%llu",
             static_cast<unsigned long long>(manifestSummary.genericAssetCount),

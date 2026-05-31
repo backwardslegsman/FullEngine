@@ -11,6 +11,22 @@ TerrainAssetBatchResolveDiagnostics makeTerrainAssetBatchResolveDiagnostics(
     return diagnostics;
 }
 
+TerrainManifestRuntimeStageDiagnostics makeTerrainManifestRuntimeStageDiagnostics(
+    const TerrainManifestRuntimeStageResult& result)
+{
+    TerrainManifestRuntimeStageDiagnostics diagnostics;
+    diagnostics.status = result.status;
+    diagnostics.manifestAssetCount = result.summary.manifestAssetCount;
+    diagnostics.manifestTerrainChunkCount = result.summary.manifestTerrainChunkCount;
+    diagnostics.resolvedResourceCount = result.summary.resolvedResourceCount;
+    diagnostics.missingWorldDescCount = result.summary.missingWorldDescCount;
+    diagnostics.desiredSetupCount = result.summary.desiredSetupCount;
+    diagnostics.assetResolve = result.assetResolve.summary;
+    diagnostics.stage = result.stagePlan.summary;
+    diagnostics.queue = result.queue.summary;
+    return diagnostics;
+}
+
 TerrainSetupRequestDiagnostics makeTerrainSetupRequestDiagnostics(
     const TerrainChunkRequestApplyResult& result)
 {

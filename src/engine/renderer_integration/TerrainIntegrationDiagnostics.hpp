@@ -3,6 +3,7 @@
 #include "engine/renderer_integration/TerrainAssetResolver.hpp"
 #include "engine/renderer_integration/TerrainChunkRequests.hpp"
 #include "engine/renderer_integration/TerrainDescriptorBuilder.hpp"
+#include "engine/renderer_integration/TerrainManifestRuntimeStaging.hpp"
 #include "engine/renderer_integration/TerrainRenderPrep.hpp"
 #include "engine/renderer_integration/TerrainRendererCommands.hpp"
 #include "engine/renderer_integration/TerrainSubmissionAdapter.hpp"
@@ -18,6 +19,20 @@ struct TerrainAssetBatchResolveDiagnostics
 {
     std::size_t requestCount = 0;
     TerrainAssetBatchResolveSummary summary = {};
+};
+
+/** @brief Value snapshot of the most recent manifest-to-runtime staging result. */
+struct TerrainManifestRuntimeStageDiagnostics
+{
+    TerrainManifestRuntimeStageStatus status = TerrainManifestRuntimeStageStatus::Success;
+    std::size_t manifestAssetCount = 0;
+    std::size_t manifestTerrainChunkCount = 0;
+    std::size_t resolvedResourceCount = 0;
+    std::size_t missingWorldDescCount = 0;
+    std::size_t desiredSetupCount = 0;
+    TerrainAssetBatchResolveSummary assetResolve = {};
+    TerrainSetupStageSummary stage = {};
+    TerrainSetupStageQueueSummary queue = {};
 };
 
 /** @brief Value snapshot of the most recently applied terrain setup request batch. */
@@ -72,6 +87,16 @@ struct TerrainIntegrationDiagnostics
  */
 TerrainAssetBatchResolveDiagnostics makeTerrainAssetBatchResolveDiagnostics(
     const TerrainAssetBatchResolveResult& result);
+
+/**
+ * @brief Builds reusable diagnostics from manifest-to-runtime staging output.
+ *
+ * The returned value copies status and counters only. It does not retain
+ * references to manifest catalogs, resource descriptors, staging operations,
+ * queued request details, renderer handles, or renderer resources.
+ */
+TerrainManifestRuntimeStageDiagnostics makeTerrainManifestRuntimeStageDiagnostics(
+    const TerrainManifestRuntimeStageResult& result);
 
 /**
  * @brief Builds reusable diagnostics from an applied terrain setup request batch.

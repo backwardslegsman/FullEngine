@@ -445,6 +445,24 @@ move gameplay, streaming policy, or editor concepts into renderer internals.
   diagnostics layer can copy batch resolve counters, and the sample terrain
   panel displays latest resolved/missing/invalid/resource-catalog failure
   counts beside setup, residency, pipeline, and submission counters.
+- Initial manifest-to-runtime terrain setup staging is in place: desired
+  manifest-derived world/resource setup can be compared with current runtime
+  setup to report add, keep, remove, and unsupported-change intent without
+  applying requests or touching renderer resources. The sample displays this
+  dry-run plan after validating an exported cooked manifest, and can queue
+  safe add/remove staging operations through a reusable `TerrainSetupStaging`
+  helper and `TerrainRuntimeState` when the plan contains no unsupported
+  descriptor changes.
+- Manifest runtime staging coordination is in place: a reusable renderer
+  integration helper can take a cooked manifest value, externally supplied
+  renderer handle catalog, current setup state, and caller-owned world
+  descriptors, then validate/build catalogs, resolve terrain resources, produce
+  a setup staging plan, and optionally queue safe plans without applying
+  runtime requests or creating renderer resources.
+- Manifest runtime staging diagnostics are in place: coordinator status,
+  manifest counts, asset resolve counters, stage plan counters, and queued
+  request counters can be copied into reusable value snapshots for sample UI
+  and future tools.
 - Initial terrain asset dependency validation is in place: terrain chunk asset
   descriptors can be checked against generic asset metadata for expected
   mesh/material/texture kinds before renderer-handle resolution, without IO or
@@ -468,7 +486,9 @@ move gameplay, streaming policy, or editor concepts into renderer internals.
   lightweight tooling and schema round-trip tests. It remains standard-library
   only and does not add production asset loading, importers, async loading, or
   renderer-resource creation. The sample debug UI can export its generated
-  cooked manifest for inspection without loading runtime assets from files.
+  cooked manifest for inspection and validate that exported file back through
+  the engine importer/catalog builder without loading runtime assets from
+  files.
 - Define engine-owned asset IDs, manifests, dependency lookup, and cooked asset
   responsibilities.
 - Map engine assets to renderer mesh, texture, material, skeleton, terrain, and

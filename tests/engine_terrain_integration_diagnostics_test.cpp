@@ -54,6 +54,91 @@ int main()
     }
 
     {
+        const full_engine::TerrainManifestRuntimeStageResult result;
+        const full_engine::TerrainManifestRuntimeStageDiagnostics diagnostics =
+            full_engine::makeTerrainManifestRuntimeStageDiagnostics(result);
+
+        assert(diagnostics.status == full_engine::TerrainManifestRuntimeStageStatus::Success);
+        assert(diagnostics.manifestAssetCount == 0);
+        assert(diagnostics.manifestTerrainChunkCount == 0);
+        assert(diagnostics.resolvedResourceCount == 0);
+        assert(diagnostics.missingWorldDescCount == 0);
+        assert(diagnostics.desiredSetupCount == 0);
+        assert(diagnostics.assetResolve.resolvedCount == 0);
+        assert(diagnostics.stage.addCount == 0);
+        assert(diagnostics.queue.queuedSetupCount == 0);
+    }
+
+    {
+        full_engine::TerrainManifestRuntimeStageResult result;
+        result.status = full_engine::TerrainManifestRuntimeStageStatus::Success;
+        result.summary.manifestAssetCount = 1;
+        result.summary.manifestTerrainChunkCount = 2;
+        result.summary.resolvedResourceCount = 3;
+        result.summary.missingWorldDescCount = 4;
+        result.summary.desiredSetupCount = 5;
+        result.assetResolve.summary.resolvedCount = 6;
+        result.assetResolve.summary.missingMeshHandleCount = 7;
+        result.stagePlan.summary.addCount = 8;
+        result.stagePlan.summary.keepCount = 9;
+        result.stagePlan.summary.removeCount = 10;
+        result.stagePlan.summary.changedUnsupportedCount = 11;
+        result.queue.summary.queuedSetupCount = 12;
+        result.queue.summary.queuedMakeResidentCount = 13;
+        result.queue.summary.skippedKeepCount = 14;
+        result.queue.summary.skippedChangedCount = 15;
+        result.assetResolve.records.push_back({});
+        result.stagePlan.operations.push_back({});
+
+        const std::size_t sourceResolveRecordCount = result.assetResolve.records.size();
+        const std::size_t sourceStageOpCount = result.stagePlan.operations.size();
+        const full_engine::TerrainManifestRuntimeStageDiagnostics diagnostics =
+            full_engine::makeTerrainManifestRuntimeStageDiagnostics(result);
+
+        assert(diagnostics.status == full_engine::TerrainManifestRuntimeStageStatus::Success);
+        assert(diagnostics.manifestAssetCount == 1);
+        assert(diagnostics.manifestTerrainChunkCount == 2);
+        assert(diagnostics.resolvedResourceCount == 3);
+        assert(diagnostics.missingWorldDescCount == 4);
+        assert(diagnostics.desiredSetupCount == 5);
+        assert(diagnostics.assetResolve.resolvedCount == 6);
+        assert(diagnostics.assetResolve.missingMeshHandleCount == 7);
+        assert(diagnostics.stage.addCount == 8);
+        assert(diagnostics.stage.keepCount == 9);
+        assert(diagnostics.stage.removeCount == 10);
+        assert(diagnostics.stage.changedUnsupportedCount == 11);
+        assert(diagnostics.queue.queuedSetupCount == 12);
+        assert(diagnostics.queue.queuedMakeResidentCount == 13);
+        assert(diagnostics.queue.skippedKeepCount == 14);
+        assert(diagnostics.queue.skippedChangedCount == 15);
+        assert(result.assetResolve.records.size() == sourceResolveRecordCount);
+        assert(result.stagePlan.operations.size() == sourceStageOpCount);
+    }
+
+    {
+        full_engine::TerrainManifestRuntimeStageResult result;
+        result.status = full_engine::TerrainManifestRuntimeStageStatus::InvalidManifest;
+        assert(
+            full_engine::makeTerrainManifestRuntimeStageDiagnostics(result).status ==
+            full_engine::TerrainManifestRuntimeStageStatus::InvalidManifest);
+
+        result.status = full_engine::TerrainManifestRuntimeStageStatus::MissingWorldDesc;
+        assert(
+            full_engine::makeTerrainManifestRuntimeStageDiagnostics(result).status ==
+            full_engine::TerrainManifestRuntimeStageStatus::MissingWorldDesc);
+
+        result.status = full_engine::TerrainManifestRuntimeStageStatus::AssetResolveFailed;
+        assert(
+            full_engine::makeTerrainManifestRuntimeStageDiagnostics(result).status ==
+            full_engine::TerrainManifestRuntimeStageStatus::AssetResolveFailed);
+
+        result.status = full_engine::TerrainManifestRuntimeStageStatus::QueueBlocked;
+        assert(
+            full_engine::makeTerrainManifestRuntimeStageDiagnostics(result).status ==
+            full_engine::TerrainManifestRuntimeStageStatus::QueueBlocked);
+    }
+
+    {
         full_engine::TerrainChunkRequestApplyResult result;
         result.records.push_back({
             full_engine::TerrainChunkRequest{full_engine::TerrainChunkRequestType::Add, {1, 0, 0}, {}, {}},

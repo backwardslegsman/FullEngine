@@ -115,6 +115,18 @@ Implemented pieces:
   through `TerrainChunkRequestQueue` from single-chunk and ring-batch runtime
   debug UI controls with engine-owned last-apply setup, residency, and pipeline
   diagnostics
+- dry-run terrain setup staging that compares desired manifest-derived terrain
+  setup records against current world/resource state and reports add, keep,
+  remove, and unsupported-change intent without applying requests
+- reusable staged-plan queueing that blocks unsupported descriptor changes and
+  queues safe add/remove setup intent through `TerrainRuntimeState`
+- manifest-to-runtime terrain staging coordination that validates cooked
+  manifest values, resolves terrain resources through externally supplied
+  renderer handle catalogs, builds staging plans from caller-provided world
+  descriptors, and can queue safe plans without applying them
+- manifest runtime staging diagnostics that expose coordinator status, asset
+  resolution counters, staging counters, and queued-request counters as
+  reusable value snapshots
 - reusable terrain integration diagnostics that snapshot setup requests,
   asset batch resolves, residency requests, pipeline counters, and
   renderer-submission outcomes as value-only engine data for debug UI or
@@ -167,8 +179,11 @@ through `TerrainRuntimeState`, updates that state before renderer frame
 submission, mirrors display state from engine registries, displays the retained
 runtime snapshot/diff in its debug panel, exports event/diff diagnostics on
 demand, displays and exports its generated cooked manifest for schema/tooling
-inspection, and submits the mapped renderer terrain handles in its render
-packet.
+inspection, validates that exported manifest back through the engine importer
+and catalog builder, dry-runs a terrain setup staging plan from the imported
+catalogs through the reusable manifest staging coordinator, can queue safe
+add/remove staging operations through the terrain runtime controller, and
+submits the mapped renderer terrain handles in its render packet.
 
 Still future work:
 

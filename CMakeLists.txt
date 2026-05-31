@@ -137,6 +137,8 @@ add_library(full_engine STATIC
     src/engine/renderer_integration/TerrainChunkRequests.hpp
     src/engine/renderer_integration/TerrainLifecyclePlan.cpp
     src/engine/renderer_integration/TerrainLifecyclePlan.hpp
+    src/engine/renderer_integration/TerrainManifestRuntimeStaging.cpp
+    src/engine/renderer_integration/TerrainManifestRuntimeStaging.hpp
     src/engine/renderer_integration/TerrainPipeline.cpp
     src/engine/renderer_integration/TerrainPipeline.hpp
     src/engine/renderer_integration/TerrainRendererCommands.cpp
@@ -159,6 +161,8 @@ add_library(full_engine STATIC
     src/engine/renderer_integration/TerrainRuntimeStateDiffImport.hpp
     src/engine/renderer_integration/TerrainRuntimeStateSnapshot.cpp
     src/engine/renderer_integration/TerrainRuntimeStateSnapshot.hpp
+    src/engine/renderer_integration/TerrainSetupStaging.cpp
+    src/engine/renderer_integration/TerrainSetupStaging.hpp
     src/engine/renderer_integration/TerrainSubmissionAdapter.cpp
     src/engine/renderer_integration/TerrainSubmissionAdapter.hpp
     src/engine/renderer_integration/WorldRenderSnapshot.cpp
