@@ -16,6 +16,10 @@ renderer draws it. It should coordinate existing engine-owned pieces:
 - renderer-facing setup and residency requests through
   `renderer_integration/`
 
+`jobs/` currently provides a deterministic single-threaded queue/executor seam.
+Streaming systems can mirror pending asset-load intent into jobs before a real
+threaded loader exists.
+
 ## Implemented files
 
 - `TerrainStreamingPlanner.hpp/.cpp` - CPU-only desired chunk window planning
@@ -54,5 +58,7 @@ The first real slice is planning-only:
 
 The retained runtime state can queue safe plan intent through
 `TerrainRuntimeState`. The manifest coordinator connects retained manifest
-values and asset-load intent to that streaming plan. Later slices can connect
-async jobs once the single-threaded CPU-side policy is proven.
+values and asset-load intent to that streaming plan. Pending manifest asset-load
+requests can now be mirrored into generic jobs for deterministic callback
+execution; later slices can connect those callbacks to real async IO after the
+single-threaded CPU-side policy is proven.

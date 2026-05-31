@@ -40,6 +40,9 @@ requested change needs them.
 - Streaming policy should live in `streaming/` once it needs retained runtime
   state or multi-system coordination; low-level chunk identity and residency
   primitives remain in `world/`.
+- Job scheduling primitives should live in `jobs/` and stay renderer-free.
+  Terrain- or renderer-facing helpers may mirror their own requests into jobs
+  from their owning subsystem rather than making `jobs/` depend on them.
 - Renderer code must not depend on `src/engine/`.
 - Shared behavior needed by both engine and renderer should be expressed
   through public renderer APIs, docs, or a deliberately separate utility layer;

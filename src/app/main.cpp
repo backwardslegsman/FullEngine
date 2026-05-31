@@ -3,12 +3,14 @@
 #include "engine/assets/CookedAssetManifest.hpp"
 #include "engine/assets/CookedAssetManifestJson.hpp"
 #include "engine/assets/CookedAssetManifestSummary.hpp"
+#include "engine/jobs/JobQueue.hpp"
 #include "engine/renderer_integration/ChunkTerrainHandleMap.hpp"
 #include "engine/renderer_integration/TerrainAssetResolver.hpp"
 #include "engine/renderer_integration/TerrainChunkRequests.hpp"
 #include "engine/renderer_integration/TerrainDescriptorBuilder.hpp"
 #include "engine/renderer_integration/TerrainIntegrationDiagnostics.hpp"
 #include "engine/renderer_integration/TerrainLifecyclePlan.hpp"
+#include "engine/renderer_integration/TerrainManifestAssetLoadJobCoordinator.hpp"
 #include "engine/renderer_integration/TerrainManifestFileLoad.hpp"
 #include "engine/renderer_integration/TerrainManifestLoadState.hpp"
 #include "engine/renderer_integration/TerrainManifestRuntimeStaging.hpp"
@@ -760,6 +762,8 @@ struct SampleTerrainResidencyControls
     full_engine::CookedAssetManifestValidationResult lastManifestImportValidationResult =
         full_engine::CookedAssetManifestValidationResult::Success;
     full_engine::TerrainManifestLoadState manifestLoad = {};
+    full_engine::EngineJobQueue manifestAssetLoadJobs = {};
+    full_engine::TerrainManifestAssetLoadJobCoordinatorResult lastManifestLoadJobResult = {};
     std::size_t lastImportedManifestAssetCount = 0;
     std::size_t lastImportedManifestTerrainChunkCount = 0;
     std::size_t lastImportedAssetCatalogCount = 0;
@@ -871,6 +875,50 @@ full_engine::TerrainRuntimeStateSnapshot sampleTerrainRuntimeSnapshot(
     const full_engine::TerrainResourceCatalog& resources,
     const full_engine::ChunkTerrainHandleMap& handles,
     const std::vector<SampleTerrainChunkState>& chunks);
+
+full_engine::TerrainManifestAssetLoadCallbackResult sampleTerrainManifestAssetLoadCallback(
+    const full_engine::TerrainManifestAssetLoadRequest& request,
+    void* const userData)
+{
+    const full_engine::RendererAssetHandleCatalog& handles =
+        *static_cast<const full_engine::RendererAssetHandleCatalog*>(userData);
+
+    full_engine::TerrainManifestAssetLoadCallbackResult result;
+    result.status = full_engine::TerrainManifestAssetLoadCallbackStatus::Loaded;
+    switch (request.kind)
+    {
+    case full_engine::AssetKind::Mesh:
+        if (const full_renderer::MeshHandle* const handle = handles.findMeshHandle(request.id))
+        {
+            result.mesh = *handle;
+            return result;
+        }
+        break;
+    case full_engine::AssetKind::Material:
+        if (const full_renderer::MaterialHandle* const handle = handles.findMaterialHandle(request.id))
+        {
+            result.material = *handle;
+            return result;
+        }
+        break;
+    case full_engine::AssetKind::Texture:
+        if (const full_renderer::TextureHandle* const handle = handles.findTextureHandle(request.id))
+        {
+            result.texture = *handle;
+            return result;
+        }
+        break;
+    case full_engine::AssetKind::Unknown:
+    case full_engine::AssetKind::TerrainChunk:
+    case full_engine::AssetKind::Skeleton:
+    case full_engine::AssetKind::SkinnedMesh:
+    case full_engine::AssetKind::Shader:
+        break;
+    }
+
+    result.status = full_engine::TerrainManifestAssetLoadCallbackStatus::Missing;
+    return result;
+}
 
 bool queueSampleTerrainSetupAdds(
     full_engine::TerrainRuntimeState& terrainRuntime,
@@ -1520,6 +1568,8 @@ void drawTerrainDiagnosticsPanel(
             terrainResidencyControls.lastImportedAssetCatalogCount = 0;
             terrainResidencyControls.lastImportedTerrainAssetCatalogCount = 0;
             terrainResidencyControls.manifestLoad.clearManifest();
+            terrainResidencyControls.manifestAssetLoadJobs.clear();
+            terrainResidencyControls.lastManifestLoadJobResult = {};
             terrainResidencyControls.lastManifestStageApplyBlocked = false;
 
             const full_engine::TerrainManifestFileReloadPlanResult manifestReload =
@@ -1597,11 +1647,60 @@ void drawTerrainDiagnosticsPanel(
                 terrainResidencyControls.manifestLoad.latestLoadRequestQueueResult().summary.alreadyQueuedCount),
             static_cast<unsigned long long>(
                 terrainResidencyControls.manifestLoad.latestLoadRequestQueueResult().summary.invalidArgumentCount));
+        if (ImGui::Button("Run Load Jobs"))
+        {
+            const std::size_t maxLoadJobs =
+                std::max<std::size_t>(1, terrainResidencyControls.manifestLoad.pendingLoadRequestCount());
+            terrainResidencyControls.lastManifestLoadJobResult =
+                full_engine::runTerrainManifestAssetLoadJobs(
+                    terrainResidencyControls.manifestLoad,
+                    terrainResidencyControls.manifestAssetLoadJobs,
+                    engineTerrainAssetHandles,
+                    sampleTerrainManifestAssetLoadCallback,
+                    &engineTerrainAssetHandles,
+                    maxLoadJobs);
+            if (terrainResidencyControls.lastManifestLoadJobResult.status ==
+                full_engine::TerrainManifestAssetLoadJobCoordinatorStatus::Success)
+            {
+                (void)terrainResidencyControls.manifestLoad.planAssetLoadRequests();
+            }
+        }
+        ImGui::SameLine();
+        ImGui::Text(
+            "Load jobs: %s, pending jobs %llu, mirror %llu/%llu/%llu, exec done/fail/block %llu/%llu/%llu",
+            full_engine::terrainManifestAssetLoadJobCoordinatorStatusName(
+                terrainResidencyControls.lastManifestLoadJobResult.status),
+            static_cast<unsigned long long>(terrainResidencyControls.manifestAssetLoadJobs.jobCount()),
+            static_cast<unsigned long long>(
+                terrainResidencyControls.lastManifestLoadJobResult.mirror.summary.queuedCount),
+            static_cast<unsigned long long>(
+                terrainResidencyControls.lastManifestLoadJobResult.mirror.summary.alreadyQueuedCount),
+            static_cast<unsigned long long>(
+                terrainResidencyControls.lastManifestLoadJobResult.mirror.summary.invalidArgumentCount),
+            static_cast<unsigned long long>(
+                terrainResidencyControls.lastManifestLoadJobResult.jobs.summary.completedCount),
+            static_cast<unsigned long long>(
+                terrainResidencyControls.lastManifestLoadJobResult.jobs.summary.failedCount),
+            static_cast<unsigned long long>(
+                terrainResidencyControls.lastManifestLoadJobResult.jobs.summary.blockedCount));
+        ImGui::Text(
+            "Load job readiness: final ready/missing %llu/%llu, pending load requests %llu",
+            static_cast<unsigned long long>(
+                terrainResidencyControls.lastManifestLoadJobResult.summary.finalReadyHandleCount),
+            static_cast<unsigned long long>(
+                terrainResidencyControls.lastManifestLoadJobResult.summary.finalMissingHandleCount),
+            static_cast<unsigned long long>(
+                terrainResidencyControls.lastManifestLoadJobResult.summary.finalPendingLoadRequestCount));
         if (ImGui::Button("Consume Load Requests"))
         {
-            (void)terrainResidencyControls.manifestLoad.consumePendingAssetLoadRequests(
+            const full_engine::TerrainManifestAssetLoadResult& consume =
+                terrainResidencyControls.manifestLoad.consumePendingAssetLoadRequests(
                 engineTerrainAssetHandles,
                 engineTerrainAssetHandles);
+            if (consume.consumed)
+            {
+                terrainResidencyControls.manifestAssetLoadJobs.clear();
+            }
             (void)terrainResidencyControls.manifestLoad.planAssetReadiness(engineTerrainAssetHandles);
             (void)terrainResidencyControls.manifestLoad.planAssetLoadRequests();
         }

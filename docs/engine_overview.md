@@ -40,7 +40,9 @@ sample types, Dear ImGui types, or `src/app` demo state.
   `renderer_integration/`.
 - `scene/` owns transforms and renderable extraction from engine state.
 - `assets/` owns runtime asset catalogs and cooked asset references.
-- `jobs/` owns async loading and work scheduling.
+- `jobs/` owns async loading and work scheduling. The current slice contains a
+  deterministic single-threaded job queue/executor seam; true background
+  threads, IO, and platform job handles are still future work.
 - `renderer_integration/` maps engine state to renderer public descriptors and
   handles. The current slice contains a smoke adapter and CPU-side render-space
   conversion from engine-owned double-precision world data to bounded
@@ -159,6 +161,19 @@ Implemented pieces:
 - manifest load state consume diagnostics that let callers consume the
   state-owned pending load queue through the adapter while keeping source and
   destination renderer handle catalogs externally owned
+- a single-threaded engine job queue that retains generic background-work
+  intent, executes ready jobs through caller callbacks in deterministic
+  priority order, and leaves failed or blocked jobs pending for retry
+- a manifest asset-load job mirroring helper that copies pending
+  mesh/material/texture load intent into generic `ManifestAssetLoad` jobs
+  without consuming asset requests or mutating renderer handle catalogs
+- a job-driven manifest asset load proof in CPU tests, showing pending
+  load intent can be mirrored into jobs, completed through caller callbacks,
+  consumed through `TerrainManifestLoadState`, and replanned as ready
+  without production async or renderer-resource creation
+- a production-facing single-threaded manifest asset load job coordinator that
+  owns the repeated mirror, execute, consume, and readiness-replan sequence
+  while keeping loader callbacks and renderer resource creation external
 - a CPU-only terrain streaming planner that converts camera/world position,
   chunk size, known chunk IDs, and a terrain runtime snapshot into deterministic
   dry-run setup and residency intent without mutating runtime state
@@ -233,8 +248,10 @@ consume counters in the debug panel, dry-runs a terrain setup staging plan
 through the reusable manifest staging coordinator, can queue safe add/remove
 staging operations through the terrain runtime controller, can drive
 setup/residency intent from the camera through the manifest-aware streaming
-coordinator debug toggle, and submits the mapped renderer terrain handles in
-its render packet.
+coordinator debug toggle, can run the manifest asset load job coordinator from
+the debug panel using its sample-created renderer handles as the external load
+callback source, and submits the mapped renderer terrain handles in its render
+packet.
 
 Still future work:
 

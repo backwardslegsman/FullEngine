@@ -119,6 +119,8 @@ add_library(full_engine STATIC
     src/engine/assets/TerrainAssetDependencyValidator.hpp
     src/engine/core/Engine.cpp
     src/engine/core/Engine.hpp
+    src/engine/jobs/JobQueue.cpp
+    src/engine/jobs/JobQueue.hpp
     src/engine/renderer_integration/ChunkTerrainHandleMap.cpp
     src/engine/renderer_integration/ChunkTerrainHandleMap.hpp
     src/engine/renderer_integration/RenderSpace.cpp
@@ -139,6 +141,10 @@ add_library(full_engine STATIC
     src/engine/renderer_integration/TerrainManifestAssetReadiness.hpp
     src/engine/renderer_integration/TerrainManifestAssetLoader.cpp
     src/engine/renderer_integration/TerrainManifestAssetLoader.hpp
+    src/engine/renderer_integration/TerrainManifestAssetLoadJobCoordinator.cpp
+    src/engine/renderer_integration/TerrainManifestAssetLoadJobCoordinator.hpp
+    src/engine/renderer_integration/TerrainManifestAssetLoadJobs.cpp
+    src/engine/renderer_integration/TerrainManifestAssetLoadJobs.hpp
     src/engine/renderer_integration/TerrainManifestAssetLoadExecutor.cpp
     src/engine/renderer_integration/TerrainManifestAssetLoadExecutor.hpp
     src/engine/renderer_integration/TerrainManifestAssetLoadPlan.cpp

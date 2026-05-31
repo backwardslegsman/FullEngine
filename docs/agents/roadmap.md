@@ -559,9 +559,26 @@ move gameplay, streaming policy, or editor concepts into renderer internals.
   Missing renderer handles become pending load intent before setup staging, and
   ready manifest setup descriptors can feed camera-window setup/residency
   queueing without applying runtime updates.
-- Fourth slice: introduce a minimal `jobs/` request/executor seam for async or
-  background asset work. Keep policy and diagnostics deterministic first; add
-  true threading only after single-threaded request lifetimes are proven.
+- Fourth slice is implemented: `src/engine/jobs/` contains a deterministic
+  single-threaded job queue/executor seam for future async or background asset
+  work. Pending manifest asset load requests can be mirrored into generic
+  `ManifestAssetLoad` jobs without consuming those requests, mutating renderer
+  handle catalogs, performing IO, or creating renderer resources.
+- Fifth slice is implemented in tests: mirrored manifest asset load jobs can be
+  completed through caller callbacks, then the retained load queue is consumed
+  through `TerrainManifestLoadState` and readiness replans as ready. This proves
+  the scheduling seam before adding production async or renderer-resource
+  creation.
+- Sixth slice is implemented: a production-facing manifest asset load job
+  coordinator owns the repeated "mirror jobs, run callback, consume load queue,
+  replan readiness" sequence while keeping callbacks, IO, threading, renderer
+  calls, and renderer resource creation externally owned.
+- Seventh slice is implemented: the sample debug panel exposes an optional
+  "Run Load Jobs" action and coordinator diagnostics, using sample-created
+  renderer handles as the external callback source.
+- Next slice: add a retained streaming/job state holder once more than manifest
+  asset loading needs scheduled work, or promote load-job diagnostics into the
+  reusable terrain integration diagnostics snapshot.
 - Initial sample integration is in place: the debug UI can run the
   manifest-aware streaming coordinator once or continuously from camera
   position, display readiness/load/staging/streaming queue counters, and keep
