@@ -113,6 +113,12 @@ The retained event log can be inspected by the sample debug UI and exported as
 deterministic JSON Lines for lightweight tooling or bug reports. A matching
 standard-library importer reads that exported schema back into value snapshots
 for tests and future diagnostics tooling.
+`TerrainRuntimeStateSnapshot` provides the same kind of value-only status
+surface for chunk setup, residency, resources, and terrain handle readiness, so
+sample and editor UI can query one engine-owned summary instead of probing each
+owner independently. The sample diagnostics panel displays those readiness
+counters directly alongside the existing request and renderer-submission
+counters.
 
 The sample still owns demo UI state and renderer mesh/material/texture
 creation. It queues setup and residency intent through `TerrainRuntimeState`,

@@ -11,6 +11,7 @@
 #include "engine/renderer_integration/TerrainResourceCatalog.hpp"
 #include "engine/renderer_integration/TerrainRuntimeController.hpp"
 #include "engine/renderer_integration/TerrainRuntimeEventExport.hpp"
+#include "engine/renderer_integration/TerrainRuntimeStateSnapshot.hpp"
 #include "engine/renderer_integration/TerrainSubmissionAdapter.hpp"
 #include "engine/renderer_integration/WorldRenderSnapshot.hpp"
 #include "engine/world/WorldChunkCatalog.hpp"
@@ -862,41 +863,54 @@ std::size_t countRegisteredSampleTerrainChunks(const std::vector<SampleTerrainCh
     return count;
 }
 
-bool isTerrainSetupRegistered(
-    const full_engine::WorldChunkRegistry& registry,
-    const full_engine::WorldChunkCatalog& worldCatalog,
-    const full_engine::TerrainResourceCatalog& resources,
-    const full_engine::ChunkId& id)
+std::vector<full_engine::ChunkId> sampleTerrainChunkIds(const std::vector<SampleTerrainChunkState>& chunks)
 {
-    return registry.contains(id) && worldCatalog.contains(id) && resources.contains(id);
+    std::vector<full_engine::ChunkId> ids;
+    ids.reserve(chunks.size());
+    for (const SampleTerrainChunkState& chunk : chunks)
+    {
+        ids.push_back(chunk.id);
+    }
+    return ids;
 }
 
-void mirrorSampleTerrainSetupState(
-    const full_engine::WorldChunkRegistry& registry,
-    const full_engine::WorldChunkCatalog& worldCatalog,
-    const full_engine::TerrainResourceCatalog& resources,
-    SampleTerrainChunkState& chunk)
+const full_engine::TerrainRuntimeChunkState* findTerrainRuntimeChunkState(
+    const full_engine::TerrainRuntimeStateSnapshot& snapshot,
+    const full_engine::ChunkId& id) noexcept
 {
-    chunk.setupRegistered = isTerrainSetupRegistered(registry, worldCatalog, resources, chunk.id);
-    if (!chunk.setupRegistered)
+    for (const full_engine::TerrainRuntimeChunkState& state : snapshot.chunks)
     {
-        chunk.resident = false;
-        return;
+        if (state.id == id)
+        {
+            return &state;
+        }
     }
-
-    const full_engine::WorldChunkInfo* info = registry.findChunk(chunk.id);
-    chunk.resident = info != nullptr && info->residency == full_engine::ChunkResidencyState::Resident;
+    return nullptr;
 }
 
 void mirrorSampleTerrainState(
-    full_engine::WorldChunkRegistry& registry,
-    full_engine::WorldChunkCatalog& worldCatalog,
-    full_engine::TerrainResourceCatalog& resources,
+    const full_engine::WorldChunkRegistry& registry,
+    const full_engine::WorldChunkCatalog& worldCatalog,
+    const full_engine::TerrainResourceCatalog& resources,
+    const full_engine::ChunkTerrainHandleMap& handles,
     std::vector<SampleTerrainChunkState>& chunks)
 {
-    for (SampleTerrainChunkState& chunk : chunks)
+    const std::vector<full_engine::ChunkId> ids = sampleTerrainChunkIds(chunks);
+    const full_engine::TerrainRuntimeStateSnapshot snapshot =
+        full_engine::buildTerrainRuntimeStateSnapshot(
+            registry,
+            worldCatalog,
+            resources,
+            handles,
+            ids.data(),
+            ids.size());
+
+    for (std::size_t index = 0; index < chunks.size() && index < snapshot.chunks.size(); ++index)
     {
-        mirrorSampleTerrainSetupState(registry, worldCatalog, resources, chunk);
+        const full_engine::TerrainRuntimeChunkState& state = snapshot.chunks[index];
+        chunks[index].setupRegistered = state.hasRegistry && state.hasWorldDesc && state.hasResources;
+        chunks[index].resident = chunks[index].setupRegistered &&
+            state.residency == full_engine::ChunkResidencyState::Resident;
     }
 }
 
@@ -1135,6 +1149,10 @@ void drawTerrainDiagnosticsPanel(
     SampleValidationState& validationState,
     SampleOpenWorldChurnState& openWorldChurnState,
     full_engine::TerrainRuntimeState& terrainRuntime,
+    const full_engine::WorldChunkRegistry& engineTerrainRegistry,
+    const full_engine::WorldChunkCatalog& engineTerrainCatalog,
+    const full_engine::TerrainResourceCatalog& engineTerrainResources,
+    const full_engine::ChunkTerrainHandleMap& engineTerrainHandles,
     std::vector<SampleTerrainChunkState>& sampleTerrainChunks,
     SampleTerrainResidencyControls& terrainResidencyControls,
     int terrainGridRadius,
@@ -1298,11 +1316,34 @@ void drawTerrainDiagnosticsPanel(
                 pipeline.submission.rendererFailedCount + pipeline.submission.handleMapFailedCount));
 
         ImGui::Separator();
+        const std::vector<full_engine::ChunkId> sampleChunkIds = sampleTerrainChunkIds(sampleTerrainChunks);
+        const full_engine::TerrainRuntimeStateSnapshot terrainStateSnapshot =
+            full_engine::buildTerrainRuntimeStateSnapshot(
+                engineTerrainRegistry,
+                engineTerrainCatalog,
+                engineTerrainResources,
+                engineTerrainHandles,
+                sampleChunkIds.data(),
+                sampleChunkIds.size());
         ImGui::Text(
             "Sample setup: %llu / %llu registered, %llu desired resident",
             static_cast<unsigned long long>(countRegisteredSampleTerrainChunks(sampleTerrainChunks)),
             static_cast<unsigned long long>(sampleTerrainChunks.size()),
             static_cast<unsigned long long>(countResidentSampleTerrainChunks(sampleTerrainChunks)));
+        ImGui::Text(
+            "Runtime state: renderable %llu, missing registry %llu, missing desc %llu, missing resources %llu, not resident %llu, missing handle %llu",
+            static_cast<unsigned long long>(terrainStateSnapshot.renderableCount),
+            static_cast<unsigned long long>(terrainStateSnapshot.missingRegistryCount),
+            static_cast<unsigned long long>(terrainStateSnapshot.missingWorldDescCount),
+            static_cast<unsigned long long>(terrainStateSnapshot.missingResourcesCount),
+            static_cast<unsigned long long>(terrainStateSnapshot.notResidentCount),
+            static_cast<unsigned long long>(terrainStateSnapshot.missingTerrainHandleCount));
+        if (terrainStateSnapshot.invalidInputCount > 0)
+        {
+            ImGui::Text(
+                "Runtime state invalid inputs: %llu",
+                static_cast<unsigned long long>(terrainStateSnapshot.invalidInputCount));
+        }
         ImGui::Text(
             "Queued setup/residency requests: %llu / %llu",
             static_cast<unsigned long long>(terrainRuntime.setupRequestCount()),
@@ -1341,12 +1382,19 @@ void drawTerrainDiagnosticsPanel(
             static_cast<std::int32_t>(terrainResidencyControls.selectedChunkX),
             0,
             static_cast<std::int32_t>(terrainResidencyControls.selectedChunkZ)};
+        const full_engine::TerrainRuntimeChunkState* selectedRuntimeState =
+            findTerrainRuntimeChunkState(terrainStateSnapshot, selectedChunkId);
         SampleTerrainChunkState* selectedChunk = findSampleTerrainChunk(sampleTerrainChunks, selectedChunkId);
         const bool selectedRegistered = selectedChunk != nullptr && selectedChunk->setupRegistered;
         ImGui::Text(
             "Selected chunk: %s / %s",
             selectedRegistered ? "registered" : "unregistered",
             selectedRegistered && selectedChunk->resident ? "resident" : "unloaded");
+        ImGui::Text(
+            "Selected readiness: %s",
+            selectedRuntimeState != nullptr
+                ? full_engine::terrainRuntimeChunkReadinessName(selectedRuntimeState->readiness)
+                : "not tracked");
         if (ImGui::Button("Add Setup") && selectedChunk != nullptr && !selectedChunk->setupRegistered)
         {
             selectedChunk->resident = true;
@@ -3774,6 +3822,7 @@ int main(int argc, char** argv)
                 engineTerrainRegistry,
                 engineTerrainCatalog,
                 engineTerrainResources,
+                engineTerrainHandles,
                 sampleTerrainChunks);
             if (terrainResidencyControls.reloadCenterAfterUnload)
             {
@@ -4283,6 +4332,10 @@ int main(int argc, char** argv)
                 validationState,
                 openWorldChurnState,
                 terrainRuntime,
+                engineTerrainRegistry,
+                engineTerrainCatalog,
+                engineTerrainResources,
+                engineTerrainHandles,
                 sampleTerrainChunks,
                 terrainResidencyControls,
                 kGridRadius,
