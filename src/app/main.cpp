@@ -1,6 +1,7 @@
 #include "full_renderer/Renderer.hpp"
 
 #include "engine/assets/CookedAssetManifest.hpp"
+#include "engine/assets/CookedAssetManifestJson.hpp"
 #include "engine/assets/TerrainAssetDependencyValidator.hpp"
 #include "engine/renderer_integration/ChunkTerrainHandleMap.hpp"
 #include "engine/renderer_integration/TerrainAssetResolver.hpp"
@@ -743,6 +744,8 @@ struct SampleTerrainResidencyControls
         full_engine::TerrainRuntimeEventExportResult::Success;
     full_engine::TerrainRuntimeStateDiffExportResult lastDiffExportResult =
         full_engine::TerrainRuntimeStateDiffExportResult::Success;
+    full_engine::CookedAssetManifestExportResult lastManifestExportResult =
+        full_engine::CookedAssetManifestExportResult::Success;
 };
 
 full_engine::WorldBounds toEngineWorldBounds(const full_renderer::Aabb& bounds) noexcept
@@ -1276,6 +1279,7 @@ void drawTerrainDiagnosticsPanel(
     const full_engine::RendererAssetHandleCatalog& engineTerrainAssetHandles,
     const full_engine::TerrainResourceCatalog& engineTerrainResources,
     const full_engine::ChunkTerrainHandleMap& engineTerrainHandles,
+    const full_engine::CookedAssetManifest& sampleTerrainManifest,
     std::vector<SampleTerrainChunkState>& sampleTerrainChunks,
     SampleTerrainResidencyControls& terrainResidencyControls,
     int terrainGridRadius,
@@ -1374,6 +1378,19 @@ void drawTerrainDiagnosticsPanel(
             "Diff: %s",
             full_engine::terrainRuntimeStateDiffExportResultName(
                 terrainResidencyControls.lastDiffExportResult));
+        ImGui::SameLine();
+        if (ImGui::Button("Export Manifest"))
+        {
+            terrainResidencyControls.lastManifestExportResult =
+                full_engine::exportCookedAssetManifestJsonLines(
+                    sampleTerrainManifest,
+                    "sample_cooked_asset_manifest.jsonl");
+        }
+        ImGui::SameLine();
+        ImGui::Text(
+            "Manifest: %s",
+            full_engine::cookedAssetManifestExportResultName(
+                terrainResidencyControls.lastManifestExportResult));
         const std::vector<full_engine::TerrainRuntimeEvent> runtimeEvents = terrainRuntime.events();
         if (!runtimeEvents.empty())
         {
@@ -4695,6 +4712,7 @@ int main(int argc, char** argv)
                 engineTerrainAssetHandles,
                 engineTerrainResources,
                 engineTerrainHandles,
+                sampleTerrainManifest,
                 sampleTerrainChunks,
                 terrainResidencyControls,
                 kGridRadius,

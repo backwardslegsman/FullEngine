@@ -446,7 +446,8 @@ move gameplay, streaming policy, or editor concepts into renderer internals.
 - Deterministic cooked manifest JSON Lines import/export is in place for
   lightweight tooling and schema round-trip tests. It remains standard-library
   only and does not add production asset loading, importers, async loading, or
-  renderer-resource creation.
+  renderer-resource creation. The sample debug UI can export its generated
+  cooked manifest for inspection without loading runtime assets from files.
 - Define engine-owned asset IDs, manifests, dependency lookup, and cooked asset
   responsibilities.
 - Map engine assets to renderer mesh, texture, material, skeleton, terrain, and

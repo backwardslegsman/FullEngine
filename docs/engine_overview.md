@@ -155,7 +155,8 @@ catalogs into terrain resource descriptors, queues setup and residency intent
 through `TerrainRuntimeState`, updates that state before renderer frame
 submission, mirrors display state from engine registries, displays the retained
 runtime snapshot/diff in its debug panel, exports event/diff diagnostics on
-demand, and submits the mapped renderer terrain handles in its render packet.
+demand, exports its generated cooked manifest for schema/tooling inspection,
+and submits the mapped renderer terrain handles in its render packet.
 
 Still future work:
 
