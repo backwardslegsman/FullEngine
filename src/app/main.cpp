@@ -10,6 +10,7 @@
 #include "engine/renderer_integration/TerrainRenderPrep.hpp"
 #include "engine/renderer_integration/TerrainResourceCatalog.hpp"
 #include "engine/renderer_integration/TerrainRuntimeController.hpp"
+#include "engine/renderer_integration/TerrainRuntimeEventExport.hpp"
 #include "engine/renderer_integration/TerrainSubmissionAdapter.hpp"
 #include "engine/renderer_integration/WorldRenderSnapshot.hpp"
 #include "engine/world/WorldChunkCatalog.hpp"
@@ -732,6 +733,8 @@ struct SampleTerrainResidencyControls
     int selectedChunkZ = 0;
     int batchRingRadius = 0;
     bool reloadCenterAfterUnload = false;
+    full_engine::TerrainRuntimeEventExportResult lastEventExportResult =
+        full_engine::TerrainRuntimeEventExportResult::Success;
 };
 
 full_engine::WorldBounds toEngineWorldBounds(const full_renderer::Aabb& bounds) noexcept
@@ -1199,7 +1202,57 @@ void drawTerrainDiagnosticsPanel(
         const full_engine::TerrainSetupRequestDiagnostics& terrainSetupDiagnostics = terrainDiagnostics.setupRequests;
         const full_engine::TerrainResidencyRequestDiagnostics& terrainResidencyDiagnostics =
             terrainDiagnostics.residencyRequests;
+        const full_engine::TerrainRuntimeEvent* latestEvent = terrainRuntime.latestEvent();
 
+        ImGui::Text("Runtime events: %llu", static_cast<unsigned long long>(terrainRuntime.eventCount()));
+        ImGui::Text(
+            "Last runtime status: %s",
+            latestEvent != nullptr ? full_engine::terrainRuntimeUpdateStatusName(latestEvent->status) : "None");
+        if (ImGui::Button("Export Events"))
+        {
+            terrainResidencyControls.lastEventExportResult =
+                full_engine::exportTerrainRuntimeEventsJsonLines(
+                    terrainRuntime.eventLog(),
+                    "terrain_runtime_events.jsonl");
+        }
+        ImGui::SameLine();
+        ImGui::Text(
+            "Export: %s",
+            full_engine::terrainRuntimeEventExportResultName(
+                terrainResidencyControls.lastEventExportResult));
+        const std::vector<full_engine::TerrainRuntimeEvent> runtimeEvents = terrainRuntime.events();
+        if (!runtimeEvents.empty())
+        {
+            ImGui::TextUnformatted("Recent runtime events");
+            const std::size_t firstEventIndex = runtimeEvents.size() > 5 ? runtimeEvents.size() - 5 : 0;
+            for (std::size_t eventIndex = firstEventIndex; eventIndex < runtimeEvents.size(); ++eventIndex)
+            {
+                const full_engine::TerrainRuntimeEvent& event = runtimeEvents[eventIndex];
+                const full_engine::TerrainSetupRequestDiagnostics& eventSetup =
+                    event.diagnostics.setupRequests;
+                const full_engine::TerrainResidencyRequestDiagnostics& eventResidency =
+                    event.diagnostics.residencyRequests;
+                const full_engine::TerrainPipelineDiagnostics& eventPipeline =
+                    event.diagnostics.pipeline;
+                ImGui::Text(
+                    "#%llu %s | setup a/i/p %llu/%llu/%llu | residency a/m/i %llu/%llu/%llu | submit c/u/d/s/f %llu/%llu/%llu/%llu/%llu",
+                    static_cast<unsigned long long>(event.sequence),
+                    full_engine::terrainRuntimeUpdateStatusName(event.status),
+                    static_cast<unsigned long long>(eventSetup.summary.appliedCount),
+                    static_cast<unsigned long long>(eventSetup.summary.invalidArgumentCount),
+                    static_cast<unsigned long long>(eventSetup.summary.partialFailureCount),
+                    static_cast<unsigned long long>(eventResidency.summary.appliedCount),
+                    static_cast<unsigned long long>(eventResidency.summary.notFoundCount),
+                    static_cast<unsigned long long>(eventResidency.summary.invalidTransitionCount),
+                    static_cast<unsigned long long>(eventPipeline.submission.createdCount),
+                    static_cast<unsigned long long>(eventPipeline.submission.updatedCount),
+                    static_cast<unsigned long long>(eventPipeline.submission.destroyedCount),
+                    static_cast<unsigned long long>(eventPipeline.submission.skippedCount),
+                    static_cast<unsigned long long>(
+                        eventPipeline.submission.rendererFailedCount +
+                        eventPipeline.submission.handleMapFailedCount));
+            }
+        }
         ImGui::Text("Handle map: %llu", static_cast<unsigned long long>(pipeline.handleCount));
         ImGui::Text(
             "Snapshot: ready %llu, not resident %llu, missing %llu, invalid %llu, out of range %llu",

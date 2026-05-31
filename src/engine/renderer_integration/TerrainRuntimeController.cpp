@@ -38,6 +38,23 @@ void countResidencyRecord(
 }
 } // namespace
 
+const char* terrainRuntimeUpdateStatusName(const TerrainRuntimeUpdateStatus status) noexcept
+{
+    switch (status)
+    {
+    case TerrainRuntimeUpdateStatus::Success:
+        return "Success";
+    case TerrainRuntimeUpdateStatus::SetupFailed:
+        return "SetupFailed";
+    case TerrainRuntimeUpdateStatus::ResidencyFailed:
+        return "ResidencyFailed";
+    case TerrainRuntimeUpdateStatus::PipelineFailed:
+        return "PipelineFailed";
+    }
+
+    return "Unknown";
+}
+
 TerrainRuntimeUpdateResult updateTerrainRuntime(
     full_renderer::IRenderer& renderer,
     WorldChunkRegistry& registry,
@@ -120,6 +137,59 @@ TerrainRuntimeUpdateResult updateTerrainRuntime(
     return result;
 }
 
+void TerrainRuntimeEventLog::append(const TerrainRuntimeUpdateResult& update)
+{
+    TerrainRuntimeEvent event;
+    event.sequence = nextSequence_;
+    event.status = update.status;
+    event.diagnostics = update.diagnostics;
+
+    events_[nextIndex_] = event;
+    nextIndex_ = (nextIndex_ + 1) % kTerrainRuntimeEventLogCapacity;
+    if (count_ < kTerrainRuntimeEventLogCapacity)
+    {
+        ++count_;
+    }
+    ++nextSequence_;
+}
+
+std::vector<TerrainRuntimeEvent> TerrainRuntimeEventLog::events() const
+{
+    std::vector<TerrainRuntimeEvent> result;
+    result.reserve(count_);
+
+    const std::size_t startIndex = count_ == kTerrainRuntimeEventLogCapacity ? nextIndex_ : 0;
+    for (std::size_t offset = 0; offset < count_; ++offset)
+    {
+        result.push_back(events_[(startIndex + offset) % kTerrainRuntimeEventLogCapacity]);
+    }
+    return result;
+}
+
+std::size_t TerrainRuntimeEventLog::eventCount() const noexcept
+{
+    return count_;
+}
+
+const TerrainRuntimeEvent* TerrainRuntimeEventLog::latestEvent() const noexcept
+{
+    if (count_ == 0)
+    {
+        return nullptr;
+    }
+
+    const std::size_t latestIndex =
+        nextIndex_ == 0 ? kTerrainRuntimeEventLogCapacity - 1 : nextIndex_ - 1;
+    return &events_[latestIndex];
+}
+
+void TerrainRuntimeEventLog::clear() noexcept
+{
+    nextIndex_ = 0;
+    count_ = 0;
+    nextSequence_ = 1;
+}
+
 void TerrainRuntimeState::queueSetupAdd(
     const WorldChunkDesc& worldDesc,
     const TerrainChunkResourceDesc& resourceDesc)
@@ -167,6 +237,31 @@ const TerrainIntegrationDiagnostics& TerrainRuntimeState::latestDiagnostics() co
     return latestUpdate_.diagnostics;
 }
 
+const TerrainRuntimeEventLog& TerrainRuntimeState::eventLog() const noexcept
+{
+    return eventLog_;
+}
+
+std::size_t TerrainRuntimeState::eventCount() const noexcept
+{
+    return eventLog_.eventCount();
+}
+
+std::vector<TerrainRuntimeEvent> TerrainRuntimeState::events() const
+{
+    return eventLog_.events();
+}
+
+const TerrainRuntimeEvent* TerrainRuntimeState::latestEvent() const noexcept
+{
+    return eventLog_.latestEvent();
+}
+
+void TerrainRuntimeState::clearEvents() noexcept
+{
+    eventLog_.clear();
+}
+
 void TerrainRuntimeState::clearRequests() noexcept
 {
     setupRequests_.clear();
@@ -190,6 +285,7 @@ const TerrainRuntimeUpdateResult& TerrainRuntimeState::update(
         setupRequests_,
         residencyRequests_,
         options);
+    eventLog_.append(latestUpdate_);
     return latestUpdate_;
 }
 } // namespace full_engine

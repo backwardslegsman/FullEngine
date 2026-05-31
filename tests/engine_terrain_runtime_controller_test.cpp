@@ -322,6 +322,8 @@ void testRuntimeStateOwnsQueuesAndLatestResult(std::vector<std::string>& failure
     expect(!state.hasPendingRequests(), "default state has no pending requests", failures);
     expect(state.latestUpdate().status == full_engine::TerrainRuntimeUpdateStatus::Success, "default latest status is success", failures);
     expect(state.latestDiagnostics().pipeline.handleCount == 0, "default latest diagnostics are empty", failures);
+    expect(state.eventCount() == 0, "default state has no runtime events", failures);
+    expect(state.latestEvent() == nullptr, "default latest event is null", failures);
 
     state.queueSetupAdd(worldDesc(id), terrainResources(id));
     state.queueMakeResident(id);
@@ -341,6 +343,14 @@ void testRuntimeStateOwnsQueuesAndLatestResult(std::vector<std::string>& failure
     expect(!state.hasPendingRequests(), "state update clears pending request state", failures);
     expect(state.latestUpdate().pipeline.submission.summary.createdCount == 1, "state stores latest create result", failures);
     expect(state.latestDiagnostics().pipeline.handleCount == 1, "state stores latest diagnostics", failures);
+    expect(state.eventCount() == 1, "state update appends runtime event", failures);
+    expect(state.latestEvent() != nullptr, "state latest event exists after update", failures);
+    if (state.latestEvent() != nullptr)
+    {
+        expect(state.latestEvent()->sequence == 1, "first runtime event sequence is one", failures);
+        expect(state.latestEvent()->status == full_engine::TerrainRuntimeUpdateStatus::Success, "runtime event stores success status", failures);
+        expect(state.latestEvent()->diagnostics.pipeline.handleCount == 1, "runtime event stores copied diagnostics", failures);
+    }
     expect(fixture.handles.contains(id), "state update maps terrain handle", failures);
 
     state.queueMakeUnloaded(id);
@@ -350,6 +360,7 @@ void testRuntimeStateOwnsQueuesAndLatestResult(std::vector<std::string>& failure
     expect(state.residencyRequestCount() == 0, "state clearRequests clears residency queue", failures);
     expect(!state.hasPendingRequests(), "state clearRequests clears pending state", failures);
     expect(state.latestDiagnostics().pipeline.handleCount == 1, "state clearRequests preserves latest diagnostics", failures);
+    expect(state.eventCount() == 1, "state clearRequests preserves runtime events", failures);
 
     state.queueSetupRemove(id);
     const full_engine::TerrainRuntimeUpdateResult& removeResult = state.update(
@@ -361,7 +372,14 @@ void testRuntimeStateOwnsQueuesAndLatestResult(std::vector<std::string>& failure
     expect(removeResult.status == full_engine::TerrainRuntimeUpdateStatus::Success, "state remove update succeeds", failures);
     expect(state.latestUpdate().pipeline.submission.summary.destroyedCount == 1, "state stores latest destroy result", failures);
     expect(state.latestDiagnostics().pipeline.handleCount == 0, "state diagnostics update after remove", failures);
+    expect(state.eventCount() == 2, "second state update appends second event", failures);
+    expect(state.latestEvent() != nullptr && state.latestEvent()->sequence == 2, "latest event sequence advances", failures);
     expect(!fixture.handles.contains(id), "state remove releases mapped handle", failures);
+
+    state.clearEvents();
+    expect(state.eventCount() == 0, "state clearEvents clears runtime events", failures);
+    expect(state.latestEvent() == nullptr, "state latest event is null after clearEvents", failures);
+    expect(state.latestDiagnostics().pipeline.handleCount == 0, "state clearEvents preserves latest diagnostics", failures);
 }
 
 void testRuntimeStatePreservesFailureStatus(std::vector<std::string>& failures)
@@ -384,6 +402,57 @@ void testRuntimeStatePreservesFailureStatus(std::vector<std::string>& failures)
     expect(state.latestUpdate().status == full_engine::TerrainRuntimeUpdateStatus::SetupFailed, "state latest update stores failure", failures);
     expect(state.latestDiagnostics().setupRequests.summary.invalidArgumentCount == 1, "state latest diagnostics store failure", failures);
     expect(state.setupRequestCount() == 0, "state clears setup queue after failure", failures);
+    expect(state.eventCount() == 1, "state failure update appends runtime event", failures);
+    expect(state.latestEvent() != nullptr, "state latest event exists after failure", failures);
+    if (state.latestEvent() != nullptr)
+    {
+        expect(state.latestEvent()->status == full_engine::TerrainRuntimeUpdateStatus::SetupFailed, "failure event stores status", failures);
+        expect(
+            state.latestEvent()->diagnostics.setupRequests.summary.invalidArgumentCount == 1,
+            "failure event stores copied diagnostics",
+            failures);
+    }
+}
+
+void testRuntimeEventLogCapacityAndOrdering(std::vector<std::string>& failures)
+{
+    full_engine::TerrainRuntimeEventLog log;
+    expect(log.eventCount() == 0, "default event log is empty", failures);
+    expect(log.latestEvent() == nullptr, "default event log latest is null", failures);
+
+    for (std::size_t index = 0; index < full_engine::kTerrainRuntimeEventLogCapacity + 5; ++index)
+    {
+        full_engine::TerrainRuntimeUpdateResult result;
+        result.status = index % 2 == 0
+            ? full_engine::TerrainRuntimeUpdateStatus::Success
+            : full_engine::TerrainRuntimeUpdateStatus::PipelineFailed;
+        result.diagnostics.pipeline.handleCount = index;
+        log.append(result);
+    }
+
+    expect(
+        log.eventCount() == full_engine::kTerrainRuntimeEventLogCapacity,
+        "event log retains fixed capacity",
+        failures);
+
+    const std::vector<full_engine::TerrainRuntimeEvent> events = log.events();
+    expect(events.size() == full_engine::kTerrainRuntimeEventLogCapacity, "event snapshot size matches count", failures);
+    expect(events.front().sequence == 6, "event log drops oldest overflow events", failures);
+    expect(events.back().sequence == full_engine::kTerrainRuntimeEventLogCapacity + 5, "event log keeps newest event", failures);
+    expect(events.front().diagnostics.pipeline.handleCount == 5, "oldest retained event keeps copied diagnostics", failures);
+    expect(
+        log.latestEvent() != nullptr &&
+            log.latestEvent()->sequence == full_engine::kTerrainRuntimeEventLogCapacity + 5,
+        "latest event points at newest retained event",
+        failures);
+
+    log.clear();
+    expect(log.eventCount() == 0, "event log clear removes events", failures);
+    expect(log.latestEvent() == nullptr, "event log clear removes latest pointer", failures);
+
+    full_engine::TerrainRuntimeUpdateResult result;
+    log.append(result);
+    expect(log.latestEvent() != nullptr && log.latestEvent()->sequence == 1, "event log clear restarts sequence", failures);
 }
 } // namespace
 
@@ -399,6 +468,7 @@ int main()
     testRendererFailureReportsPipelineFailure(failures);
     testRuntimeStateOwnsQueuesAndLatestResult(failures);
     testRuntimeStatePreservesFailureStatus(failures);
+    testRuntimeEventLogCapacityAndOrdering(failures);
 
     if (!failures.empty())
     {

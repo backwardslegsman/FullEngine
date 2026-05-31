@@ -149,10 +149,11 @@ milestones before adding more visual effects.
   large-coordinate diagnostics without moving streaming policy into renderer
   core. `src/engine` now owns the first real terrain integration chain through
   chunk residency, render snapshots, resource catalogs, descriptor intent,
-  submission, and handle associations. The seam is kept out of the installed
-  renderer package target, while the public renderer API now exposes in-place
-  terrain chunk descriptor updates and terrain shadow-caster debug snapshots
-  for engine integration.
+  submission, handle associations, runtime request coordination, and compact
+  recent-update event diagnostics with sample UI inspection and JSON Lines
+  export. The seam is kept out of the installed renderer package target, while
+  the public renderer API now exposes in-place terrain chunk descriptor updates
+  and terrain shadow-caster debug snapshots for engine integration.
 - Harden terrain chunk streaming, LOD transitions, chunk material residency,
   skirts/seams, and large-scene culling stress cases.
 - Add shared culling diagnostics for terrain, static meshes, instancing,

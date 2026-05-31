@@ -5,7 +5,10 @@
 #include "engine/renderer_integration/TerrainPipeline.hpp"
 #include "engine/world/WorldResidencyRequests.hpp"
 
+#include <array>
 #include <cstddef>
+#include <cstdint>
+#include <vector>
 
 namespace full_engine
 {
@@ -24,6 +27,9 @@ enum class TerrainRuntimeUpdateStatus
     PipelineFailed,
 };
 
+/** @brief Returns a stable diagnostic name for a terrain runtime update status. */
+const char* terrainRuntimeUpdateStatusName(TerrainRuntimeUpdateStatus status) noexcept;
+
 /**
  * @brief Result of applying terrain setup, residency, and renderer pipeline work.
  *
@@ -38,6 +44,54 @@ struct TerrainRuntimeUpdateResult
     WorldChunkResidencyApplyResult residency = {};
     TerrainPipelineRunResult pipeline = {};
     TerrainIntegrationDiagnostics diagnostics = {};
+};
+
+/** @brief Number of recent terrain runtime update events kept in memory. */
+constexpr std::size_t kTerrainRuntimeEventLogCapacity = 32;
+
+/**
+ * @brief Value snapshot of one terrain runtime update for diagnostics history.
+ *
+ * Events copy compact diagnostic counters only. They do not own request
+ * records, descriptor vectors, renderer handles, resources, or frame data.
+ */
+struct TerrainRuntimeEvent
+{
+    std::uint64_t sequence = 0;
+    TerrainRuntimeUpdateStatus status = TerrainRuntimeUpdateStatus::Success;
+    TerrainIntegrationDiagnostics diagnostics = {};
+};
+
+/**
+ * @brief Fixed-capacity chronological history of recent terrain runtime updates.
+ *
+ * The log is CPU-only and not thread-safe. Appending an update copies summary
+ * diagnostics from the update result and assigns a monotonically increasing
+ * sequence number local to the log.
+ */
+class TerrainRuntimeEventLog
+{
+public:
+    /** @brief Appends a compact event copied from an update result. */
+    void append(const TerrainRuntimeUpdateResult& update);
+
+    /** @brief Returns recent events in oldest-to-newest order. */
+    std::vector<TerrainRuntimeEvent> events() const;
+
+    /** @brief Returns the number of events currently retained. */
+    std::size_t eventCount() const noexcept;
+
+    /** @brief Returns the newest retained event, or null when the log is empty. */
+    const TerrainRuntimeEvent* latestEvent() const noexcept;
+
+    /** @brief Clears retained events and restarts local event sequencing. */
+    void clear() noexcept;
+
+private:
+    std::array<TerrainRuntimeEvent, kTerrainRuntimeEventLogCapacity> events_ = {};
+    std::size_t nextIndex_ = 0;
+    std::size_t count_ = 0;
+    std::uint64_t nextSequence_ = 1;
 };
 
 /**
@@ -95,6 +149,21 @@ public:
     /** @brief Returns diagnostics from the latest stored runtime update result. */
     const TerrainIntegrationDiagnostics& latestDiagnostics() const noexcept;
 
+    /** @brief Returns the retained runtime update event log. */
+    const TerrainRuntimeEventLog& eventLog() const noexcept;
+
+    /** @brief Returns the number of retained runtime update events. */
+    std::size_t eventCount() const noexcept;
+
+    /** @brief Returns retained runtime update events in oldest-to-newest order. */
+    std::vector<TerrainRuntimeEvent> events() const;
+
+    /** @brief Returns the newest retained runtime event, or null when none exist. */
+    const TerrainRuntimeEvent* latestEvent() const noexcept;
+
+    /** @brief Clears retained runtime events without erasing the latest update. */
+    void clearEvents() noexcept;
+
     /** @brief Clears pending setup and residency requests without erasing the latest result. */
     void clearRequests() noexcept;
 
@@ -111,5 +180,6 @@ private:
     TerrainChunkRequestQueue setupRequests_;
     WorldChunkResidencyRequestQueue residencyRequests_;
     TerrainRuntimeUpdateResult latestUpdate_ = {};
+    TerrainRuntimeEventLog eventLog_;
 };
 } // namespace full_engine

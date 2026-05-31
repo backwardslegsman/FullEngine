@@ -106,9 +106,11 @@ renderer terrain submission. `updateTerrainRuntime` applies setup requests,
 filters and applies registered residency requests, runs the pipeline, clears
 handled queues, and returns one aggregate update result. `TerrainRuntimeState`
 wraps those queues and the latest result for callers that want a compact
-runtime holder with `hasPendingRequests()` dirty-state checks, without
-transferring ownership of registries, catalogs, renderer handles, or renderer
-resources.
+runtime holder with `hasPendingRequests()` dirty-state checks and a compact
+fixed-capacity event log of recent update diagnostics, without transferring
+ownership of registries, catalogs, renderer handles, or renderer resources.
+The retained event log can be inspected by the sample debug UI and exported as
+deterministic JSON Lines for lightweight tooling or bug reports.
 
 The sample still owns demo UI state and renderer mesh/material/texture
 creation. It queues setup and residency intent through `TerrainRuntimeState`,
