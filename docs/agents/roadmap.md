@@ -154,9 +154,11 @@ milestones before adding more visual effects.
   export/import tests, and chunk readiness snapshots for setup/residency/
   resource/handle status displayed in the sample diagnostics panel. Snapshot
   diff planning now reports added, removed, and changed chunk status without
-  renderer calls. The seam is kept out of the installed renderer package target,
-  while the public renderer API now exposes in-place terrain chunk descriptor
-  updates and terrain shadow-caster debug snapshots for engine integration.
+  renderer calls, and `TerrainRuntimeState` can opt into update-time snapshot
+  tracking so callers can retain the latest runtime snapshot and diff. The seam
+  is kept out of the installed renderer package target, while the public
+  renderer API now exposes in-place terrain chunk descriptor updates and terrain
+  shadow-caster debug snapshots for engine integration.
 - Harden terrain chunk streaming, LOD transitions, chunk material residency,
   skirts/seams, and large-scene culling stress cases.
 - Add shared culling diagnostics for terrain, static meshes, instancing,
@@ -396,7 +398,10 @@ move gameplay, streaming policy, or editor concepts into renderer internals.
   the latest runtime update result for callers that want a compact engine-owned
   holder without giving the engine ownership of registries, renderer resources,
   or sample UI mirrors. It also exposes pending-request checks so callers can
-  drive request-based updates without separate dirty flags.
+  drive request-based updates without separate dirty flags, plus optional
+  latest snapshot/diff tracking for diagnostics or future editor status panels.
+  The sample panel now consumes that retained snapshot/diff to display runtime
+  readiness counters and recent state changes.
 - Define engine-owned chunk IDs, streaming regions, residency state, and
   large-world origin policy.
 - Translate world coordinates to renderer-relative frame data in

@@ -257,9 +257,31 @@ const TerrainRuntimeEvent* TerrainRuntimeState::latestEvent() const noexcept
     return eventLog_.latestEvent();
 }
 
+bool TerrainRuntimeState::hasLatestSnapshot() const noexcept
+{
+    return hasLatestSnapshot_;
+}
+
+const TerrainRuntimeStateSnapshot& TerrainRuntimeState::latestSnapshot() const noexcept
+{
+    return latestSnapshot_;
+}
+
+const TerrainRuntimeStateDiff& TerrainRuntimeState::latestSnapshotDiff() const noexcept
+{
+    return latestSnapshotDiff_;
+}
+
 void TerrainRuntimeState::clearEvents() noexcept
 {
     eventLog_.clear();
+}
+
+void TerrainRuntimeState::clearSnapshotTracking() noexcept
+{
+    latestSnapshot_ = {};
+    latestSnapshotDiff_ = {};
+    hasLatestSnapshot_ = false;
 }
 
 void TerrainRuntimeState::clearRequests() noexcept
@@ -287,5 +309,38 @@ const TerrainRuntimeUpdateResult& TerrainRuntimeState::update(
         options);
     eventLog_.append(latestUpdate_);
     return latestUpdate_;
+}
+
+const TerrainRuntimeUpdateResult& TerrainRuntimeState::updateWithSnapshot(
+    full_renderer::IRenderer& renderer,
+    WorldChunkRegistry& registry,
+    WorldChunkCatalog& worldCatalog,
+    TerrainResourceCatalog& resources,
+    ChunkTerrainHandleMap& handles,
+    const ChunkId* trackedIds,
+    const std::size_t trackedIdCount,
+    const TerrainRuntimeUpdateOptions& options)
+{
+    const TerrainRuntimeUpdateResult& result = update(
+        renderer,
+        registry,
+        worldCatalog,
+        resources,
+        handles,
+        options);
+
+    TerrainRuntimeStateSnapshot currentSnapshot = buildTerrainRuntimeStateSnapshot(
+        registry,
+        worldCatalog,
+        resources,
+        handles,
+        trackedIds,
+        trackedIdCount);
+    latestSnapshotDiff_ = hasLatestSnapshot_
+        ? diffTerrainRuntimeStateSnapshots(latestSnapshot_, currentSnapshot)
+        : diffTerrainRuntimeStateSnapshots({}, currentSnapshot);
+    latestSnapshot_ = currentSnapshot;
+    hasLatestSnapshot_ = true;
+    return result;
 }
 } // namespace full_engine

@@ -17,6 +17,9 @@ enum class TerrainRuntimeStateChangeType
     HandlePresenceChanged,
 };
 
+/** @brief Returns a stable diagnostic name for a terrain runtime state change type. */
+const char* terrainRuntimeStateChangeTypeName(TerrainRuntimeStateChangeType type) noexcept;
+
 /** @brief One deterministic terrain runtime state change record. */
 struct TerrainRuntimeStateChange
 {

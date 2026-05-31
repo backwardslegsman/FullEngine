@@ -3,6 +3,7 @@
 #include "engine/renderer_integration/TerrainChunkRequests.hpp"
 #include "engine/renderer_integration/TerrainIntegrationDiagnostics.hpp"
 #include "engine/renderer_integration/TerrainPipeline.hpp"
+#include "engine/renderer_integration/TerrainRuntimeStateDiff.hpp"
 #include "engine/world/WorldResidencyRequests.hpp"
 
 #include <array>
@@ -115,9 +116,10 @@ TerrainRuntimeUpdateResult updateTerrainRuntime(
 /**
  * @brief Caller-facing terrain runtime state for queued intent and latest results.
  *
- * The state owns only terrain setup/residency intent queues and the latest
- * update result. It does not own world registries, terrain resources, renderer
- * handles, renderer resources, UI state, or sample chunk mirrors.
+ * The state owns only terrain setup/residency intent queues, the latest update
+ * result, recent events, and optional snapshot tracking. It does not own world
+ * registries, terrain resources, renderer handles, renderer resources, UI
+ * state, or sample chunk mirrors.
  */
 class TerrainRuntimeState
 {
@@ -161,8 +163,20 @@ public:
     /** @brief Returns the newest retained runtime event, or null when none exist. */
     const TerrainRuntimeEvent* latestEvent() const noexcept;
 
+    /** @brief Returns whether snapshot tracking has captured at least one snapshot. */
+    bool hasLatestSnapshot() const noexcept;
+
+    /** @brief Returns the latest tracked terrain runtime state snapshot. */
+    const TerrainRuntimeStateSnapshot& latestSnapshot() const noexcept;
+
+    /** @brief Returns the latest diff between tracked terrain runtime snapshots. */
+    const TerrainRuntimeStateDiff& latestSnapshotDiff() const noexcept;
+
     /** @brief Clears retained runtime events without erasing the latest update. */
     void clearEvents() noexcept;
+
+    /** @brief Clears tracked snapshots without erasing queues, events, or the latest update. */
+    void clearSnapshotTracking() noexcept;
 
     /** @brief Clears pending setup and residency requests without erasing the latest result. */
     void clearRequests() noexcept;
@@ -176,10 +190,32 @@ public:
         ChunkTerrainHandleMap& handles,
         const TerrainRuntimeUpdateOptions& options = {});
 
+    /**
+     * @brief Applies owned queues, then captures and diffs tracked chunk state.
+     *
+     * This opt-in update path delegates to `update` first, so queue handling,
+     * renderer submission, latest-update storage, and event logging are
+     * identical to the normal runtime update. Afterward it snapshots the
+     * supplied caller-owned chunk IDs and stores a diff against the previous
+     * tracked snapshot, or against an empty snapshot on first capture.
+     */
+    const TerrainRuntimeUpdateResult& updateWithSnapshot(
+        full_renderer::IRenderer& renderer,
+        WorldChunkRegistry& registry,
+        WorldChunkCatalog& worldCatalog,
+        TerrainResourceCatalog& resources,
+        ChunkTerrainHandleMap& handles,
+        const ChunkId* trackedIds,
+        std::size_t trackedIdCount,
+        const TerrainRuntimeUpdateOptions& options = {});
+
 private:
     TerrainChunkRequestQueue setupRequests_;
     WorldChunkResidencyRequestQueue residencyRequests_;
     TerrainRuntimeUpdateResult latestUpdate_ = {};
     TerrainRuntimeEventLog eventLog_;
+    TerrainRuntimeStateSnapshot latestSnapshot_ = {};
+    TerrainRuntimeStateDiff latestSnapshotDiff_ = {};
+    bool hasLatestSnapshot_ = false;
 };
 } // namespace full_engine

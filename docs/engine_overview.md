@@ -120,13 +120,15 @@ owner independently. The sample diagnostics panel displays those readiness
 counters directly alongside the existing request and renderer-submission
 counters. `TerrainRuntimeStateDiff` compares two snapshots and reports added,
 removed, and changed chunk state in deterministic order for future diagnostics
-or editor tooling.
+or editor tooling. `TerrainRuntimeState` can opt into that tracking during an
+update, storing the latest snapshot and latest diff against the previous
+tracked snapshot without changing the plain update path.
 
 The sample still owns demo UI state and renderer mesh/material/texture
 creation. It queues setup and residency intent through `TerrainRuntimeState`,
 updates that state before renderer frame submission, mirrors display state from
-engine registries, and submits the mapped renderer terrain handles in its
-render packet.
+engine registries, displays the retained runtime snapshot/diff in its debug
+panel, and submits the mapped renderer terrain handles in its render packet.
 
 Still future work:
 

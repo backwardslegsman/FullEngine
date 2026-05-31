@@ -324,6 +324,9 @@ void testRuntimeStateOwnsQueuesAndLatestResult(std::vector<std::string>& failure
     expect(state.latestDiagnostics().pipeline.handleCount == 0, "default latest diagnostics are empty", failures);
     expect(state.eventCount() == 0, "default state has no runtime events", failures);
     expect(state.latestEvent() == nullptr, "default latest event is null", failures);
+    expect(!state.hasLatestSnapshot(), "default state has no latest snapshot", failures);
+    expect(state.latestSnapshot().chunks.empty(), "default latest snapshot is empty", failures);
+    expect(state.latestSnapshotDiff().changes.empty(), "default latest snapshot diff is empty", failures);
 
     state.queueSetupAdd(worldDesc(id), terrainResources(id));
     state.queueMakeResident(id);
@@ -345,6 +348,8 @@ void testRuntimeStateOwnsQueuesAndLatestResult(std::vector<std::string>& failure
     expect(state.latestDiagnostics().pipeline.handleCount == 1, "state stores latest diagnostics", failures);
     expect(state.eventCount() == 1, "state update appends runtime event", failures);
     expect(state.latestEvent() != nullptr, "state latest event exists after update", failures);
+    expect(!state.hasLatestSnapshot(), "plain state update does not create snapshot tracking", failures);
+    expect(state.latestSnapshotDiff().changes.empty(), "plain state update leaves snapshot diff empty", failures);
     if (state.latestEvent() != nullptr)
     {
         expect(state.latestEvent()->sequence == 1, "first runtime event sequence is one", failures);
@@ -414,6 +419,232 @@ void testRuntimeStatePreservesFailureStatus(std::vector<std::string>& failures)
     }
 }
 
+void testRuntimeStateUpdateWithSnapshotTracksFirstAddedChunk(std::vector<std::string>& failures)
+{
+    RuntimeFixture fixture;
+    full_engine::TerrainRuntimeState state;
+    const full_engine::ChunkId id{9, 0, 0};
+    const std::vector<full_engine::ChunkId> trackedIds{id};
+
+    state.queueSetupAdd(worldDesc(id), terrainResources(id));
+    state.queueMakeResident(id);
+
+    const full_engine::TerrainRuntimeUpdateResult& result = state.updateWithSnapshot(
+        fixture.renderer,
+        fixture.registry,
+        fixture.worldCatalog,
+        fixture.resources,
+        fixture.handles,
+        trackedIds.data(),
+        trackedIds.size());
+
+    expect(result.status == full_engine::TerrainRuntimeUpdateStatus::Success, "snapshot update succeeds", failures);
+    expect(state.hasLatestSnapshot(), "snapshot update stores latest snapshot", failures);
+    expect(state.latestSnapshot().chunks.size() == 1, "snapshot tracks one chunk", failures);
+    expect(state.latestSnapshot().renderableCount == 1, "tracked chunk is renderable", failures);
+    expect(state.latestSnapshotDiff().summary.addedCount == 1, "first snapshot reports tracked chunk added", failures);
+    expect(state.latestSnapshotDiff().changes.size() == 1, "first snapshot has one diff record", failures);
+    if (!state.latestSnapshotDiff().changes.empty())
+    {
+        const full_engine::TerrainRuntimeStateChange& change = state.latestSnapshotDiff().changes.front();
+        expect(change.id == id, "added snapshot diff stores chunk id", failures);
+        expect(
+            change.type == full_engine::TerrainRuntimeStateChangeType::Added,
+            "first snapshot diff reports added chunk",
+            failures);
+        expect(
+            change.currentReadiness == full_engine::TerrainRuntimeChunkReadiness::Renderable,
+            "added snapshot diff stores renderable readiness",
+            failures);
+    }
+    expect(state.eventCount() == 1, "snapshot update still appends runtime event", failures);
+    expect(fixture.handles.contains(id), "snapshot update maps terrain handle", failures);
+}
+
+void testRuntimeStateUpdateWithSnapshotReportsNoChangeOnStableState(std::vector<std::string>& failures)
+{
+    RuntimeFixture fixture;
+    full_engine::TerrainRuntimeState state;
+    const full_engine::ChunkId id{10, 0, 0};
+    const std::vector<full_engine::ChunkId> trackedIds{id};
+
+    state.queueSetupAdd(worldDesc(id), terrainResources(id));
+    state.queueMakeResident(id);
+    (void)state.updateWithSnapshot(
+        fixture.renderer,
+        fixture.registry,
+        fixture.worldCatalog,
+        fixture.resources,
+        fixture.handles,
+        trackedIds.data(),
+        trackedIds.size());
+
+    const full_engine::TerrainRuntimeUpdateResult& result = state.updateWithSnapshot(
+        fixture.renderer,
+        fixture.registry,
+        fixture.worldCatalog,
+        fixture.resources,
+        fixture.handles,
+        trackedIds.data(),
+        trackedIds.size());
+
+    expect(result.status == full_engine::TerrainRuntimeUpdateStatus::Success, "stable snapshot update succeeds", failures);
+    expect(state.latestSnapshotDiff().changes.empty(), "stable snapshot update reports no changes", failures);
+    expect(state.latestSnapshotDiff().summary.addedCount == 0, "stable snapshot has no added changes", failures);
+    expect(state.latestSnapshot().renderableCount == 1, "stable snapshot remains renderable", failures);
+    expect(state.eventCount() == 2, "stable snapshot update still appends event", failures);
+}
+
+void testRuntimeStateUpdateWithSnapshotReportsResidencyReadinessChange(std::vector<std::string>& failures)
+{
+    RuntimeFixture fixture;
+    full_engine::TerrainRuntimeState state;
+    const full_engine::ChunkId id{11, 0, 0};
+    const std::vector<full_engine::ChunkId> trackedIds{id};
+
+    state.queueSetupAdd(worldDesc(id), terrainResources(id));
+    state.queueMakeResident(id);
+    (void)state.updateWithSnapshot(
+        fixture.renderer,
+        fixture.registry,
+        fixture.worldCatalog,
+        fixture.resources,
+        fixture.handles,
+        trackedIds.data(),
+        trackedIds.size());
+
+    state.queueMakeUnloaded(id);
+    const full_engine::TerrainRuntimeUpdateResult& result = state.updateWithSnapshot(
+        fixture.renderer,
+        fixture.registry,
+        fixture.worldCatalog,
+        fixture.resources,
+        fixture.handles,
+        trackedIds.data(),
+        trackedIds.size());
+
+    expect(result.status == full_engine::TerrainRuntimeUpdateStatus::Success, "unload snapshot update succeeds", failures);
+    expect(state.latestSnapshot().notResidentCount == 1, "unload snapshot reports not resident", failures);
+    expect(state.latestSnapshotDiff().summary.readinessChangedCount == 1, "unload snapshot reports readiness change", failures);
+    expect(state.latestSnapshotDiff().changes.size() == 1, "unload snapshot has one diff record", failures);
+    if (!state.latestSnapshotDiff().changes.empty())
+    {
+        const full_engine::TerrainRuntimeStateChange& change = state.latestSnapshotDiff().changes.front();
+        expect(
+            change.type == full_engine::TerrainRuntimeStateChangeType::ReadinessChanged,
+            "unload snapshot diff uses readiness change",
+            failures);
+        expect(
+            change.previousReadiness == full_engine::TerrainRuntimeChunkReadiness::Renderable,
+            "unload diff previous readiness is renderable",
+            failures);
+        expect(
+            change.currentReadiness == full_engine::TerrainRuntimeChunkReadiness::NotResident,
+            "unload diff current readiness is not resident",
+            failures);
+    }
+}
+
+void testRuntimeStateUpdateWithSnapshotKeepsTrackedIdentityAfterSetupRemove(std::vector<std::string>& failures)
+{
+    RuntimeFixture fixture;
+    full_engine::TerrainRuntimeState state;
+    const full_engine::ChunkId id{12, 0, 0};
+    const std::vector<full_engine::ChunkId> trackedIds{id};
+
+    state.queueSetupAdd(worldDesc(id), terrainResources(id));
+    state.queueMakeResident(id);
+    (void)state.updateWithSnapshot(
+        fixture.renderer,
+        fixture.registry,
+        fixture.worldCatalog,
+        fixture.resources,
+        fixture.handles,
+        trackedIds.data(),
+        trackedIds.size());
+
+    state.queueSetupRemove(id);
+    const full_engine::TerrainRuntimeUpdateResult& result = state.updateWithSnapshot(
+        fixture.renderer,
+        fixture.registry,
+        fixture.worldCatalog,
+        fixture.resources,
+        fixture.handles,
+        trackedIds.data(),
+        trackedIds.size());
+
+    expect(result.status == full_engine::TerrainRuntimeUpdateStatus::Success, "remove snapshot update succeeds", failures);
+    expect(state.latestSnapshot().chunks.size() == 1, "removed setup snapshot still contains tracked id", failures);
+    expect(state.latestSnapshot().missingRegistryCount == 1, "removed setup snapshot reports missing registry", failures);
+    expect(state.latestSnapshotDiff().summary.readinessChangedCount == 1, "removed setup reports readiness change", failures);
+    expect(state.latestSnapshotDiff().changes.size() == 1, "removed setup snapshot has one diff record", failures);
+    if (!state.latestSnapshotDiff().changes.empty())
+    {
+        const full_engine::TerrainRuntimeStateChange& change = state.latestSnapshotDiff().changes.front();
+        expect(change.id == id, "removed setup diff keeps chunk id", failures);
+        expect(
+            change.currentReadiness == full_engine::TerrainRuntimeChunkReadiness::MissingRegistry,
+            "removed setup diff current readiness is missing registry",
+            failures);
+    }
+}
+
+void testRuntimeStateClearSnapshotTrackingPreservesOtherState(std::vector<std::string>& failures)
+{
+    RuntimeFixture fixture;
+    full_engine::TerrainRuntimeState state;
+    const full_engine::ChunkId id{13, 0, 0};
+    const std::vector<full_engine::ChunkId> trackedIds{id};
+
+    state.queueSetupAdd(worldDesc(id), terrainResources(id));
+    state.queueMakeResident(id);
+    (void)state.updateWithSnapshot(
+        fixture.renderer,
+        fixture.registry,
+        fixture.worldCatalog,
+        fixture.resources,
+        fixture.handles,
+        trackedIds.data(),
+        trackedIds.size());
+    state.queueMakeUnloaded(id);
+
+    state.clearSnapshotTracking();
+
+    expect(!state.hasLatestSnapshot(), "clear snapshot tracking clears presence flag", failures);
+    expect(state.latestSnapshot().chunks.empty(), "clear snapshot tracking clears latest snapshot", failures);
+    expect(state.latestSnapshotDiff().changes.empty(), "clear snapshot tracking clears latest diff", failures);
+    expect(state.residencyRequestCount() == 1, "clear snapshot tracking preserves pending requests", failures);
+    expect(state.latestUpdate().status == full_engine::TerrainRuntimeUpdateStatus::Success, "clear snapshot tracking preserves latest update", failures);
+    expect(state.eventCount() == 1, "clear snapshot tracking preserves events", failures);
+}
+
+void testRuntimeStateUpdateWithSnapshotStoresFailureSnapshot(std::vector<std::string>& failures)
+{
+    RuntimeFixture fixture;
+    full_engine::TerrainRuntimeState state;
+    const full_engine::ChunkId id{14, 0, 0};
+    const std::vector<full_engine::ChunkId> trackedIds{id};
+    full_engine::TerrainChunkResourceDesc invalidResources = terrainResources(id);
+    invalidResources.lodCount = 0;
+
+    state.queueSetupAdd(worldDesc(id), invalidResources);
+    const full_engine::TerrainRuntimeUpdateResult& result = state.updateWithSnapshot(
+        fixture.renderer,
+        fixture.registry,
+        fixture.worldCatalog,
+        fixture.resources,
+        fixture.handles,
+        trackedIds.data(),
+        trackedIds.size());
+
+    expect(result.status == full_engine::TerrainRuntimeUpdateStatus::SetupFailed, "snapshot update preserves setup failure", failures);
+    expect(state.hasLatestSnapshot(), "failed snapshot update still stores snapshot", failures);
+    expect(state.latestSnapshot().missingRegistryCount == 1, "failed snapshot reports post-failure missing registry", failures);
+    expect(state.latestSnapshotDiff().summary.addedCount == 1, "failed first snapshot still reports tracked id added", failures);
+    expect(state.eventCount() == 1, "failed snapshot update appends event", failures);
+    expect(state.latestEvent() != nullptr && state.latestEvent()->status == full_engine::TerrainRuntimeUpdateStatus::SetupFailed, "failed snapshot event stores status", failures);
+}
+
 void testRuntimeEventLogCapacityAndOrdering(std::vector<std::string>& failures)
 {
     full_engine::TerrainRuntimeEventLog log;
@@ -468,6 +699,12 @@ int main()
     testRendererFailureReportsPipelineFailure(failures);
     testRuntimeStateOwnsQueuesAndLatestResult(failures);
     testRuntimeStatePreservesFailureStatus(failures);
+    testRuntimeStateUpdateWithSnapshotTracksFirstAddedChunk(failures);
+    testRuntimeStateUpdateWithSnapshotReportsNoChangeOnStableState(failures);
+    testRuntimeStateUpdateWithSnapshotReportsResidencyReadinessChange(failures);
+    testRuntimeStateUpdateWithSnapshotKeepsTrackedIdentityAfterSetupRemove(failures);
+    testRuntimeStateClearSnapshotTrackingPreservesOtherState(failures);
+    testRuntimeStateUpdateWithSnapshotStoresFailureSnapshot(failures);
     testRuntimeEventLogCapacityAndOrdering(failures);
 
     if (!failures.empty())

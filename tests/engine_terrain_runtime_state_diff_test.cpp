@@ -134,6 +134,40 @@ void testUnchangedIgnoredAndDeterministicOrder(std::vector<std::string>& failure
     expect(diff.changes[1].id == high, "high changed id is second", failures);
     expect(diff.summary.readinessChangedCount == 2, "summary counts readiness changes", failures);
 }
+
+void testChangeTypeNames(std::vector<std::string>& failures)
+{
+    expect(
+        std::string(full_engine::terrainRuntimeStateChangeTypeName(
+            full_engine::TerrainRuntimeStateChangeType::Added)) == "Added",
+        "added change type name is stable",
+        failures);
+    expect(
+        std::string(full_engine::terrainRuntimeStateChangeTypeName(
+            full_engine::TerrainRuntimeStateChangeType::Removed)) == "Removed",
+        "removed change type name is stable",
+        failures);
+    expect(
+        std::string(full_engine::terrainRuntimeStateChangeTypeName(
+            full_engine::TerrainRuntimeStateChangeType::ReadinessChanged)) == "ReadinessChanged",
+        "readiness change type name is stable",
+        failures);
+    expect(
+        std::string(full_engine::terrainRuntimeStateChangeTypeName(
+            full_engine::TerrainRuntimeStateChangeType::ResidencyChanged)) == "ResidencyChanged",
+        "residency change type name is stable",
+        failures);
+    expect(
+        std::string(full_engine::terrainRuntimeStateChangeTypeName(
+            full_engine::TerrainRuntimeStateChangeType::HandlePresenceChanged)) == "HandlePresenceChanged",
+        "handle presence change type name is stable",
+        failures);
+    expect(
+        std::string(full_engine::terrainRuntimeStateChangeTypeName(
+            static_cast<full_engine::TerrainRuntimeStateChangeType>(99))) == "Unknown",
+        "unknown change type name is stable",
+        failures);
+}
 } // namespace
 
 int main()
@@ -145,6 +179,7 @@ int main()
     testReadinessPrecedence(failures);
     testResidencyAndHandleChanges(failures);
     testUnchangedIgnoredAndDeterministicOrder(failures);
+    testChangeTypeNames(failures);
 
     if (!failures.empty())
     {

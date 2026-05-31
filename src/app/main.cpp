@@ -1316,15 +1316,20 @@ void drawTerrainDiagnosticsPanel(
                 pipeline.submission.rendererFailedCount + pipeline.submission.handleMapFailedCount));
 
         ImGui::Separator();
-        const std::vector<full_engine::ChunkId> sampleChunkIds = sampleTerrainChunkIds(sampleTerrainChunks);
-        const full_engine::TerrainRuntimeStateSnapshot terrainStateSnapshot =
-            full_engine::buildTerrainRuntimeStateSnapshot(
+        full_engine::TerrainRuntimeStateSnapshot fallbackTerrainStateSnapshot;
+        const full_engine::TerrainRuntimeStateSnapshot* terrainStateSnapshot = &terrainRuntime.latestSnapshot();
+        if (!terrainRuntime.hasLatestSnapshot())
+        {
+            const std::vector<full_engine::ChunkId> sampleChunkIds = sampleTerrainChunkIds(sampleTerrainChunks);
+            fallbackTerrainStateSnapshot = full_engine::buildTerrainRuntimeStateSnapshot(
                 engineTerrainRegistry,
                 engineTerrainCatalog,
                 engineTerrainResources,
                 engineTerrainHandles,
                 sampleChunkIds.data(),
                 sampleChunkIds.size());
+            terrainStateSnapshot = &fallbackTerrainStateSnapshot;
+        }
         ImGui::Text(
             "Sample setup: %llu / %llu registered, %llu desired resident",
             static_cast<unsigned long long>(countRegisteredSampleTerrainChunks(sampleTerrainChunks)),
@@ -1332,17 +1337,42 @@ void drawTerrainDiagnosticsPanel(
             static_cast<unsigned long long>(countResidentSampleTerrainChunks(sampleTerrainChunks)));
         ImGui::Text(
             "Runtime state: renderable %llu, missing registry %llu, missing desc %llu, missing resources %llu, not resident %llu, missing handle %llu",
-            static_cast<unsigned long long>(terrainStateSnapshot.renderableCount),
-            static_cast<unsigned long long>(terrainStateSnapshot.missingRegistryCount),
-            static_cast<unsigned long long>(terrainStateSnapshot.missingWorldDescCount),
-            static_cast<unsigned long long>(terrainStateSnapshot.missingResourcesCount),
-            static_cast<unsigned long long>(terrainStateSnapshot.notResidentCount),
-            static_cast<unsigned long long>(terrainStateSnapshot.missingTerrainHandleCount));
-        if (terrainStateSnapshot.invalidInputCount > 0)
+            static_cast<unsigned long long>(terrainStateSnapshot->renderableCount),
+            static_cast<unsigned long long>(terrainStateSnapshot->missingRegistryCount),
+            static_cast<unsigned long long>(terrainStateSnapshot->missingWorldDescCount),
+            static_cast<unsigned long long>(terrainStateSnapshot->missingResourcesCount),
+            static_cast<unsigned long long>(terrainStateSnapshot->notResidentCount),
+            static_cast<unsigned long long>(terrainStateSnapshot->missingTerrainHandleCount));
+        if (terrainStateSnapshot->invalidInputCount > 0)
         {
             ImGui::Text(
                 "Runtime state invalid inputs: %llu",
-                static_cast<unsigned long long>(terrainStateSnapshot.invalidInputCount));
+                static_cast<unsigned long long>(terrainStateSnapshot->invalidInputCount));
+        }
+        const full_engine::TerrainRuntimeStateDiff& terrainStateDiff = terrainRuntime.latestSnapshotDiff();
+        ImGui::Text(
+            "Runtime diff: added %llu, removed %llu, readiness %llu, residency %llu, handles %llu",
+            static_cast<unsigned long long>(terrainStateDiff.summary.addedCount),
+            static_cast<unsigned long long>(terrainStateDiff.summary.removedCount),
+            static_cast<unsigned long long>(terrainStateDiff.summary.readinessChangedCount),
+            static_cast<unsigned long long>(terrainStateDiff.summary.residencyChangedCount),
+            static_cast<unsigned long long>(terrainStateDiff.summary.handlePresenceChangedCount));
+        if (!terrainStateDiff.changes.empty())
+        {
+            ImGui::TextUnformatted("Latest runtime state changes");
+            const std::size_t diffCount = std::min<std::size_t>(terrainStateDiff.changes.size(), 5);
+            for (std::size_t diffIndex = 0; diffIndex < diffCount; ++diffIndex)
+            {
+                const full_engine::TerrainRuntimeStateChange& change = terrainStateDiff.changes[diffIndex];
+                ImGui::Text(
+                    "(%d, %d, %d) %s | %s -> %s",
+                    change.id.x,
+                    change.id.y,
+                    change.id.z,
+                    full_engine::terrainRuntimeStateChangeTypeName(change.type),
+                    full_engine::terrainRuntimeChunkReadinessName(change.previousReadiness),
+                    full_engine::terrainRuntimeChunkReadinessName(change.currentReadiness));
+            }
         }
         ImGui::Text(
             "Queued setup/residency requests: %llu / %llu",
@@ -1383,7 +1413,7 @@ void drawTerrainDiagnosticsPanel(
             0,
             static_cast<std::int32_t>(terrainResidencyControls.selectedChunkZ)};
         const full_engine::TerrainRuntimeChunkState* selectedRuntimeState =
-            findTerrainRuntimeChunkState(terrainStateSnapshot, selectedChunkId);
+            findTerrainRuntimeChunkState(*terrainStateSnapshot, selectedChunkId);
         SampleTerrainChunkState* selectedChunk = findSampleTerrainChunk(sampleTerrainChunks, selectedChunkId);
         const bool selectedRegistered = selectedChunk != nullptr && selectedChunk->setupRegistered;
         ImGui::Text(
@@ -3488,12 +3518,16 @@ int main(int argc, char** argv)
 
     full_engine::TerrainRuntimeUpdateOptions engineTerrainRuntimeOptions;
     engineTerrainRuntimeOptions.pipelineOptions.snapshotOptions.origin = full_engine::makeAbsoluteOrigin();
-    const full_engine::TerrainRuntimeUpdateResult& initialTerrainUpdate = terrainRuntime.update(
+    const std::vector<full_engine::ChunkId> initialTrackedTerrainIds =
+        sampleTerrainChunkIds(sampleTerrainChunks);
+    const full_engine::TerrainRuntimeUpdateResult& initialTerrainUpdate = terrainRuntime.updateWithSnapshot(
         *renderer,
         engineTerrainRegistry,
         engineTerrainCatalog,
         engineTerrainResources,
         engineTerrainHandles,
+        initialTrackedTerrainIds.data(),
+        initialTrackedTerrainIds.size(),
         engineTerrainRuntimeOptions);
     if (initialTerrainUpdate.status != full_engine::TerrainRuntimeUpdateStatus::Success ||
         engineTerrainHandles.mappedCount() != sampleTerrainChunks.size())
@@ -3794,12 +3828,16 @@ int main(int argc, char** argv)
 
         if (terrainRuntime.hasPendingRequests())
         {
-            const full_engine::TerrainRuntimeUpdateResult& updateResult = terrainRuntime.update(
+            const std::vector<full_engine::ChunkId> trackedTerrainIds =
+                sampleTerrainChunkIds(sampleTerrainChunks);
+            const full_engine::TerrainRuntimeUpdateResult& updateResult = terrainRuntime.updateWithSnapshot(
                 *renderer,
                 engineTerrainRegistry,
                 engineTerrainCatalog,
                 engineTerrainResources,
                 engineTerrainHandles,
+                trackedTerrainIds.data(),
+                trackedTerrainIds.size(),
                 engineTerrainRuntimeOptions);
 
             if (updateResult.status == full_engine::TerrainRuntimeUpdateStatus::SetupFailed)

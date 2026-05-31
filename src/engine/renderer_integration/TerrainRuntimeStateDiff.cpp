@@ -63,6 +63,25 @@ std::map<ChunkId, TerrainRuntimeChunkState> makeMap(const TerrainRuntimeStateSna
 }
 } // namespace
 
+const char* terrainRuntimeStateChangeTypeName(const TerrainRuntimeStateChangeType type) noexcept
+{
+    switch (type)
+    {
+    case TerrainRuntimeStateChangeType::Added:
+        return "Added";
+    case TerrainRuntimeStateChangeType::Removed:
+        return "Removed";
+    case TerrainRuntimeStateChangeType::ReadinessChanged:
+        return "ReadinessChanged";
+    case TerrainRuntimeStateChangeType::ResidencyChanged:
+        return "ResidencyChanged";
+    case TerrainRuntimeStateChangeType::HandlePresenceChanged:
+        return "HandlePresenceChanged";
+    }
+
+    return "Unknown";
+}
+
 TerrainRuntimeStateDiff diffTerrainRuntimeStateSnapshots(
     const TerrainRuntimeStateSnapshot& previous,
     const TerrainRuntimeStateSnapshot& current)
