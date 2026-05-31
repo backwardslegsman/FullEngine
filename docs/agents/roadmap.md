@@ -441,6 +441,10 @@ move gameplay, streaming policy, or editor concepts into renderer internals.
   supplied renderer handle catalogs into a value-built `TerrainResourceCatalog`
   with ordered per-chunk diagnostics. The sample startup and restore controls
   use that batch seam before terrain setup requests mutate runtime state.
+- Initial asset batch resolve diagnostics are in place: the reusable terrain
+  diagnostics layer can copy batch resolve counters, and the sample terrain
+  panel displays latest resolved/missing/invalid/resource-catalog failure
+  counts beside setup, residency, pipeline, and submission counters.
 - Initial terrain asset dependency validation is in place: terrain chunk asset
   descriptors can be checked against generic asset metadata for expected
   mesh/material/texture kinds before renderer-handle resolution, without IO or
@@ -454,6 +458,12 @@ move gameplay, streaming policy, or editor concepts into renderer internals.
   resource creation. The sample terrain setup now declares its metadata through
   that manifest path before renderer-handle resolution and terrain setup
   queuing.
+- Cooked manifest dependency summary tooling is in place: manifests can be
+  queried for declared asset kind counts, active dependency reference counts,
+  default terrain splat fallback intent, and deterministic unique asset ID
+  lists without validation, IO, renderer handles, or resource creation. The
+  sample debug UI displays the generated terrain manifest's record counts and
+  unique dependency totals beside manifest export.
 - Deterministic cooked manifest JSON Lines import/export is in place for
   lightweight tooling and schema round-trip tests. It remains standard-library
   only and does not add production asset loading, importers, async loading, or

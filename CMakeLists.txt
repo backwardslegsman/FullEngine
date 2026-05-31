@@ -111,6 +111,8 @@ add_library(full_engine STATIC
     src/engine/assets/CookedAssetManifest.hpp
     src/engine/assets/CookedAssetManifestJson.cpp
     src/engine/assets/CookedAssetManifestJson.hpp
+    src/engine/assets/CookedAssetManifestSummary.cpp
+    src/engine/assets/CookedAssetManifestSummary.hpp
     src/engine/assets/TerrainAssetCatalog.cpp
     src/engine/assets/TerrainAssetCatalog.hpp
     src/engine/assets/TerrainAssetDependencyValidator.cpp

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "engine/renderer_integration/TerrainAssetResolver.hpp"
 #include "engine/renderer_integration/TerrainChunkRequests.hpp"
 #include "engine/renderer_integration/TerrainDescriptorBuilder.hpp"
 #include "engine/renderer_integration/TerrainRenderPrep.hpp"
@@ -12,6 +13,13 @@
 
 namespace full_engine
 {
+/** @brief Value snapshot of the most recent terrain asset batch resolution. */
+struct TerrainAssetBatchResolveDiagnostics
+{
+    std::size_t requestCount = 0;
+    TerrainAssetBatchResolveSummary summary = {};
+};
+
 /** @brief Value snapshot of the most recently applied terrain setup request batch. */
 struct TerrainSetupRequestDiagnostics
 {
@@ -54,6 +62,16 @@ struct TerrainIntegrationDiagnostics
     TerrainResidencyRequestDiagnostics residencyRequests = {};
     TerrainPipelineDiagnostics pipeline = {};
 };
+
+/**
+ * @brief Builds reusable diagnostics from a terrain asset batch resolve result.
+ *
+ * The returned value copies counters only. It does not retain references to
+ * per-chunk records, resolved resource descriptors, renderer handles, or
+ * renderer resource ownership.
+ */
+TerrainAssetBatchResolveDiagnostics makeTerrainAssetBatchResolveDiagnostics(
+    const TerrainAssetBatchResolveResult& result);
 
 /**
  * @brief Builds reusable diagnostics from an applied terrain setup request batch.

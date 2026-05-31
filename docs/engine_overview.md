@@ -91,6 +91,8 @@ Implemented pieces:
 - an in-memory cooked asset manifest value model that groups generic asset
   records and terrain chunk asset descriptors into validated catalogs without
   file IO or renderer-resource ownership
+- cooked manifest dependency summaries that report declared asset kinds and
+  unique terrain/generic asset references without validating or resolving them
 - deterministic JSON Lines import/export for cooked asset manifests, used as
   lightweight schema and tooling support without introducing production asset
   loading policy
@@ -114,8 +116,9 @@ Implemented pieces:
   debug UI controls with engine-owned last-apply setup, residency, and pipeline
   diagnostics
 - reusable terrain integration diagnostics that snapshot setup requests,
-  residency requests, pipeline counters, and renderer-submission outcomes as
-  value-only engine data for debug UI or tooling surfaces
+  asset batch resolves, residency requests, pipeline counters, and
+  renderer-submission outcomes as value-only engine data for debug UI or
+  tooling surfaces
 - deterministic JSON Lines import/export for terrain runtime events and
   snapshot diffs without adding a third-party JSON dependency
 - CPU and fake-renderer tests for engine lifecycle, world ownership, terrain
@@ -143,14 +146,15 @@ future diagnostics tooling.
 surface for chunk setup, residency, resources, and terrain handle readiness, so
 sample and editor UI can query one engine-owned summary instead of probing each
 owner independently. The sample diagnostics panel displays those readiness
-counters directly alongside the existing request and renderer-submission
-counters. `TerrainRuntimeStateDiff` compares two snapshots and reports added,
-removed, and changed chunk state in deterministic order. `TerrainRuntimeState`
-can opt into that tracking during an update, storing the latest snapshot and
-latest diff against the previous tracked snapshot without changing the plain
-update path. Snapshot diffs can also be exported and imported as deterministic
-JSON Lines, matching the event diagnostics tooling while keeping the data
-CPU-only, value-owned, and independent of renderer resources or sample UI state.
+counters directly alongside asset batch resolve, request, and
+renderer-submission counters. `TerrainRuntimeStateDiff` compares two snapshots
+and reports added, removed, and changed chunk state in deterministic order.
+`TerrainRuntimeState` can opt into that tracking during an update, storing the
+latest snapshot and latest diff against the previous tracked snapshot without
+changing the plain update path. Snapshot diffs can also be exported and
+imported as deterministic JSON Lines, matching the event diagnostics tooling
+while keeping the data CPU-only, value-owned, and independent of renderer
+resources or sample UI state.
 
 The sample still owns demo UI state and renderer mesh/material/texture
 creation. It declares sample terrain asset IDs, generic asset metadata, and
@@ -162,8 +166,9 @@ queues setup and residency intent
 through `TerrainRuntimeState`, updates that state before renderer frame
 submission, mirrors display state from engine registries, displays the retained
 runtime snapshot/diff in its debug panel, exports event/diff diagnostics on
-demand, exports its generated cooked manifest for schema/tooling inspection,
-and submits the mapped renderer terrain handles in its render packet.
+demand, displays and exports its generated cooked manifest for schema/tooling
+inspection, and submits the mapped renderer terrain handles in its render
+packet.
 
 Still future work:
 

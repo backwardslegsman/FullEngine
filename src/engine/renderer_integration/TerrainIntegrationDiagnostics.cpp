@@ -2,6 +2,15 @@
 
 namespace full_engine
 {
+TerrainAssetBatchResolveDiagnostics makeTerrainAssetBatchResolveDiagnostics(
+    const TerrainAssetBatchResolveResult& result)
+{
+    TerrainAssetBatchResolveDiagnostics diagnostics;
+    diagnostics.requestCount = result.records.size();
+    diagnostics.summary = result.summary;
+    return diagnostics;
+}
+
 TerrainSetupRequestDiagnostics makeTerrainSetupRequestDiagnostics(
     const TerrainChunkRequestApplyResult& result)
 {

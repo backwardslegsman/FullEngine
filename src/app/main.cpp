@@ -2,6 +2,7 @@
 
 #include "engine/assets/CookedAssetManifest.hpp"
 #include "engine/assets/CookedAssetManifestJson.hpp"
+#include "engine/assets/CookedAssetManifestSummary.hpp"
 #include "engine/renderer_integration/ChunkTerrainHandleMap.hpp"
 #include "engine/renderer_integration/TerrainAssetResolver.hpp"
 #include "engine/renderer_integration/TerrainChunkRequests.hpp"
@@ -745,6 +746,7 @@ struct SampleTerrainResidencyControls
         full_engine::TerrainRuntimeStateDiffExportResult::Success;
     full_engine::CookedAssetManifestExportResult lastManifestExportResult =
         full_engine::CookedAssetManifestExportResult::Success;
+    full_engine::TerrainAssetBatchResolveDiagnostics lastAssetBatchResolve = {};
 };
 
 full_engine::WorldBounds toEngineWorldBounds(const full_renderer::Aabb& bounds) noexcept
@@ -841,6 +843,7 @@ const char* cookedAssetManifestValidationResultName(
 
 bool queueSampleTerrainSetupAdds(
     full_engine::TerrainRuntimeState& terrainRuntime,
+    SampleTerrainResidencyControls& terrainResidencyControls,
     std::vector<SampleTerrainChunkState>& chunks,
     const std::vector<full_engine::ChunkId>& ids,
     const full_engine::TerrainAssetCatalog& assets,
@@ -848,6 +851,8 @@ bool queueSampleTerrainSetupAdds(
 {
     const full_engine::TerrainAssetBatchResolveResult resolved =
         full_engine::resolveTerrainResourceCatalog(assets, ids.data(), ids.size(), handles);
+    terrainResidencyControls.lastAssetBatchResolve =
+        full_engine::makeTerrainAssetBatchResolveDiagnostics(resolved);
     if (resolved.summary.resolvedCount != ids.size() || resolved.records.size() != ids.size())
     {
         for (const full_engine::TerrainAssetBatchResolveRecord& record : resolved.records)
@@ -1366,6 +1371,8 @@ void drawTerrainDiagnosticsPanel(
         const full_engine::TerrainResidencyRequestDiagnostics& terrainResidencyDiagnostics =
             terrainDiagnostics.residencyRequests;
         const full_engine::TerrainRuntimeEvent* latestEvent = terrainRuntime.latestEvent();
+        const full_engine::CookedAssetManifestDependencySummary manifestSummary =
+            full_engine::summarizeCookedAssetManifestDependencies(sampleTerrainManifest);
 
         ImGui::Text("Runtime events: %llu", static_cast<unsigned long long>(terrainRuntime.eventCount()));
         ImGui::Text(
@@ -1409,6 +1416,22 @@ void drawTerrainDiagnosticsPanel(
             "Manifest: %s",
             full_engine::cookedAssetManifestExportResultName(
                 terrainResidencyControls.lastManifestExportResult));
+        ImGui::Text(
+            "Manifest assets: %llu records, terrain chunks %llu, mesh/material/texture %llu/%llu/%llu",
+            static_cast<unsigned long long>(manifestSummary.genericAssetCount),
+            static_cast<unsigned long long>(manifestSummary.terrainChunkCount),
+            static_cast<unsigned long long>(manifestSummary.assetKinds.meshCount),
+            static_cast<unsigned long long>(manifestSummary.assetKinds.materialCount),
+            static_cast<unsigned long long>(manifestSummary.assetKinds.textureCount));
+        ImGui::Text(
+            "Manifest refs: generic %llu (%llu unique), terrain LOD %llu, unique mesh/material/splat %llu/%llu/%llu, default splat %llu",
+            static_cast<unsigned long long>(manifestSummary.genericDependencyReferenceCount),
+            static_cast<unsigned long long>(manifestSummary.uniqueGenericDependencies.size()),
+            static_cast<unsigned long long>(manifestSummary.terrainLodReferenceCount),
+            static_cast<unsigned long long>(manifestSummary.uniqueTerrainMeshes.size()),
+            static_cast<unsigned long long>(manifestSummary.uniqueTerrainMaterials.size()),
+            static_cast<unsigned long long>(manifestSummary.uniqueTerrainSplatMaps.size()),
+            static_cast<unsigned long long>(manifestSummary.defaultSplatMapCount));
         const std::vector<full_engine::TerrainRuntimeEvent> runtimeEvents = terrainRuntime.events();
         if (!runtimeEvents.empty())
         {
@@ -1549,6 +1572,20 @@ void drawTerrainDiagnosticsPanel(
             "Queued setup/residency requests: %llu / %llu",
             static_cast<unsigned long long>(terrainRuntime.setupRequestCount()),
             static_cast<unsigned long long>(terrainRuntime.residencyRequestCount()));
+        const full_engine::TerrainAssetBatchResolveDiagnostics& assetResolveDiagnostics =
+            terrainResidencyControls.lastAssetBatchResolve;
+        ImGui::Text(
+            "Last asset resolve: requests %llu, resolved %llu, catalog failures %llu",
+            static_cast<unsigned long long>(assetResolveDiagnostics.requestCount),
+            static_cast<unsigned long long>(assetResolveDiagnostics.summary.resolvedCount),
+            static_cast<unsigned long long>(assetResolveDiagnostics.summary.resourceCatalogFailedCount));
+        ImGui::Text(
+            "Asset resolve misses: chunks %llu, invalid %llu, mesh %llu, material %llu, splat %llu",
+            static_cast<unsigned long long>(assetResolveDiagnostics.summary.missingChunkAssetsCount),
+            static_cast<unsigned long long>(assetResolveDiagnostics.summary.invalidChunkAssetsCount),
+            static_cast<unsigned long long>(assetResolveDiagnostics.summary.missingMeshHandleCount),
+            static_cast<unsigned long long>(assetResolveDiagnostics.summary.missingMaterialHandleCount),
+            static_cast<unsigned long long>(assetResolveDiagnostics.summary.missingSplatMapHandleCount));
         ImGui::Text(
             "Last setup requests: total %llu, add %llu, remove %llu",
             static_cast<unsigned long long>(terrainSetupDiagnostics.requestCount),
@@ -1601,6 +1638,7 @@ void drawTerrainDiagnosticsPanel(
             const std::vector<full_engine::ChunkId> selectedIds = {selectedChunkId};
             if (!queueSampleTerrainSetupAdds(
                     terrainRuntime,
+                    terrainResidencyControls,
                     sampleTerrainChunks,
                     selectedIds,
                     engineTerrainAssets,
@@ -1645,6 +1683,7 @@ void drawTerrainDiagnosticsPanel(
             if (!restoreIds.empty() &&
                 !queueSampleTerrainSetupAdds(
                     terrainRuntime,
+                    terrainResidencyControls,
                     sampleTerrainChunks,
                     restoreIds,
                     engineTerrainAssets,
@@ -3803,6 +3842,8 @@ int main(int argc, char** argv)
             initialTerrainChunkIds.data(),
             initialTerrainChunkIds.size(),
             engineTerrainAssetHandles);
+    terrainResidencyControls.lastAssetBatchResolve =
+        full_engine::makeTerrainAssetBatchResolveDiagnostics(initialTerrainResources);
     if (initialTerrainResources.summary.resolvedCount != sampleTerrainChunks.size() ||
         initialTerrainResources.records.size() != sampleTerrainChunks.size())
     {

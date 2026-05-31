@@ -12,6 +12,48 @@ int main()
     }
 
     {
+        full_engine::TerrainAssetBatchResolveResult result;
+        result.records.push_back({
+            {1, 0, 0},
+            full_engine::TerrainAssetBatchResolveStatus::Resolved,
+            {},
+            full_engine::TerrainResourceResult::Success});
+        result.records.push_back({
+            {2, 0, 0},
+            full_engine::TerrainAssetBatchResolveStatus::MissingMeshHandle,
+            {},
+            full_engine::TerrainResourceResult::NotFound});
+        result.records.push_back({
+            {3, 0, 0},
+            full_engine::TerrainAssetBatchResolveStatus::ResourceCatalogFailed,
+            {},
+            full_engine::TerrainResourceResult::AlreadyExists});
+        result.summary.resolvedCount = 1;
+        result.summary.missingChunkAssetsCount = 2;
+        result.summary.invalidChunkAssetsCount = 3;
+        result.summary.missingMeshHandleCount = 4;
+        result.summary.missingMaterialHandleCount = 5;
+        result.summary.missingSplatMapHandleCount = 6;
+        result.summary.resourceCatalogFailedCount = 7;
+
+        const std::size_t sourceRecordCount = result.records.size();
+        const std::size_t sourceResourceCount = result.resources.resourceCount();
+        const full_engine::TerrainAssetBatchResolveDiagnostics diagnostics =
+            full_engine::makeTerrainAssetBatchResolveDiagnostics(result);
+
+        assert(diagnostics.requestCount == 3);
+        assert(diagnostics.summary.resolvedCount == 1);
+        assert(diagnostics.summary.missingChunkAssetsCount == 2);
+        assert(diagnostics.summary.invalidChunkAssetsCount == 3);
+        assert(diagnostics.summary.missingMeshHandleCount == 4);
+        assert(diagnostics.summary.missingMaterialHandleCount == 5);
+        assert(diagnostics.summary.missingSplatMapHandleCount == 6);
+        assert(diagnostics.summary.resourceCatalogFailedCount == 7);
+        assert(result.records.size() == sourceRecordCount);
+        assert(result.resources.resourceCount() == sourceResourceCount);
+    }
+
+    {
         full_engine::TerrainChunkRequestApplyResult result;
         result.records.push_back({
             full_engine::TerrainChunkRequest{full_engine::TerrainChunkRequestType::Add, {1, 0, 0}, {}, {}},
