@@ -467,6 +467,15 @@ move gameplay, streaming policy, or editor concepts into renderer internals.
   cooked manifest value plus latest staging results and diagnostics, so callers
   can dry-run or queue safe manifest staging without owning file IO, async
   loading, renderer handles, or renderer resources in that state object.
+- Synchronous manifest file loading is in place: JSON Lines cooked manifests can
+  be imported into `TerrainManifestLoadState` through an engine-owned
+  coordinator that clears stale retained state on invalid paths, IO failures,
+  parse errors, or validation failures, while still avoiding async loading and
+  renderer-resource creation.
+- Manifest reload-and-replan coordination is in place: the file-load path can
+  immediately plan renderer-handle readiness, convert missing handles into
+  renderer-free load intent, and queue that intent in `TerrainManifestLoadState`
+  without consuming requests or creating renderer resources.
 - Manifest asset readiness planning is in place: retained cooked manifest
   mesh/material/texture references can be compared with externally supplied
   renderer handle catalogs to report ready and missing handle mappings before
@@ -483,6 +492,11 @@ move gameplay, streaming policy, or editor concepts into renderer internals.
   be satisfied by externally supplied renderer handle catalogs and copied into
   runtime handle catalogs with all-or-nothing queue clearing and ordered
   diagnostics, still without IO, async work, renderer calls, or renderer
+  resource creation.
+- Manifest asset load executor callbacks are in place: pending load intent can
+  be resolved through a caller-owned synchronous callback that supplies renderer
+  handles for missing mappings, then consumed through the existing
+  all-or-nothing adapter without engine-owned IO, async work, or renderer
   resource creation.
 - Manifest load state consume diagnostics are in place: `TerrainManifestLoadState`
   can consume its retained pending load queue through the adapter and store the

@@ -28,6 +28,7 @@ void TerrainManifestLoadState::setManifest(CookedAssetManifest manifest)
     loadRequestQueue_.clear();
     latestLoadRequestQueueResult_ = {};
     latestLoadConsumeResult_ = {};
+    latestLoadExecutorResult_ = {};
 }
 
 void TerrainManifestLoadState::clearManifest()
@@ -41,6 +42,7 @@ void TerrainManifestLoadState::clearManifest()
     loadRequestQueue_.clear();
     latestLoadRequestQueueResult_ = {};
     latestLoadConsumeResult_ = {};
+    latestLoadExecutorResult_ = {};
 }
 
 bool TerrainManifestLoadState::hasManifest() const noexcept
@@ -88,6 +90,11 @@ const TerrainManifestAssetLoadResult& TerrainManifestLoadState::latestLoadConsum
     return latestLoadConsumeResult_;
 }
 
+const TerrainManifestAssetLoadExecutorResult& TerrainManifestLoadState::latestLoadExecutorResult() const noexcept
+{
+    return latestLoadExecutorResult_;
+}
+
 std::size_t TerrainManifestLoadState::pendingLoadRequestCount() const noexcept
 {
     return loadRequestQueue_.requestCount();
@@ -121,6 +128,17 @@ const TerrainManifestAssetLoadResult& TerrainManifestLoadState::consumePendingAs
     latestLoadConsumeResult_ =
         consumeTerrainManifestAssetLoadRequests(loadRequestQueue_, sourceHandles, destinationHandles);
     return latestLoadConsumeResult_;
+}
+
+const TerrainManifestAssetLoadExecutorResult& TerrainManifestLoadState::executePendingAssetLoadRequests(
+    RendererAssetHandleCatalog& destinationHandles,
+    TerrainManifestAssetLoadCallback callback,
+    void* const userData)
+{
+    latestLoadExecutorResult_ =
+        executeTerrainManifestAssetLoadRequests(loadRequestQueue_, destinationHandles, callback, userData);
+    latestLoadConsumeResult_ = latestLoadExecutorResult_.consume;
+    return latestLoadExecutorResult_;
 }
 
 TerrainManifestLoadStageResult TerrainManifestLoadState::stage(

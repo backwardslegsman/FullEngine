@@ -127,6 +127,14 @@ Implemented pieces:
 - manifest load state that owns an imported cooked manifest value plus latest
   staging results/diagnostics, giving callers a small engine-side loading shape
   before file IO, async loading, or renderer-resource creation are introduced
+- a synchronous cooked manifest file-load coordinator that imports JSON Lines
+  manifest files into `TerrainManifestLoadState` and clears stale retained
+  state on failure, while still avoiding async loading and renderer-resource
+  creation
+- a reload-and-replan coordinator that chains manifest file load, handle
+  readiness planning, renderer-free load-request planning, and state-owned
+  load-request queueing without consuming requests or creating renderer
+  resources
 - manifest asset readiness planning that compares retained manifest
   mesh/material/texture references with externally supplied renderer handle
   catalogs and reports ready or missing handle mappings without loading assets
@@ -140,6 +148,9 @@ Implemented pieces:
   pending load intent by copying externally supplied renderer handles into a
   runtime handle catalog with ordered diagnostics, while still avoiding IO,
   async work, renderer calls, and renderer-resource creation
+- a callback-driven manifest asset load executor that asks caller-owned loader
+  code for missing renderer handles, then uses the same all-or-nothing load
+  adapter to consume queued load intent
 - manifest load state consume diagnostics that let callers consume the
   state-owned pending load queue through the adapter while keeping source and
   destination renderer handle catalogs externally owned

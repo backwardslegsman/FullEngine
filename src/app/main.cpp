@@ -9,6 +9,7 @@
 #include "engine/renderer_integration/TerrainDescriptorBuilder.hpp"
 #include "engine/renderer_integration/TerrainIntegrationDiagnostics.hpp"
 #include "engine/renderer_integration/TerrainLifecyclePlan.hpp"
+#include "engine/renderer_integration/TerrainManifestFileLoad.hpp"
 #include "engine/renderer_integration/TerrainManifestLoadState.hpp"
 #include "engine/renderer_integration/TerrainManifestRuntimeStaging.hpp"
 #include "engine/renderer_integration/TerrainPipeline.hpp"
@@ -1450,19 +1451,17 @@ void drawTerrainDiagnosticsPanel(
             terrainResidencyControls.manifestLoad.clearManifest();
             terrainResidencyControls.lastManifestStageApplyBlocked = false;
 
-            const full_engine::CookedAssetManifestImport importedManifest =
-                full_engine::importCookedAssetManifestJsonLines("sample_cooked_asset_manifest.jsonl");
-            terrainResidencyControls.lastManifestImportResult = importedManifest.result;
-            terrainResidencyControls.lastManifestImportValidationResult = importedManifest.validation.result;
-            if (importedManifest.result == full_engine::CookedAssetManifestImportResult::Success)
+            const full_engine::TerrainManifestFileReloadPlanResult manifestReload =
+                full_engine::reloadTerrainManifestFileAndQueueMissingAssetLoads(
+                    "sample_cooked_asset_manifest.jsonl",
+                    terrainResidencyControls.manifestLoad,
+                    engineTerrainAssetHandles);
+            terrainResidencyControls.lastManifestImportResult = manifestReload.load.imported.result;
+            terrainResidencyControls.lastManifestImportValidationResult = manifestReload.load.imported.validation.result;
+            if (manifestReload.load.status == full_engine::TerrainManifestFileLoadStatus::Success)
             {
-                terrainResidencyControls.lastImportedManifestAssetCount = importedManifest.manifest.assets.size();
-                terrainResidencyControls.lastImportedManifestTerrainChunkCount =
-                    importedManifest.manifest.terrainChunks.size();
-                terrainResidencyControls.manifestLoad.setManifest(importedManifest.manifest);
-                (void)terrainResidencyControls.manifestLoad.planAssetReadiness(engineTerrainAssetHandles);
-                (void)terrainResidencyControls.manifestLoad.planAssetLoadRequests();
-                (void)terrainResidencyControls.manifestLoad.queueLatestAssetLoadRequests();
+                terrainResidencyControls.lastImportedManifestAssetCount = manifestReload.load.assetCount;
+                terrainResidencyControls.lastImportedManifestTerrainChunkCount = manifestReload.load.terrainChunkCount;
 
                 const std::vector<full_engine::WorldChunkDesc> sampleWorldDescs =
                     sampleTerrainWorldDescs(sampleTerrainChunks);

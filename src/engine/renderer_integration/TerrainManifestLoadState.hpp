@@ -1,6 +1,7 @@
 #pragma once
 
 #include "engine/renderer_integration/TerrainIntegrationDiagnostics.hpp"
+#include "engine/renderer_integration/TerrainManifestAssetLoadExecutor.hpp"
 #include "engine/renderer_integration/TerrainManifestAssetLoader.hpp"
 #include "engine/renderer_integration/TerrainManifestAssetLoadPlan.hpp"
 #include "engine/renderer_integration/TerrainManifestAssetLoadRequests.hpp"
@@ -95,6 +96,9 @@ public:
     /** @brief Returns the latest result from consuming retained load requests. */
     const TerrainManifestAssetLoadResult& latestLoadConsumeResult() const noexcept;
 
+    /** @brief Returns the latest callback-executor result for retained load requests. */
+    const TerrainManifestAssetLoadExecutorResult& latestLoadExecutorResult() const noexcept;
+
     /** @brief Returns the number of pending retained asset load requests. */
     std::size_t pendingLoadRequestCount() const noexcept;
 
@@ -158,6 +162,26 @@ public:
     const TerrainManifestAssetLoadResult& consumePendingAssetLoadRequests(
         const RendererAssetHandleCatalog& sourceHandles,
         RendererAssetHandleCatalog& destinationHandles);
+
+    /**
+     * @brief Executes retained pending load requests through a caller callback.
+     *
+     * This delegates to the manifest asset load executor, stores the ordered
+     * callback diagnostics, and stores the nested consume diagnostics. The
+     * state does not own the callback, callback data, destination handle
+     * catalog, renderer resources, IO, or async work.
+     *
+     * @param destinationHandles Caller-owned runtime catalog to receive loaded
+     * mappings when the whole batch succeeds.
+     * @param callback Caller-owned synchronous handle provider.
+     * @param userData Opaque caller data passed through to `callback`.
+     * @return Retained executor diagnostics owned by this state until the next
+     * execute or manifest mutation call.
+     */
+    const TerrainManifestAssetLoadExecutorResult& executePendingAssetLoadRequests(
+        RendererAssetHandleCatalog& destinationHandles,
+        TerrainManifestAssetLoadCallback callback,
+        void* userData = nullptr);
 
     /**
      * @brief Dry-runs the retained manifest against current terrain setup state.
@@ -234,5 +258,6 @@ private:
     TerrainManifestAssetLoadRequestQueue loadRequestQueue_ = {};
     TerrainManifestAssetLoadQueuePushResult latestLoadRequestQueueResult_ = {};
     TerrainManifestAssetLoadResult latestLoadConsumeResult_ = {};
+    TerrainManifestAssetLoadExecutorResult latestLoadExecutorResult_ = {};
 };
 } // namespace full_engine

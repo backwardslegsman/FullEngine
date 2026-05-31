@@ -92,6 +92,7 @@ void testDefaultState(std::vector<std::string>& failures)
     expect(state.latestLoadRequests().requests.empty(), "default load requests are empty", failures);
     expect(state.pendingLoadRequestCount() == 0, "default pending load queue is empty", failures);
     expect(state.latestLoadConsumeResult().records.empty(), "default consume diagnostics are empty", failures);
+    expect(state.latestLoadExecutorResult().callbackRecords.empty(), "default executor diagnostics are empty", failures);
     expect(
         full_engine::terrainManifestLoadStageStatusName(full_engine::TerrainManifestLoadStageStatus::NoManifest) ==
             std::string("NoManifest"),
@@ -208,6 +209,7 @@ void testLoadRequestsCanBeQueuedAndReset(std::vector<std::string>& failures)
     expect(state.pendingLoadRequestCount() == 0, "setManifest clears pending load queue", failures);
     expect(state.latestLoadRequestQueueResult().records.empty(), "setManifest clears latest queue diagnostics", failures);
     expect(state.latestLoadConsumeResult().records.empty(), "setManifest clears latest consume diagnostics", failures);
+    expect(state.latestLoadExecutorResult().callbackRecords.empty(), "setManifest clears latest executor diagnostics", failures);
 
     (void)state.planAssetReadiness({});
     (void)state.planAssetLoadRequests();
@@ -219,6 +221,7 @@ void testLoadRequestsCanBeQueuedAndReset(std::vector<std::string>& failures)
     expect(state.pendingLoadRequestCount() == 0, "clearManifest clears pending load queue", failures);
     expect(state.latestLoadRequestQueueResult().records.empty(), "clearManifest clears queue diagnostics", failures);
     expect(state.latestLoadConsumeResult().records.empty(), "clearManifest clears consume diagnostics", failures);
+    expect(state.latestLoadExecutorResult().callbackRecords.empty(), "clearManifest clears executor diagnostics", failures);
 }
 
 void testLoadRequestsCanBeConsumed(std::vector<std::string>& failures)
