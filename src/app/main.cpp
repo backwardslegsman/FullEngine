@@ -11,6 +11,7 @@
 #include "engine/renderer_integration/TerrainResourceCatalog.hpp"
 #include "engine/renderer_integration/TerrainRuntimeController.hpp"
 #include "engine/renderer_integration/TerrainRuntimeEventExport.hpp"
+#include "engine/renderer_integration/TerrainRuntimeStateDiffExport.hpp"
 #include "engine/renderer_integration/TerrainRuntimeStateSnapshot.hpp"
 #include "engine/renderer_integration/TerrainSubmissionAdapter.hpp"
 #include "engine/renderer_integration/WorldRenderSnapshot.hpp"
@@ -736,6 +737,8 @@ struct SampleTerrainResidencyControls
     bool reloadCenterAfterUnload = false;
     full_engine::TerrainRuntimeEventExportResult lastEventExportResult =
         full_engine::TerrainRuntimeEventExportResult::Success;
+    full_engine::TerrainRuntimeStateDiffExportResult lastDiffExportResult =
+        full_engine::TerrainRuntimeStateDiffExportResult::Success;
 };
 
 full_engine::WorldBounds toEngineWorldBounds(const full_renderer::Aabb& bounds) noexcept
@@ -1238,6 +1241,19 @@ void drawTerrainDiagnosticsPanel(
             "Export: %s",
             full_engine::terrainRuntimeEventExportResultName(
                 terrainResidencyControls.lastEventExportResult));
+        ImGui::SameLine();
+        if (ImGui::Button("Export Diff"))
+        {
+            terrainResidencyControls.lastDiffExportResult =
+                full_engine::exportTerrainRuntimeStateDiffJsonLines(
+                    terrainRuntime.latestSnapshotDiff(),
+                    "terrain_runtime_state_diff.jsonl");
+        }
+        ImGui::SameLine();
+        ImGui::Text(
+            "Diff: %s",
+            full_engine::terrainRuntimeStateDiffExportResultName(
+                terrainResidencyControls.lastDiffExportResult));
         const std::vector<full_engine::TerrainRuntimeEvent> runtimeEvents = terrainRuntime.events();
         if (!runtimeEvents.empty())
         {

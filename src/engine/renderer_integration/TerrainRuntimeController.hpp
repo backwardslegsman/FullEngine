@@ -197,7 +197,9 @@ public:
      * renderer submission, latest-update storage, and event logging are
      * identical to the normal runtime update. Afterward it snapshots the
      * supplied caller-owned chunk IDs and stores a diff against the previous
-     * tracked snapshot, or against an empty snapshot on first capture.
+     * tracked snapshot, or against an empty snapshot on first capture. The
+     * tracked ID array is read only for the duration of the call; snapshot and
+     * diff results are copied into the state object before returning.
      */
     const TerrainRuntimeUpdateResult& updateWithSnapshot(
         full_renderer::IRenderer& renderer,

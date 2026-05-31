@@ -155,10 +155,12 @@ milestones before adding more visual effects.
   resource/handle status displayed in the sample diagnostics panel. Snapshot
   diff planning now reports added, removed, and changed chunk status without
   renderer calls, and `TerrainRuntimeState` can opt into update-time snapshot
-  tracking so callers can retain the latest runtime snapshot and diff. The seam
-  is kept out of the installed renderer package target, while the public
-  renderer API now exposes in-place terrain chunk descriptor updates and terrain
-  shadow-caster debug snapshots for engine integration.
+  tracking so callers can retain the latest runtime snapshot and diff. Snapshot
+  diffs now have JSON Lines export/import tests plus sample UI export for
+  tooling and bug-report diagnostics. The seam is kept out of the installed
+  renderer package target,
+  while the public renderer API now exposes in-place terrain chunk descriptor
+  updates and terrain shadow-caster debug snapshots for engine integration.
 - Harden terrain chunk streaming, LOD transitions, chunk material residency,
   skirts/seams, and large-scene culling stress cases.
 - Add shared culling diagnostics for terrain, static meshes, instancing,
@@ -401,7 +403,9 @@ move gameplay, streaming policy, or editor concepts into renderer internals.
   drive request-based updates without separate dirty flags, plus optional
   latest snapshot/diff tracking for diagnostics or future editor status panels.
   The sample panel now consumes that retained snapshot/diff to display runtime
-  readiness counters and recent state changes.
+  readiness counters and recent state changes, and the diff records can be
+  serialized from the sample panel as deterministic JSON Lines without
+  renderer-resource ownership.
 - Define engine-owned chunk IDs, streaming regions, residency state, and
   large-world origin policy.
 - Translate world coordinates to renderer-relative frame data in
@@ -410,6 +414,15 @@ move gameplay, streaming policy, or editor concepts into renderer internals.
 
 ### E3 - Asset catalog and cooked runtime asset conventions
 
+- Initial E3-lite terrain asset identity is in place: `src/engine/assets`
+  defines opaque engine `AssetId` values plus CPU-only terrain chunk asset
+  descriptors and catalogs for mesh/material/LOD/splat-map references. These
+  catalogs deliberately avoid renderer handles, file IO, importers, cooked
+  manifests, and async loading.
+- Initial terrain asset resolution is in place: `src/engine/renderer_integration`
+  can map terrain chunk asset IDs through externally supplied renderer handle
+  catalogs into the existing `TerrainChunkResourceDesc` contract without
+  creating renderer resources or mutating terrain setup/submission state.
 - Define engine-owned asset IDs, manifests, dependency lookup, and cooked asset
   responsibilities.
 - Map engine assets to renderer mesh, texture, material, skeleton, terrain, and

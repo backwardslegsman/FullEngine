@@ -79,8 +79,14 @@ Implemented pieces:
   registered residency requests, runs the terrain pipeline, and returns
   aggregate diagnostics for the caller
 - a terrain runtime state object that owns pending setup/residency queues and
-  the latest runtime update result so callers can keep queue/result plumbing in
-  one engine-owned value
+  the latest runtime update result, retained event diagnostics, and optional
+  snapshot/diff tracking so callers can keep terrain runtime plumbing in one
+  engine-owned value
+- initial terrain asset identity catalogs that describe chunk mesh/material/LOD
+  and optional splat-map asset references without storing renderer handles
+- a terrain asset resolver that maps engine terrain asset IDs through
+  externally supplied renderer handle catalogs into the existing terrain
+  resource descriptors, without creating or owning renderer resources
 - terrain resource catalogs that associate chunks with externally supplied
   renderer mesh/material/LOD/splat handles without owning those resources
 - a submission adapter that calls only public terrain APIs and updates
@@ -93,6 +99,8 @@ Implemented pieces:
 - reusable terrain integration diagnostics that snapshot setup requests,
   residency requests, pipeline counters, and renderer-submission outcomes as
   value-only engine data for debug UI or tooling surfaces
+- deterministic JSON Lines import/export for terrain runtime events and
+  snapshot diffs without adding a third-party JSON dependency
 - CPU and fake-renderer tests for engine lifecycle, world ownership, terrain
   integration seams, and end-to-end terrain pipeline composition
 
@@ -110,30 +118,35 @@ runtime holder with `hasPendingRequests()` dirty-state checks and a compact
 fixed-capacity event log of recent update diagnostics, without transferring
 ownership of registries, catalogs, renderer handles, or renderer resources.
 The retained event log can be inspected by the sample debug UI and exported as
-deterministic JSON Lines for lightweight tooling or bug reports. A matching
-standard-library importer reads that exported schema back into value snapshots
-for tests and future diagnostics tooling.
+deterministic JSON Lines for lightweight tooling or bug reports. The sample can
+also export the latest retained snapshot diff. Matching standard-library
+importers read those exported schemas back into value snapshots for tests and
+future diagnostics tooling.
 `TerrainRuntimeStateSnapshot` provides the same kind of value-only status
 surface for chunk setup, residency, resources, and terrain handle readiness, so
 sample and editor UI can query one engine-owned summary instead of probing each
 owner independently. The sample diagnostics panel displays those readiness
 counters directly alongside the existing request and renderer-submission
 counters. `TerrainRuntimeStateDiff` compares two snapshots and reports added,
-removed, and changed chunk state in deterministic order for future diagnostics
-or editor tooling. `TerrainRuntimeState` can opt into that tracking during an
-update, storing the latest snapshot and latest diff against the previous
-tracked snapshot without changing the plain update path.
+removed, and changed chunk state in deterministic order. `TerrainRuntimeState`
+can opt into that tracking during an update, storing the latest snapshot and
+latest diff against the previous tracked snapshot without changing the plain
+update path. Snapshot diffs can also be exported and imported as deterministic
+JSON Lines, matching the event diagnostics tooling while keeping the data
+CPU-only, value-owned, and independent of renderer resources or sample UI state.
 
 The sample still owns demo UI state and renderer mesh/material/texture
 creation. It queues setup and residency intent through `TerrainRuntimeState`,
 updates that state before renderer frame submission, mirrors display state from
 engine registries, displays the retained runtime snapshot/diff in its debug
-panel, and submits the mapped renderer terrain handles in its render packet.
+panel, exports event/diff diagnostics on demand, and submits the mapped
+renderer terrain handles in its render packet.
 
 Still future work:
 
 - async loading, streaming jobs, and IO
-- asset catalogs and cooked asset manifests
+- cooked asset manifests, importers, and production renderer-resource creation
+  policy
 - production terrain streaming policy and editor-owned residency controls
 - real engine-owned mesh/material/texture creation and lifetime policy
 - renderer descriptor conversion for non-terrain draws and cameras

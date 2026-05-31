@@ -103,6 +103,8 @@ add_library(full_renderer STATIC
 add_library(FullRenderer::full_renderer ALIAS full_renderer)
 
 add_library(full_engine STATIC
+    src/engine/assets/TerrainAssetCatalog.cpp
+    src/engine/assets/TerrainAssetCatalog.hpp
     src/engine/core/Engine.cpp
     src/engine/core/Engine.hpp
     src/engine/renderer_integration/ChunkTerrainHandleMap.cpp
@@ -111,6 +113,8 @@ add_library(full_engine STATIC
     src/engine/renderer_integration/RenderSpace.hpp
     src/engine/renderer_integration/RendererHost.cpp
     src/engine/renderer_integration/RendererHost.hpp
+    src/engine/renderer_integration/TerrainAssetResolver.cpp
+    src/engine/renderer_integration/TerrainAssetResolver.hpp
     src/engine/renderer_integration/TerrainDescriptorBuilder.cpp
     src/engine/renderer_integration/TerrainDescriptorBuilder.hpp
     src/engine/renderer_integration/TerrainIntegrationDiagnostics.cpp
@@ -137,6 +141,10 @@ add_library(full_engine STATIC
     src/engine/renderer_integration/TerrainRuntimeEventImport.hpp
     src/engine/renderer_integration/TerrainRuntimeStateDiff.cpp
     src/engine/renderer_integration/TerrainRuntimeStateDiff.hpp
+    src/engine/renderer_integration/TerrainRuntimeStateDiffExport.cpp
+    src/engine/renderer_integration/TerrainRuntimeStateDiffExport.hpp
+    src/engine/renderer_integration/TerrainRuntimeStateDiffImport.cpp
+    src/engine/renderer_integration/TerrainRuntimeStateDiffImport.hpp
     src/engine/renderer_integration/TerrainRuntimeStateSnapshot.cpp
     src/engine/renderer_integration/TerrainRuntimeStateSnapshot.hpp
     src/engine/renderer_integration/TerrainSubmissionAdapter.cpp
