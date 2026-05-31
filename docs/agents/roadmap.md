@@ -536,6 +536,41 @@ move gameplay, streaming policy, or editor concepts into renderer internals.
   shader-runtime inputs through renderer public APIs.
 - Keep importer/tool internals out of renderer runtime ownership.
 
+### E3.5 - Streaming runtime loop shape
+
+- Add `src/engine/streaming/` as the home for retained streaming policy once
+  terrain load/residency decisions need to coordinate world, manifest load
+  state, asset load intent, and terrain runtime requests. `world/` should keep
+  chunk identity and residency primitives; `streaming/` should own desired
+  load/resident windows, prioritization, request-plan generation, and compact
+  diagnostics.
+- First slice is implemented: CPU-only `TerrainStreamingPlanner` takes
+  camera/world position, chunk size, load radius, resident radius, known
+  terrain chunk IDs, and current terrain runtime snapshot/readiness. It outputs
+  a deterministic dry-run plan of setup add/remove and residency make-resident
+  / make-unloaded intent without mutating registries, catalogs, queues,
+  handles, renderer resources, or jobs.
+- Second slice is implemented: retained `TerrainStreamingRuntimeState` stores
+  the latest streaming plan and diagnostics, then can queue safe setup and
+  residency intent into `TerrainRuntimeState` without applying runtime updates,
+  asset IO, async scheduling, renderer calls, or direct resource creation.
+- Third slice is implemented: a manifest-aware terrain streaming coordinator
+  connects retained `TerrainManifestLoadState` to the streaming runtime loop.
+  Missing renderer handles become pending load intent before setup staging, and
+  ready manifest setup descriptors can feed camera-window setup/residency
+  queueing without applying runtime updates.
+- Fourth slice: introduce a minimal `jobs/` request/executor seam for async or
+  background asset work. Keep policy and diagnostics deterministic first; add
+  true threading only after single-threaded request lifetimes are proven.
+- Initial sample integration is in place: the debug UI can run the
+  manifest-aware streaming coordinator once or continuously from camera
+  position, display readiness/load/staging/streaming queue counters, and keep
+  manual terrain controls as a diagnostic override path.
+- Completion gate for this track: camera movement can produce deterministic
+  chunk load/residency intent, queue that intent through existing runtime
+  controllers, explain every skipped/missing/blocked chunk through diagnostics,
+  and run without renderer internals or sample UI owning engine policy.
+
 ### E4 - Simulation and entity layer
 
 - Add entity or scene object identity only after world, assets, and renderer

@@ -52,6 +52,7 @@ public `full_renderer/*` headers.
     engine/              # future engine runtime, separate from renderer
       core/              # lifecycle, time, configuration, diagnostics
       world/             # chunks, streaming policy, origin rules
+      streaming/         # runtime streaming policy and load/residency planning
       scene/             # transforms and renderable extraction
       assets/            # runtime catalogs and cooked asset ownership
       jobs/              # async loading and work scheduling
@@ -97,6 +98,13 @@ Engine code should use the renderer as a package/library boundary:
 - keep bgfx, SDL3, Dear ImGui, sample app types, and renderer internals out of
   engine subsystems
 - keep `src/engine/` independent from `src/engine_bridge/`
+
+Streaming runtime policy should be split once it grows beyond primitive world
+state. `world/` owns chunk identity, bounds, and residency state transitions;
+`streaming/` should own desired load/resident windows, prioritization,
+request-plan generation, and coordination with manifest/asset load state. It
+must remain renderer-free and feed renderer-facing work only through
+`renderer_integration/`.
 
 ### `src/renderer/public/`
 

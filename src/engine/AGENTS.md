@@ -19,6 +19,7 @@ src/engine/
   AGENTS.md
   core/                  # lifecycle, time, configuration, diagnostics
   world/                 # chunks, streaming policy, large-world origin rules
+  streaming/             # runtime streaming policy and load/residency planning
   scene/                 # transforms and renderable extraction
   assets/                # runtime asset catalogs and cooked asset ownership
   jobs/                  # async loading and work scheduling
@@ -36,6 +37,9 @@ requested change needs them.
   `src/renderer/bgfx`, `src/renderer/scene`, `src/renderer/resources`,
   `src/renderer/terrain`, `src/renderer/animation`, or `src/renderer/debug`.
 - Engine code must not depend on bgfx, SDL3, Dear ImGui, or sample app types.
+- Streaming policy should live in `streaming/` once it needs retained runtime
+  state or multi-system coordination; low-level chunk identity and residency
+  primitives remain in `world/`.
 - Renderer code must not depend on `src/engine/`.
 - Shared behavior needed by both engine and renderer should be expressed
   through public renderer APIs, docs, or a deliberately separate utility layer;
@@ -47,6 +51,7 @@ The engine owns:
 
 - absolute world coordinates and origin-shift policy
 - chunk IDs, residency, streaming priorities, and persistence
+- desired streaming windows, load/residency intent, and streaming diagnostics
 - entity or scene object identity
 - simulation, animation state, gameplay state, selection state, and weather
   policy

@@ -23,6 +23,7 @@
 #include "engine/renderer_integration/TerrainSetupStaging.hpp"
 #include "engine/renderer_integration/TerrainSubmissionAdapter.hpp"
 #include "engine/renderer_integration/WorldRenderSnapshot.hpp"
+#include "engine/streaming/TerrainStreamingManifestCoordinator.hpp"
 #include "engine/world/WorldChunkCatalog.hpp"
 #include "engine/world/WorldChunkRegistry.hpp"
 #include "engine/world/WorldOrigin.hpp"
@@ -742,6 +743,10 @@ struct SampleTerrainResidencyControls
     int selectedChunkX = 0;
     int selectedChunkZ = 0;
     int batchRingRadius = 0;
+    bool terrainStreamingEnabled = false;
+    bool terrainStreamingRunOnce = false;
+    int streamingLoadRadius = 0;
+    int streamingResidentRadius = 0;
     bool reloadCenterAfterUnload = false;
     bool terrainAssetResolutionFailed = false;
     full_engine::TerrainRuntimeEventExportResult lastEventExportResult =
@@ -761,6 +766,8 @@ struct SampleTerrainResidencyControls
     std::size_t lastImportedTerrainAssetCatalogCount = 0;
     bool lastManifestStageApplyBlocked = false;
     full_engine::TerrainAssetBatchResolveDiagnostics lastAssetBatchResolve = {};
+    full_engine::TerrainStreamingRuntimeState terrainStreaming = {};
+    full_engine::TerrainStreamingManifestUpdateResult lastStreamingUpdate = {};
 };
 
 full_engine::WorldBounds toEngineWorldBounds(const full_renderer::Aabb& bounds) noexcept
@@ -855,6 +862,16 @@ const char* cookedAssetManifestValidationResultName(
     return "Unknown";
 }
 
+std::vector<full_engine::WorldChunkDesc> sampleTerrainWorldDescs(
+    const std::vector<SampleTerrainChunkState>& chunks);
+
+full_engine::TerrainRuntimeStateSnapshot sampleTerrainRuntimeSnapshot(
+    const full_engine::WorldChunkRegistry& registry,
+    const full_engine::WorldChunkCatalog& worldCatalog,
+    const full_engine::TerrainResourceCatalog& resources,
+    const full_engine::ChunkTerrainHandleMap& handles,
+    const std::vector<SampleTerrainChunkState>& chunks);
+
 bool queueSampleTerrainSetupAdds(
     full_engine::TerrainRuntimeState& terrainRuntime,
     SampleTerrainResidencyControls& terrainResidencyControls,
@@ -908,6 +925,50 @@ bool queueSampleTerrainSetupAdds(
     }
 
     return true;
+}
+
+void runSampleTerrainStreamingCoordinator(
+    full_engine::TerrainRuntimeState& terrainRuntime,
+    const full_engine::WorldChunkRegistry& registry,
+    const full_engine::WorldChunkCatalog& worldCatalog,
+    const full_engine::RendererAssetHandleCatalog& handles,
+    const full_engine::TerrainResourceCatalog& resources,
+    const full_engine::ChunkTerrainHandleMap& terrainHandles,
+    std::vector<SampleTerrainChunkState>& chunks,
+    SampleTerrainResidencyControls& controls,
+    const float chunkSizeMeters,
+    const Vec3& cameraPosition)
+{
+    const std::vector<full_engine::WorldChunkDesc> worldDescs = sampleTerrainWorldDescs(chunks);
+    const full_engine::TerrainRuntimeStateSnapshot currentSnapshot =
+        sampleTerrainRuntimeSnapshot(registry, worldCatalog, resources, terrainHandles, chunks);
+
+    full_engine::TerrainStreamingPlannerConfig config;
+    config.chunkSizeMeters = static_cast<double>(chunkSizeMeters);
+    config.loadRadiusChunks = std::max(0, controls.streamingLoadRadius);
+    config.residentRadiusChunks = std::max(
+        0,
+        std::min(controls.streamingResidentRadius, controls.streamingLoadRadius));
+
+    const full_engine::WorldPosition cameraWorld = {
+        static_cast<double>(cameraPosition.x),
+        static_cast<double>(cameraPosition.y),
+        static_cast<double>(cameraPosition.z)};
+
+    controls.lastStreamingUpdate =
+        full_engine::updateTerrainStreamingFromManifest(
+            controls.manifestLoad,
+            handles,
+            registry,
+            worldCatalog,
+            resources,
+            worldDescs.data(),
+            worldDescs.size(),
+            controls.terrainStreaming,
+            terrainRuntime,
+            config,
+            cameraWorld,
+            currentSnapshot);
 }
 
 void refreshTerrainSubmitHandles(
@@ -1045,6 +1106,23 @@ std::vector<full_engine::WorldChunkDesc> sampleTerrainWorldDescs(const std::vect
     return descs;
 }
 
+full_engine::TerrainRuntimeStateSnapshot sampleTerrainRuntimeSnapshot(
+    const full_engine::WorldChunkRegistry& registry,
+    const full_engine::WorldChunkCatalog& worldCatalog,
+    const full_engine::TerrainResourceCatalog& resources,
+    const full_engine::ChunkTerrainHandleMap& handles,
+    const std::vector<SampleTerrainChunkState>& chunks)
+{
+    const std::vector<full_engine::ChunkId> ids = sampleTerrainChunkIds(chunks);
+    return full_engine::buildTerrainRuntimeStateSnapshot(
+        registry,
+        worldCatalog,
+        resources,
+        handles,
+        ids.data(),
+        ids.size());
+}
+
 const full_engine::TerrainRuntimeChunkState* findTerrainRuntimeChunkState(
     const full_engine::TerrainRuntimeStateSnapshot& snapshot,
     const full_engine::ChunkId& id) noexcept
@@ -1066,15 +1144,8 @@ void mirrorSampleTerrainState(
     const full_engine::ChunkTerrainHandleMap& handles,
     std::vector<SampleTerrainChunkState>& chunks)
 {
-    const std::vector<full_engine::ChunkId> ids = sampleTerrainChunkIds(chunks);
     const full_engine::TerrainRuntimeStateSnapshot snapshot =
-        full_engine::buildTerrainRuntimeStateSnapshot(
-            registry,
-            worldCatalog,
-            resources,
-            handles,
-            ids.data(),
-            ids.size());
+        sampleTerrainRuntimeSnapshot(registry, worldCatalog, resources, handles, chunks);
 
     for (std::size_t index = 0; index < chunks.size() && index < snapshot.chunks.size(); ++index)
     {
@@ -1560,6 +1631,47 @@ void drawTerrainDiagnosticsPanel(
             static_cast<unsigned long long>(terrainResidencyControls.manifestLoad.latestDiagnostics().resolvedResourceCount),
             static_cast<unsigned long long>(terrainResidencyControls.manifestLoad.latestDiagnostics().missingWorldDescCount),
             static_cast<unsigned long long>(terrainResidencyControls.manifestLoad.latestDiagnostics().desiredSetupCount));
+        terrainResidencyControls.streamingLoadRadius =
+            std::max(0, std::min(terrainGridRadius, terrainResidencyControls.streamingLoadRadius));
+        terrainResidencyControls.streamingResidentRadius =
+            std::max(0, std::min(terrainResidencyControls.streamingLoadRadius, terrainResidencyControls.streamingResidentRadius));
+        ImGui::Checkbox("Camera Streaming", &terrainResidencyControls.terrainStreamingEnabled);
+        ImGui::SameLine();
+        if (ImGui::Button("Run Streaming Once"))
+        {
+            terrainResidencyControls.terrainStreamingRunOnce = true;
+        }
+        ImGui::InputInt("Streaming Load Radius", &terrainResidencyControls.streamingLoadRadius);
+        ImGui::InputInt("Streaming Resident Radius", &terrainResidencyControls.streamingResidentRadius);
+        terrainResidencyControls.streamingLoadRadius =
+            std::max(0, std::min(terrainGridRadius, terrainResidencyControls.streamingLoadRadius));
+        terrainResidencyControls.streamingResidentRadius =
+            std::max(0, std::min(terrainResidencyControls.streamingLoadRadius, terrainResidencyControls.streamingResidentRadius));
+        const full_engine::TerrainStreamingManifestUpdateResult& streamingUpdate =
+            terrainResidencyControls.lastStreamingUpdate;
+        ImGui::Text(
+            "Streaming manifest: %s, chunks %llu, missing handles %llu, load requests %llu/%llu",
+            full_engine::terrainStreamingManifestUpdateStatusName(streamingUpdate.status),
+            static_cast<unsigned long long>(streamingUpdate.summary.manifestTerrainChunkCount),
+            static_cast<unsigned long long>(streamingUpdate.summary.readinessMissingHandleCount),
+            static_cast<unsigned long long>(streamingUpdate.summary.loadRequestCount),
+            static_cast<unsigned long long>(streamingUpdate.summary.queuedLoadRequestCount));
+        ImGui::Text(
+            "Streaming plan: ops %llu, add/keep/remove setup %llu/%llu/%llu, resident make/keep/unload %llu/%llu/%llu",
+            static_cast<unsigned long long>(streamingUpdate.summary.streamingPlanOperationCount),
+            static_cast<unsigned long long>(streamingUpdate.streamingPlan.summary.addSetupCount),
+            static_cast<unsigned long long>(streamingUpdate.streamingPlan.summary.keepSetupCount),
+            static_cast<unsigned long long>(streamingUpdate.streamingPlan.summary.removeSetupCount),
+            static_cast<unsigned long long>(streamingUpdate.streamingPlan.summary.makeResidentCount),
+            static_cast<unsigned long long>(streamingUpdate.streamingPlan.summary.keepResidentCount),
+            static_cast<unsigned long long>(streamingUpdate.streamingPlan.summary.makeUnloadedCount));
+        ImGui::Text(
+            "Streaming queued: setup add/remove %llu/%llu, resident make/unload %llu/%llu, queue %s",
+            static_cast<unsigned long long>(streamingUpdate.summary.queuedSetupAddCount),
+            static_cast<unsigned long long>(streamingUpdate.summary.queuedSetupRemoveCount),
+            static_cast<unsigned long long>(streamingUpdate.summary.queuedMakeResidentCount),
+            static_cast<unsigned long long>(streamingUpdate.summary.queuedMakeUnloadedCount),
+            full_engine::terrainStreamingQueueStatusName(streamingUpdate.streamingQueue.status));
         if (ImGui::Button("Apply Manifest Stage"))
         {
             terrainResidencyControls.lastManifestStageApplyBlocked =
@@ -3734,6 +3846,8 @@ int main(int argc, char** argv)
     SampleTerrainResidencyControls terrainResidencyControls;
     const int kGridRadius = static_cast<int>(validationScene.terrainGridRadius);
     terrainResidencyControls.batchRingRadius = kGridRadius;
+    terrainResidencyControls.streamingLoadRadius = kGridRadius;
+    terrainResidencyControls.streamingResidentRadius = kGridRadius;
     const float kChunkSize = validationScene.chunkSizeMeters;
     const std::size_t terrainGridWidth = static_cast<std::size_t>((kGridRadius * 2) + 1);
     const std::size_t terrainGridChunkCount = terrainGridWidth * terrainGridWidth;
@@ -4429,6 +4543,23 @@ int main(int argc, char** argv)
         {
             std::cerr << "Sample terrain asset resolution failed during runtime setup restore.\n";
             break;
+        }
+
+        if (terrainResidencyControls.terrainStreamingEnabled ||
+            terrainResidencyControls.terrainStreamingRunOnce)
+        {
+            runSampleTerrainStreamingCoordinator(
+                terrainRuntime,
+                engineTerrainRegistry,
+                engineTerrainCatalog,
+                engineTerrainAssetHandles,
+                engineTerrainResources,
+                engineTerrainHandles,
+                sampleTerrainChunks,
+                terrainResidencyControls,
+                kChunkSize,
+                cameraPosition);
+            terrainResidencyControls.terrainStreamingRunOnce = false;
         }
 
         if (terrainRuntime.hasPendingRequests())

@@ -33,6 +33,11 @@ sample types, Dear ImGui types, or `src/app` demo state.
   CPU-only residency registry plus double-precision origin rebasing helpers,
   but not async IO, persistence, terrain resource ownership, renderer handles,
   or renderer-submission conversion.
+- `streaming/` owns engine streaming policy as it grows beyond primitive world
+  state. The current slice contains a CPU-only terrain planner that decides
+  desired load/resident windows and emits dry-run request intent, while staying
+  renderer-free and delegating renderer setup/submission to
+  `renderer_integration/`.
 - `scene/` owns transforms and renderable extraction from engine state.
 - `assets/` owns runtime asset catalogs and cooked asset references.
 - `jobs/` owns async loading and work scheduling.
@@ -154,6 +159,15 @@ Implemented pieces:
 - manifest load state consume diagnostics that let callers consume the
   state-owned pending load queue through the adapter while keeping source and
   destination renderer handle catalogs externally owned
+- a CPU-only terrain streaming planner that converts camera/world position,
+  chunk size, known chunk IDs, and a terrain runtime snapshot into deterministic
+  dry-run setup and residency intent without mutating runtime state
+- a retained terrain streaming runtime state that stores the latest dry-run
+  streaming plan and queues safe setup/residency intent into `TerrainRuntimeState`
+  without applying runtime updates
+- a manifest-aware terrain streaming coordinator that plans handle readiness,
+  queues missing asset-load intent, stages manifest setup descriptors, and then
+  feeds safe camera-window setup/residency intent into the streaming runtime
 - manifest runtime staging diagnostics that expose coordinator status, asset
   resolution counters, staging counters, and queued-request counters as
   reusable value snapshots
@@ -217,12 +231,17 @@ counts, retains pending load intent in a deduplicated queue, can consume that
 intent once externally supplied handles are available, exposes the latest load
 consume counters in the debug panel, dry-runs a terrain setup staging plan
 through the reusable manifest staging coordinator, can queue safe add/remove
-staging operations through the terrain runtime controller, and submits the
-mapped renderer terrain handles in its render packet.
+staging operations through the terrain runtime controller, can drive
+setup/residency intent from the camera through the manifest-aware streaming
+coordinator debug toggle, and submits the mapped renderer terrain handles in
+its render packet.
 
 Still future work:
 
 - async loading, streaming jobs, and IO
+- a streaming runtime loop that sequences manifest load state, asset load
+  requests, terrain setup staging, residency requests, and terrain runtime
+  updates without sample-owned orchestration
 - production cooked manifest formats, importers, and renderer-resource
   creation policy
 - production terrain streaming policy and editor-owned residency controls

@@ -20,7 +20,8 @@ public CMake target `FullRenderer::full_renderer`.
   snapshot diffs, JSON Lines diagnostics export/import, renderer-free asset
   identity/catalog validation, cooked manifest schema/tooling support, and the
   first manifest load-intent/handle-readiness adapter contracts without
-  production IO.
+  production IO. The docs now outline the next streaming-runtime track and
+  reserve `src/engine/streaming/` for engine-owned load/residency policy.
 - The SDL3 sample keeps renderer mesh/material/texture ownership local, but its
   terrain chunks now flow through engine world snapshots, terrain prep,
   lifecycle planning, renderer command intent, descriptor building, submission,
@@ -39,7 +40,7 @@ public CMake target `FullRenderer::full_renderer`.
 ```text
 src/app/                 SDL3 sample app and validation shell
 src/renderer/            renderer implementation and public API
-src/engine/              engine core, world ownership, and renderer integration
+src/engine/              engine core, world, streaming, assets, and integration
 src/engine_bridge/       sample/testing adapter, not the real engine
 assets/                  shader, texture, and mesh source assets
 tools/                   shader, asset, and CI tooling

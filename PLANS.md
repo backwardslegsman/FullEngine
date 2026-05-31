@@ -18,6 +18,10 @@ Which renderer phase or Engine Expansion Track milestone from
 `docs/agents/roadmap.md` this belongs to. If the task does not fit the roadmap,
 state that explicitly.
 
+For streaming-runtime work, identify whether the slice belongs to the E3.5
+streaming loop track: planning-only, retained streaming state, manifest/asset
+load coordination, jobs/async integration, or sample/editor diagnostics.
+
 ### Engine-readiness milestone
 
 For Phase 3 and later work, identify the relevant hardening milestone from
@@ -34,6 +38,10 @@ say which gate remains: streaming/residency, large-world precision, asset
 pipeline validation, shader runtime packaging, material/transparency maturity,
 performance proof, platform matrix, backend-safe debug capture, or long-session
 stability.
+
+For streaming-loop changes, state whether the slice only produces dry-run
+intent, queues runtime requests, consumes asset load work, schedules background
+jobs, or reaches renderer-visible terrain changes.
 
 ### Constraints
 

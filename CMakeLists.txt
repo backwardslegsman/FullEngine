@@ -181,6 +181,12 @@ add_library(full_engine STATIC
     src/engine/renderer_integration/TerrainSubmissionAdapter.hpp
     src/engine/renderer_integration/WorldRenderSnapshot.cpp
     src/engine/renderer_integration/WorldRenderSnapshot.hpp
+    src/engine/streaming/TerrainStreamingManifestCoordinator.cpp
+    src/engine/streaming/TerrainStreamingManifestCoordinator.hpp
+    src/engine/streaming/TerrainStreamingPlanner.cpp
+    src/engine/streaming/TerrainStreamingPlanner.hpp
+    src/engine/streaming/TerrainStreamingRuntime.cpp
+    src/engine/streaming/TerrainStreamingRuntime.hpp
     src/engine/world/WorldChunkCatalog.cpp
     src/engine/world/WorldChunkCatalog.hpp
     src/engine/world/WorldChunkRegistry.cpp
