@@ -59,6 +59,58 @@ const Handle* findHandle(const std::map<AssetId, Handle>& handles, const AssetId
     const auto found = handles.find(id);
     return found == handles.end() ? nullptr : &found->second;
 }
+
+TerrainAssetBatchResolveStatus batchStatusFromResolve(const TerrainAssetResolveStatus status) noexcept
+{
+    switch (status)
+    {
+    case TerrainAssetResolveStatus::Success:
+        return TerrainAssetBatchResolveStatus::Resolved;
+    case TerrainAssetResolveStatus::MissingChunkAssets:
+        return TerrainAssetBatchResolveStatus::MissingChunkAssets;
+    case TerrainAssetResolveStatus::InvalidChunkAssets:
+        return TerrainAssetBatchResolveStatus::InvalidChunkAssets;
+    case TerrainAssetResolveStatus::MissingMeshHandle:
+        return TerrainAssetBatchResolveStatus::MissingMeshHandle;
+    case TerrainAssetResolveStatus::MissingMaterialHandle:
+        return TerrainAssetBatchResolveStatus::MissingMaterialHandle;
+    case TerrainAssetResolveStatus::MissingSplatMapHandle:
+        return TerrainAssetBatchResolveStatus::MissingSplatMapHandle;
+    }
+
+    return TerrainAssetBatchResolveStatus::MissingChunkAssets;
+}
+
+void incrementSummary(
+    TerrainAssetBatchResolveSummary& summary,
+    const TerrainAssetBatchResolveStatus status,
+    const std::size_t amount = 1) noexcept
+{
+    switch (status)
+    {
+    case TerrainAssetBatchResolveStatus::Resolved:
+        summary.resolvedCount += amount;
+        break;
+    case TerrainAssetBatchResolveStatus::MissingChunkAssets:
+        summary.missingChunkAssetsCount += amount;
+        break;
+    case TerrainAssetBatchResolveStatus::InvalidChunkAssets:
+        summary.invalidChunkAssetsCount += amount;
+        break;
+    case TerrainAssetBatchResolveStatus::MissingMeshHandle:
+        summary.missingMeshHandleCount += amount;
+        break;
+    case TerrainAssetBatchResolveStatus::MissingMaterialHandle:
+        summary.missingMaterialHandleCount += amount;
+        break;
+    case TerrainAssetBatchResolveStatus::MissingSplatMapHandle:
+        summary.missingSplatMapHandleCount += amount;
+        break;
+    case TerrainAssetBatchResolveStatus::ResourceCatalogFailed:
+        summary.resourceCatalogFailedCount += amount;
+        break;
+    }
+}
 } // namespace
 
 RendererAssetHandleCatalogResult RendererAssetHandleCatalog::addMeshHandle(
@@ -225,5 +277,48 @@ TerrainAssetResolveResult resolveTerrainChunkResources(
     }
 
     return resolveTerrainChunkResources(*desc, handles);
+}
+
+TerrainAssetBatchResolveResult resolveTerrainResourceCatalog(
+    const TerrainAssetCatalog& assets,
+    const ChunkId* ids,
+    const std::size_t idCount,
+    const RendererAssetHandleCatalog& handles)
+{
+    TerrainAssetBatchResolveResult result;
+    if (ids == nullptr)
+    {
+        if (idCount > 0)
+        {
+            incrementSummary(
+                result.summary,
+                TerrainAssetBatchResolveStatus::MissingChunkAssets,
+                idCount);
+        }
+        return result;
+    }
+
+    result.records.reserve(idCount);
+    for (std::size_t index = 0; index < idCount; ++index)
+    {
+        TerrainAssetBatchResolveRecord record;
+        record.id = ids[index];
+        record.sourceResolve = resolveTerrainChunkResources(assets, record.id, handles);
+        record.status = batchStatusFromResolve(record.sourceResolve.status);
+
+        if (record.status == TerrainAssetBatchResolveStatus::Resolved)
+        {
+            record.resourceResult = result.resources.addChunkResources(record.sourceResolve.resources);
+            if (record.resourceResult != TerrainResourceResult::Success)
+            {
+                record.status = TerrainAssetBatchResolveStatus::ResourceCatalogFailed;
+            }
+        }
+
+        incrementSummary(result.summary, record.status);
+        result.records.push_back(record);
+    }
+
+    return result;
 }
 } // namespace full_engine

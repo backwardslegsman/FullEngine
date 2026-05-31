@@ -1,5 +1,6 @@
 #pragma once
 
+#include "engine/assets/AssetDependencyValidator.hpp"
 #include "engine/assets/TerrainAssetDependencyValidator.hpp"
 
 #include <cstddef>
@@ -43,6 +44,7 @@ enum class CookedAssetManifestValidationResult
     Success,
     InvalidAssetRecord,
     DuplicateAssetId,
+    InvalidAssetDependencies,
     InvalidTerrainAssets,
     DuplicateTerrainChunk,
     InvalidTerrainDependencies,
@@ -64,6 +66,8 @@ struct CookedAssetManifestValidation
     std::size_t assetIndex = invalidIndex;
     std::size_t terrainChunkIndex = invalidIndex;
     AssetRecordValidationResult assetValidation = AssetRecordValidationResult::Success;
+    AssetDependencyValidationResult assetDependencyValidation = AssetDependencyValidationResult::Success;
+    std::uint32_t assetDependencyIndex = AssetDependencyValidation::invalidDependencyIndex;
     TerrainAssetValidationResult terrainValidation = TerrainAssetValidationResult::Success;
     TerrainAssetDependencyValidationResult terrainDependencyValidation =
         TerrainAssetDependencyValidationResult::Success;

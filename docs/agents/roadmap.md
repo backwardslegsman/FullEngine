@@ -419,6 +419,11 @@ move gameplay, streaming policy, or editor concepts into renderer internals.
   references, validation, and a deterministic CPU-only catalog. This layer
   deliberately avoids file IO, manifest parsing, importers, async loading,
   renderer handles, and renderer resource creation.
+- Initial generic asset dependency validation is in place: generic asset
+  records can be checked against an `AssetCatalog` for missing dependencies and
+  wrong dependency kinds before cooked manifest catalogs are accepted, while
+  inactive dependency slots remain ignored and renderer resource creation stays
+  out of scope.
 - Initial E3-lite terrain asset identity is in place: `src/engine/assets`
   defines opaque engine `AssetId` values plus CPU-only terrain chunk asset
   descriptors and catalogs for mesh/material/LOD/splat-map references. These
@@ -431,6 +436,11 @@ move gameplay, streaming policy, or editor concepts into renderer internals.
   sample terrain setup now demonstrates that seam by registering asset
   descriptors, resolving them to renderer handles supplied by the sample, and
   feeding the existing terrain setup request queue.
+- Batch terrain asset/resource resolution is in place: caller-selected
+  `ChunkId` lists can be resolved from `TerrainAssetCatalog` plus externally
+  supplied renderer handle catalogs into a value-built `TerrainResourceCatalog`
+  with ordered per-chunk diagnostics. The sample startup and restore controls
+  use that batch seam before terrain setup requests mutate runtime state.
 - Initial terrain asset dependency validation is in place: terrain chunk asset
   descriptors can be checked against generic asset metadata for expected
   mesh/material/texture kinds before renderer-handle resolution, without IO or
@@ -438,11 +448,12 @@ move gameplay, streaming policy, or editor concepts into renderer internals.
   asset metadata and runs that validation before resolving renderer handles.
 - Initial in-memory cooked asset manifest conventions are in place: generic
   asset records and terrain chunk asset descriptors can be grouped into a
-  renderer-free manifest value, validated deterministically, and built into
-  generic/terrain catalogs without file IO, parsing, importers, async loading,
-  renderer handles, or renderer resource creation. The sample terrain setup now
-  declares its metadata through that manifest path before renderer-handle
-  resolution and terrain setup queuing.
+  renderer-free manifest value, validated deterministically including generic
+  and terrain dependency checks, and built into generic/terrain catalogs without
+  file IO, parsing, importers, async loading, renderer handles, or renderer
+  resource creation. The sample terrain setup now declares its metadata through
+  that manifest path before renderer-handle resolution and terrain setup
+  queuing.
 - Deterministic cooked manifest JSON Lines import/export is in place for
   lightweight tooling and schema round-trip tests. It remains standard-library
   only and does not add production asset loading, importers, async loading, or

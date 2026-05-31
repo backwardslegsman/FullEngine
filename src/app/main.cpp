@@ -2,7 +2,6 @@
 
 #include "engine/assets/CookedAssetManifest.hpp"
 #include "engine/assets/CookedAssetManifestJson.hpp"
-#include "engine/assets/TerrainAssetDependencyValidator.hpp"
 #include "engine/renderer_integration/ChunkTerrainHandleMap.hpp"
 #include "engine/renderer_integration/TerrainAssetResolver.hpp"
 #include "engine/renderer_integration/TerrainChunkRequests.hpp"
@@ -795,27 +794,24 @@ const char* terrainAssetResolveStatusName(const full_engine::TerrainAssetResolve
     return "Unknown";
 }
 
-const char* terrainAssetDependencyValidationResultName(
-    const full_engine::TerrainAssetDependencyValidationResult result) noexcept
+const char* terrainAssetBatchResolveStatusName(const full_engine::TerrainAssetBatchResolveStatus status) noexcept
 {
-    switch (result)
+    switch (status)
     {
-    case full_engine::TerrainAssetDependencyValidationResult::Success:
-        return "Success";
-    case full_engine::TerrainAssetDependencyValidationResult::InvalidTerrainAssets:
-        return "InvalidTerrainAssets";
-    case full_engine::TerrainAssetDependencyValidationResult::MissingMeshAsset:
-        return "MissingMeshAsset";
-    case full_engine::TerrainAssetDependencyValidationResult::WrongMeshAssetKind:
-        return "WrongMeshAssetKind";
-    case full_engine::TerrainAssetDependencyValidationResult::MissingMaterialAsset:
-        return "MissingMaterialAsset";
-    case full_engine::TerrainAssetDependencyValidationResult::WrongMaterialAssetKind:
-        return "WrongMaterialAssetKind";
-    case full_engine::TerrainAssetDependencyValidationResult::MissingSplatMapAsset:
-        return "MissingSplatMapAsset";
-    case full_engine::TerrainAssetDependencyValidationResult::WrongSplatMapAssetKind:
-        return "WrongSplatMapAssetKind";
+    case full_engine::TerrainAssetBatchResolveStatus::Resolved:
+        return "Resolved";
+    case full_engine::TerrainAssetBatchResolveStatus::MissingChunkAssets:
+        return "MissingChunkAssets";
+    case full_engine::TerrainAssetBatchResolveStatus::InvalidChunkAssets:
+        return "InvalidChunkAssets";
+    case full_engine::TerrainAssetBatchResolveStatus::MissingMeshHandle:
+        return "MissingMeshHandle";
+    case full_engine::TerrainAssetBatchResolveStatus::MissingMaterialHandle:
+        return "MissingMaterialHandle";
+    case full_engine::TerrainAssetBatchResolveStatus::MissingSplatMapHandle:
+        return "MissingSplatMapHandle";
+    case full_engine::TerrainAssetBatchResolveStatus::ResourceCatalogFailed:
+        return "ResourceCatalogFailed";
     }
     return "Unknown";
 }
@@ -831,6 +827,8 @@ const char* cookedAssetManifestValidationResultName(
         return "InvalidAssetRecord";
     case full_engine::CookedAssetManifestValidationResult::DuplicateAssetId:
         return "DuplicateAssetId";
+    case full_engine::CookedAssetManifestValidationResult::InvalidAssetDependencies:
+        return "InvalidAssetDependencies";
     case full_engine::CookedAssetManifestValidationResult::InvalidTerrainAssets:
         return "InvalidTerrainAssets";
     case full_engine::CookedAssetManifestValidationResult::DuplicateTerrainChunk:
@@ -841,35 +839,55 @@ const char* cookedAssetManifestValidationResultName(
     return "Unknown";
 }
 
-bool queueSampleTerrainSetupAdd(
+bool queueSampleTerrainSetupAdds(
     full_engine::TerrainRuntimeState& terrainRuntime,
-    const full_engine::WorldChunkDesc& worldDesc,
-    const full_engine::TerrainChunkAssetDesc& terrainAssets,
-    const full_engine::AssetCatalog& genericAssets,
+    std::vector<SampleTerrainChunkState>& chunks,
+    const std::vector<full_engine::ChunkId>& ids,
     const full_engine::TerrainAssetCatalog& assets,
     const full_engine::RendererAssetHandleCatalog& handles)
 {
-    const full_engine::TerrainAssetDependencyValidation dependencies =
-        full_engine::validateTerrainAssetDependencies(terrainAssets, genericAssets);
-    if (dependencies.result != full_engine::TerrainAssetDependencyValidationResult::Success)
+    const full_engine::TerrainAssetBatchResolveResult resolved =
+        full_engine::resolveTerrainResourceCatalog(assets, ids.data(), ids.size(), handles);
+    if (resolved.summary.resolvedCount != ids.size() || resolved.records.size() != ids.size())
     {
-        std::cerr << "Failed to validate sample terrain asset dependencies for chunk ("
-                  << worldDesc.id.x << ", " << worldDesc.id.y << ", " << worldDesc.id.z
-                  << "): " << terrainAssetDependencyValidationResultName(dependencies.result) << ".\n";
+        for (const full_engine::TerrainAssetBatchResolveRecord& record : resolved.records)
+        {
+            if (record.status != full_engine::TerrainAssetBatchResolveStatus::Resolved)
+            {
+                std::cerr << "Failed to resolve sample terrain assets for chunk ("
+                          << record.id.x << ", " << record.id.y << ", " << record.id.z
+                          << "): " << terrainAssetBatchResolveStatusName(record.status)
+                          << " / " << terrainAssetResolveStatusName(record.sourceResolve.status) << ".\n";
+            }
+        }
         return false;
     }
 
-    const full_engine::TerrainAssetResolveResult resolved =
-        full_engine::resolveTerrainChunkResources(assets, worldDesc.id, handles);
-    if (resolved.status != full_engine::TerrainAssetResolveStatus::Success)
+    for (const full_engine::TerrainAssetBatchResolveRecord& record : resolved.records)
     {
-        std::cerr << "Failed to resolve sample terrain assets for chunk ("
-                  << worldDesc.id.x << ", " << worldDesc.id.y << ", " << worldDesc.id.z
-                  << "): " << terrainAssetResolveStatusName(resolved.status) << ".\n";
-        return false;
+        const full_engine::TerrainChunkResourceDesc* resources =
+            resolved.resources.findChunkResources(record.id);
+        SampleTerrainChunkState* chunk = nullptr;
+        for (SampleTerrainChunkState& candidate : chunks)
+        {
+            if (candidate.id == record.id)
+            {
+                chunk = &candidate;
+                break;
+            }
+        }
+        if (resources == nullptr || chunk == nullptr)
+        {
+            std::cerr << "Resolved sample terrain chunk was missing setup data for chunk ("
+                      << record.id.x << ", " << record.id.y << ", " << record.id.z << ").\n";
+            return false;
+        }
+
+        terrainRuntime.queueSetupAdd(chunk->worldDesc, *resources);
+        terrainRuntime.queueMakeResident(record.id);
+        chunk->resident = true;
     }
 
-    terrainRuntime.queueSetupAdd(worldDesc, resolved.resources);
     return true;
 }
 
@@ -1580,18 +1598,13 @@ void drawTerrainDiagnosticsPanel(
                 : "not tracked");
         if (ImGui::Button("Add Setup") && selectedChunk != nullptr && !selectedChunk->setupRegistered)
         {
-            selectedChunk->resident = true;
-            if (queueSampleTerrainSetupAdd(
+            const std::vector<full_engine::ChunkId> selectedIds = {selectedChunkId};
+            if (!queueSampleTerrainSetupAdds(
                     terrainRuntime,
-                    selectedChunk->worldDesc,
-                    selectedChunk->assetDesc,
-                    engineAssetCatalog,
+                    sampleTerrainChunks,
+                    selectedIds,
                     engineTerrainAssets,
                     engineTerrainAssetHandles))
-            {
-                terrainRuntime.queueMakeResident(selectedChunkId);
-            }
-            else
             {
                 terrainResidencyControls.terrainAssetResolutionFailed = true;
             }
@@ -1620,27 +1633,24 @@ void drawTerrainDiagnosticsPanel(
         ImGui::SameLine();
         if (ImGui::Button("Restore Ring"))
         {
-            for (SampleTerrainChunkState& chunk : sampleTerrainChunks)
+            std::vector<full_engine::ChunkId> restoreIds;
+            for (const SampleTerrainChunkState& chunk : sampleTerrainChunks)
             {
                 const int ringRadius = std::max(std::abs(chunk.id.x), std::abs(chunk.id.z));
                 if (ringRadius == terrainResidencyControls.batchRingRadius && !chunk.setupRegistered)
                 {
-                    chunk.resident = true;
-                    if (queueSampleTerrainSetupAdd(
-                            terrainRuntime,
-                            chunk.worldDesc,
-                            chunk.assetDesc,
-                            engineAssetCatalog,
-                            engineTerrainAssets,
-                            engineTerrainAssetHandles))
-                    {
-                        terrainRuntime.queueMakeResident(chunk.id);
-                    }
-                    else
-                    {
-                        terrainResidencyControls.terrainAssetResolutionFailed = true;
-                    }
+                    restoreIds.push_back(chunk.id);
                 }
+            }
+            if (!restoreIds.empty() &&
+                !queueSampleTerrainSetupAdds(
+                    terrainRuntime,
+                    sampleTerrainChunks,
+                    restoreIds,
+                    engineTerrainAssets,
+                    engineTerrainAssetHandles))
+            {
+                terrainResidencyControls.terrainAssetResolutionFailed = true;
             }
         }
         if (ImGui::Button("Make Resident") && selectedRegistered)
@@ -3785,64 +3795,96 @@ int main(int argc, char** argv)
         return 1;
     }
 
-    for (SampleTerrainChunkState& chunk : sampleTerrainChunks)
+    const std::vector<full_engine::ChunkId> initialTerrainChunkIds =
+        sampleTerrainChunkIds(sampleTerrainChunks);
+    const full_engine::TerrainAssetBatchResolveResult initialTerrainResources =
+        full_engine::resolveTerrainResourceCatalog(
+            engineTerrainAssets,
+            initialTerrainChunkIds.data(),
+            initialTerrainChunkIds.size(),
+            engineTerrainAssetHandles);
+    if (initialTerrainResources.summary.resolvedCount != sampleTerrainChunks.size() ||
+        initialTerrainResources.records.size() != sampleTerrainChunks.size())
     {
-        const full_engine::TerrainAssetDependencyValidation dependencyValidation =
-            full_engine::validateTerrainAssetDependencies(chunk.assetDesc, engineAssetCatalog);
-        full_engine::TerrainAssetResolveResult resolvedResources;
-        if (dependencyValidation.result == full_engine::TerrainAssetDependencyValidationResult::Success)
+        std::cerr << "Failed to resolve sample terrain resource catalog.\n";
+        for (const full_engine::TerrainAssetBatchResolveRecord& record : initialTerrainResources.records)
         {
-            resolvedResources = full_engine::resolveTerrainChunkResources(
-                engineTerrainAssets,
-                chunk.id,
-                engineTerrainAssetHandles);
+            if (record.status != full_engine::TerrainAssetBatchResolveStatus::Resolved)
+            {
+                std::cerr << "Sample terrain batch resolution failed for chunk ("
+                          << record.id.x << ", " << record.id.y << ", " << record.id.z
+                          << "): " << terrainAssetBatchResolveStatusName(record.status)
+                          << " / " << terrainAssetResolveStatusName(record.sourceResolve.status) << ".\n";
+            }
         }
-        full_engine::TerrainChunkRequestQueue setupRequests;
-        if (dependencyValidation.result == full_engine::TerrainAssetDependencyValidationResult::Success &&
-            resolvedResources.status == full_engine::TerrainAssetResolveStatus::Success)
-        {
-            setupRequests.pushAdd(chunk.worldDesc, resolvedResources.resources);
-        }
-        const full_engine::TerrainChunkRequestApplyResult setupResult = setupRequests.applyTo(
+        removeSampleTerrainSetup(
             engineTerrainRegistry,
             engineTerrainCatalog,
-            engineTerrainResources);
-        const bool setupApplied =
-            setupResult.records.size() == 1 &&
-            setupResult.records[0].status == full_engine::TerrainChunkRequestStatus::Applied;
-        const bool resident =
-            setupApplied &&
-            engineTerrainRegistry.setResidencyState(chunk.id, full_engine::ChunkResidencyState::Loading) ==
-                full_engine::WorldResult::Success &&
-            engineTerrainRegistry.setResidencyState(chunk.id, full_engine::ChunkResidencyState::Resident) ==
-                full_engine::WorldResult::Success;
+            engineTerrainResources,
+            sampleTerrainChunks);
+        renderer->shutdown();
+        return 1;
+    }
 
-        if (!resident)
+    full_engine::TerrainChunkRequestQueue initialSetupRequests;
+    for (const SampleTerrainChunkState& chunk : sampleTerrainChunks)
+    {
+        const full_engine::TerrainChunkResourceDesc* resources =
+            initialTerrainResources.resources.findChunkResources(chunk.id);
+        if (resources != nullptr)
         {
-            std::cerr << "Failed to register sample terrain chunk setup.\n";
-            if (dependencyValidation.result != full_engine::TerrainAssetDependencyValidationResult::Success)
-            {
-                std::cerr << "Sample terrain asset dependency validation failed for chunk ("
-                          << chunk.id.x << ", " << chunk.id.y << ", " << chunk.id.z
-                          << "): " << terrainAssetDependencyValidationResultName(dependencyValidation.result) << ".\n";
-            }
-            if (resolvedResources.status != full_engine::TerrainAssetResolveStatus::Success)
-            {
-                std::cerr << "Sample terrain asset resolution failed for chunk ("
-                          << chunk.id.x << ", " << chunk.id.y << ", " << chunk.id.z
-                          << "): " << terrainAssetResolveStatusName(resolvedResources.status) << ".\n";
-            }
-            removeSampleTerrainSetup(
-                engineTerrainRegistry,
-                engineTerrainCatalog,
-                engineTerrainResources,
-                sampleTerrainChunks);
-            renderer->shutdown();
-            return 1;
+            initialSetupRequests.pushAdd(chunk.worldDesc, *resources);
         }
+    }
+    const full_engine::TerrainChunkRequestApplyResult initialSetupResult = initialSetupRequests.applyTo(
+        engineTerrainRegistry,
+        engineTerrainCatalog,
+        engineTerrainResources);
+    for (const full_engine::TerrainChunkRequestRecord& record : initialSetupResult.records)
+    {
+        if (record.status == full_engine::TerrainChunkRequestStatus::Applied)
+        {
+            if (SampleTerrainChunkState* chunk = findSampleTerrainChunk(sampleTerrainChunks, record.request.id))
+            {
+                chunk->setupRegistered = true;
+            }
+        }
+    }
+    const bool initialSetupApplied =
+        initialSetupResult.records.size() == sampleTerrainChunks.size() &&
+        initialSetupResult.summary.appliedCount == sampleTerrainChunks.size();
 
-        chunk.setupRegistered = true;
-        chunk.resident = true;
+    bool initialResidencyApplied = initialSetupApplied;
+    if (initialResidencyApplied)
+    {
+        for (SampleTerrainChunkState& chunk : sampleTerrainChunks)
+        {
+            const bool resident =
+                engineTerrainRegistry.setResidencyState(chunk.id, full_engine::ChunkResidencyState::Loading) ==
+                    full_engine::WorldResult::Success &&
+                engineTerrainRegistry.setResidencyState(chunk.id, full_engine::ChunkResidencyState::Resident) ==
+                    full_engine::WorldResult::Success;
+            if (!resident)
+            {
+                initialResidencyApplied = false;
+                break;
+            }
+
+            chunk.setupRegistered = true;
+            chunk.resident = true;
+        }
+    }
+
+    if (!initialResidencyApplied)
+    {
+        std::cerr << "Failed to register sample terrain chunk setup.\n";
+        removeSampleTerrainSetup(
+            engineTerrainRegistry,
+            engineTerrainCatalog,
+            engineTerrainResources,
+            sampleTerrainChunks);
+        renderer->shutdown();
+        return 1;
     }
 
     full_engine::TerrainRuntimeUpdateOptions engineTerrainRuntimeOptions;

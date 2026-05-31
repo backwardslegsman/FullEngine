@@ -5,6 +5,7 @@
 
 #include <cstddef>
 #include <map>
+#include <vector>
 
 namespace full_engine
 {
@@ -106,6 +107,59 @@ struct TerrainAssetResolveResult
     TerrainChunkResourceDesc resources = {};
 };
 
+/** @brief Per-chunk status for batch terrain asset-to-resource resolution. */
+enum class TerrainAssetBatchResolveStatus
+{
+    Resolved,
+    MissingChunkAssets,
+    InvalidChunkAssets,
+    MissingMeshHandle,
+    MissingMaterialHandle,
+    MissingSplatMapHandle,
+    ResourceCatalogFailed,
+};
+
+/**
+ * @brief One ordered diagnostic record from batch terrain resource resolution.
+ *
+ * `sourceResolve` preserves the single-chunk resolver result. `resourceResult`
+ * is set when inserting a successfully resolved descriptor into the built
+ * resource catalog. The batch resolver never mutates caller-owned catalogs.
+ */
+struct TerrainAssetBatchResolveRecord
+{
+    ChunkId id = {};
+    TerrainAssetBatchResolveStatus status = TerrainAssetBatchResolveStatus::MissingChunkAssets;
+    TerrainAssetResolveResult sourceResolve = {};
+    TerrainResourceResult resourceResult = TerrainResourceResult::NotFound;
+};
+
+/** @brief Aggregate counters for batch terrain asset-to-resource resolution. */
+struct TerrainAssetBatchResolveSummary
+{
+    std::size_t resolvedCount = 0;
+    std::size_t missingChunkAssetsCount = 0;
+    std::size_t invalidChunkAssetsCount = 0;
+    std::size_t missingMeshHandleCount = 0;
+    std::size_t missingMaterialHandleCount = 0;
+    std::size_t missingSplatMapHandleCount = 0;
+    std::size_t resourceCatalogFailedCount = 0;
+};
+
+/**
+ * @brief Value result for resolving many terrain chunk asset descriptors.
+ *
+ * Records preserve caller-provided chunk ID order. `resources` contains only
+ * descriptors that resolved and inserted successfully. No renderer APIs are
+ * called and no renderer resource lifetime is affected.
+ */
+struct TerrainAssetBatchResolveResult
+{
+    std::vector<TerrainAssetBatchResolveRecord> records;
+    TerrainAssetBatchResolveSummary summary;
+    TerrainResourceCatalog resources;
+};
+
 /**
  * @brief Resolves one engine terrain asset descriptor into renderer handle resources.
  *
@@ -127,5 +181,19 @@ TerrainAssetResolveResult resolveTerrainChunkResources(
 TerrainAssetResolveResult resolveTerrainChunkResources(
     const TerrainAssetCatalog& assets,
     const ChunkId& id,
+    const RendererAssetHandleCatalog& handles);
+
+/**
+ * @brief Resolves a caller-selected list of terrain chunks into a resource catalog.
+ *
+ * `ids` supplies the chunk order used for diagnostics. A null `ids` pointer
+ * with a nonzero count produces no records and counts those inputs as missing
+ * chunk assets. The returned catalog is built by value and never replaces or
+ * mutates caller-owned runtime terrain resources.
+ */
+TerrainAssetBatchResolveResult resolveTerrainResourceCatalog(
+    const TerrainAssetCatalog& assets,
+    const ChunkId* ids,
+    std::size_t idCount,
     const RendererAssetHandleCatalog& handles);
 } // namespace full_engine

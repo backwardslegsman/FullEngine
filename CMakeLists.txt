@@ -105,6 +105,8 @@ add_library(FullRenderer::full_renderer ALIAS full_renderer)
 add_library(full_engine STATIC
     src/engine/assets/AssetCatalog.cpp
     src/engine/assets/AssetCatalog.hpp
+    src/engine/assets/AssetDependencyValidator.cpp
+    src/engine/assets/AssetDependencyValidator.hpp
     src/engine/assets/CookedAssetManifest.cpp
     src/engine/assets/CookedAssetManifest.hpp
     src/engine/assets/CookedAssetManifestJson.cpp

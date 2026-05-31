@@ -28,6 +28,19 @@ CookedAssetManifestValidation duplicateAssetValidation(const std::size_t index) 
     return validation;
 }
 
+CookedAssetManifestValidation invalidAssetDependencyValidation(
+    const std::size_t index,
+    const AssetDependencyValidation& dependencyValidation) noexcept
+{
+    CookedAssetManifestValidation validation;
+    validation.result = CookedAssetManifestValidationResult::InvalidAssetDependencies;
+    validation.assetIndex = index;
+    validation.assetValidation = dependencyValidation.recordValidation;
+    validation.assetDependencyValidation = dependencyValidation.result;
+    validation.assetDependencyIndex = dependencyValidation.dependencyIndex;
+    return validation;
+}
+
 CookedAssetManifestValidation invalidTerrainValidation(
     const std::size_t index,
     const TerrainAssetValidationResult terrainValidation) noexcept
@@ -76,6 +89,16 @@ CookedAssetManifestValidation validateCookedAssetManifest(const CookedAssetManif
         if (addResult == AssetCatalogResult::AlreadyExists)
         {
             return duplicateAssetValidation(index);
+        }
+    }
+
+    for (std::size_t index = 0; index < manifest.assets.size(); ++index)
+    {
+        const AssetDependencyValidation dependencyValidation =
+            validateAssetDependencies(manifest.assets[index], assetCatalog);
+        if (dependencyValidation.result != AssetDependencyValidationResult::Success)
+        {
+            return invalidAssetDependencyValidation(index, dependencyValidation);
         }
     }
 

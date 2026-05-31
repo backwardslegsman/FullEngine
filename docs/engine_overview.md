@@ -85,6 +85,9 @@ Implemented pieces:
 - a generic asset identity catalog for renderer-free asset kind and dependency
   metadata, used as the shared convention beneath specialized asset reference
   catalogs
+- generic asset dependency validation that checks declared dependency IDs and
+  expected kinds against generic catalog metadata before manifest catalogs are
+  accepted
 - an in-memory cooked asset manifest value model that groups generic asset
   records and terrain chunk asset descriptors into validated catalogs without
   file IO or renderer-resource ownership
@@ -98,6 +101,9 @@ Implemented pieces:
 - a terrain asset resolver that maps engine terrain asset IDs through
   externally supplied renderer handle catalogs into the existing terrain
   resource descriptors, without creating or owning renderer resources
+- a batch terrain asset resolver that converts caller-selected terrain asset
+  descriptors into a value-built terrain resource catalog with ordered
+  per-chunk diagnostics
 - terrain resource catalogs that associate chunks with externally supplied
   renderer mesh/material/LOD/splat handles without owning those resources
 - a submission adapter that calls only public terrain APIs and updates
@@ -148,10 +154,11 @@ CPU-only, value-owned, and independent of renderer resources or sample UI state.
 
 The sample still owns demo UI state and renderer mesh/material/texture
 creation. It declares sample terrain asset IDs, generic asset metadata, and
-terrain chunk asset references through an in-memory cooked manifest, builds
-generic and terrain asset catalogs from that manifest, validates terrain asset
-dependencies, resolves them through externally supplied renderer handle
-catalogs into terrain resource descriptors, queues setup and residency intent
+terrain chunk asset references through an in-memory cooked manifest, validates
+generic asset dependencies, builds generic and terrain asset catalogs from that
+manifest, validates terrain asset dependencies, resolves them through
+externally supplied renderer handle catalogs into a terrain resource catalog,
+queues setup and residency intent
 through `TerrainRuntimeState`, updates that state before renderer frame
 submission, mirrors display state from engine registries, displays the retained
 runtime snapshot/diff in its debug panel, exports event/diff diagnostics on

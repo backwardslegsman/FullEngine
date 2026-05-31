@@ -204,6 +204,70 @@ void testMissingTerrainDependenciesAreRejected(std::vector<std::string>& failure
         failures);
 }
 
+void testMissingGenericAssetDependenciesAreRejected(std::vector<std::string>& failures)
+{
+    full_engine::CookedAssetManifest manifest = makeValidManifest();
+    manifest.assets[1].dependencyCount = 1;
+    manifest.assets[1].dependencies[0].id = asset(99);
+    manifest.assets[1].dependencies[0].kind = full_engine::AssetKind::Texture;
+
+    const full_engine::CookedAssetManifestValidation validation =
+        full_engine::validateCookedAssetManifest(manifest);
+
+    expect(
+        validation.result == full_engine::CookedAssetManifestValidationResult::InvalidAssetDependencies,
+        "missing generic dependency is rejected",
+        failures);
+    expect(validation.assetIndex == 1, "missing generic dependency reports asset index", failures);
+    expect(validation.assetDependencyIndex == 0, "missing generic dependency reports dependency index", failures);
+    expect(
+        validation.assetDependencyValidation == full_engine::AssetDependencyValidationResult::MissingDependency,
+        "missing generic dependency preserves nested detail",
+        failures);
+}
+
+void testWrongKindGenericAssetDependenciesAreRejected(std::vector<std::string>& failures)
+{
+    full_engine::CookedAssetManifest manifest = makeValidManifest();
+    manifest.assets[1].dependencyCount = 1;
+    manifest.assets[1].dependencies[0].id = asset(1);
+    manifest.assets[1].dependencies[0].kind = full_engine::AssetKind::Texture;
+
+    const full_engine::CookedAssetManifestValidation validation =
+        full_engine::validateCookedAssetManifest(manifest);
+
+    expect(
+        validation.result == full_engine::CookedAssetManifestValidationResult::InvalidAssetDependencies,
+        "wrong-kind generic dependency is rejected",
+        failures);
+    expect(
+        validation.assetDependencyValidation == full_engine::AssetDependencyValidationResult::WrongDependencyKind,
+        "wrong-kind generic dependency preserves nested detail",
+        failures);
+}
+
+void testGenericDependencyFailurePrecedesTerrainFailure(std::vector<std::string>& failures)
+{
+    full_engine::CookedAssetManifest manifest = makeValidManifest();
+    manifest.assets[1].dependencyCount = 1;
+    manifest.assets[1].dependencies[0].id = asset(99);
+    manifest.assets[1].dependencies[0].kind = full_engine::AssetKind::Texture;
+    manifest.terrainChunks[0].lods[0].mesh = asset(99);
+
+    const full_engine::CookedAssetManifestValidation validation =
+        full_engine::validateCookedAssetManifest(manifest);
+
+    expect(
+        validation.result == full_engine::CookedAssetManifestValidationResult::InvalidAssetDependencies,
+        "generic dependency failures are reported before terrain dependency failures",
+        failures);
+    expect(validation.assetIndex == 1, "generic dependency precedence reports asset index", failures);
+    expect(
+        validation.terrainChunkIndex == full_engine::CookedAssetManifestValidation::invalidIndex,
+        "generic dependency failure leaves terrain index unset",
+        failures);
+}
+
 void testWrongKindTerrainDependenciesAreRejected(std::vector<std::string>& failures)
 {
     full_engine::CookedAssetManifest manifest = makeValidManifest();
@@ -254,6 +318,9 @@ int main()
     testDuplicateTerrainChunksAreRejected(failures);
     testInvalidGenericAssetReportsNestedDetail(failures);
     testInvalidTerrainAssetsReportNestedDetail(failures);
+    testMissingGenericAssetDependenciesAreRejected(failures);
+    testWrongKindGenericAssetDependenciesAreRejected(failures);
+    testGenericDependencyFailurePrecedesTerrainFailure(failures);
     testMissingTerrainDependenciesAreRejected(failures);
     testWrongKindTerrainDependenciesAreRejected(failures);
     testFirstFailureIsDeterministic(failures);
