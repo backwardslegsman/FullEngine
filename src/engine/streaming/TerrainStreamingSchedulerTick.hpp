@@ -5,6 +5,16 @@
 
 namespace full_engine
 {
+/** @brief How a scheduler tick handles manifest asset-load work. */
+enum class TerrainStreamingSchedulerLoadJobMode
+{
+    /** @brief Run the existing synchronous load-job coordinator. */
+    ExecuteSynchronously,
+
+    /** @brief Mirror load jobs into the retained queue and leave execution external. */
+    ScheduleOnly,
+};
+
 /**
  * @brief Options for one policy-driven synchronous streaming scheduler tick.
  *
@@ -18,6 +28,17 @@ struct TerrainStreamingSchedulerTickOptions
 {
     /** @brief Policy thresholds used to decide which phases to attempt. */
     TerrainStreamingSchedulerOptions scheduler = {};
+
+    /**
+     * @brief Whether load-job phases execute synchronously or are only scheduled.
+     *
+     * In `ScheduleOnly` mode, a tick that selects asset-load work stops after
+     * mirroring pending requests into jobs. The streaming phase is deferred so
+     * a caller-owned loader can complete jobs and publish renderer handles
+     * before terrain setup/resource resolution is attempted.
+     */
+    TerrainStreamingSchedulerLoadJobMode loadJobMode =
+        TerrainStreamingSchedulerLoadJobMode::ExecuteSynchronously;
 
     /** @brief Default streaming/runtime options; policy-selected budgets overwrite `budgets`. */
     TerrainStreamingLoopUpdateOptions loopUpdate = {};
@@ -45,8 +66,10 @@ struct TerrainStreamingSchedulerTickResult
     TerrainStreamingSchedulerDecision decision = {};
     TerrainStreamingTickHistorySummary historySummary = {};
     TerrainManifestAssetLoadJobCoordinatorResult loadJobs = {};
+    TerrainManifestAssetLoadJobScheduleResult scheduledLoadJobs = {};
     TerrainStreamingLoopUpdateResult streaming = {};
     bool loadJobsRan = false;
+    bool loadJobsScheduled = false;
     bool streamingRan = false;
 };
 

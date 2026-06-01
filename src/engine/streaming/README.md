@@ -36,9 +36,11 @@ threaded loader exists.
   runtime intent without applying it.
 - `TerrainStreamingLoopState.hpp/.cpp` - retained synchronous holder for
   manifest load state, streaming runtime state, manifest asset-load jobs, and
-  latest coordination diagnostics. It also keeps a compact fixed-capacity tick
-  history ring for budget/deferred-work visibility across recent frames and
-  exposes the latest adaptive budget selection in loop diagnostics.
+  latest coordination diagnostics. It can also reconcile externally completed
+  scheduled load jobs back into retained manifest readiness. It keeps a compact
+  fixed-capacity tick history ring for budget/deferred-work visibility across
+  recent frames and exposes the latest adaptive budget selection in loop
+  diagnostics.
 - `TerrainStreamingLoopUpdate.hpp/.cpp` - synchronous tick-shaped helper that
   runs retained manifest-aware streaming coordination and then applies queued
   terrain setup/residency work through `TerrainRuntimeState::updateWithSnapshot`
@@ -53,8 +55,9 @@ threaded loader exists.
   selecting whether the caller should run streaming, asset-load jobs, both, or
   neither.
 - `TerrainStreamingSchedulerTick.hpp/.cpp` - policy-driven synchronous tick
-  helper that summarizes history, chooses scheduler work, runs load jobs before
-  streaming when requested, and returns one copied result without owning
+  helper that summarizes history, chooses scheduler work, and either runs load
+  jobs synchronously before streaming or mirrors them into the retained job
+  queue for external execution. It returns one copied result without owning
   renderer handles, resources, threads, or IO.
 - `TerrainStreamingSchedulerTickDiagnostics.hpp/.cpp` - compact value
   diagnostics for scheduler tick status, decision pressure, load-job counters,
@@ -115,11 +118,19 @@ profile diagnostics without needing retained loop state. The scheduler policy
 can now turn those summaries and current pending load/job counts into a
 deterministic single-threaded pacing decision, and the scheduler tick helper
 can execute that decision through the existing explicit load-job and streaming
-loop seams. A compact diagnostics snapshot lets the sample terrain panel show
+loop seams. It can also stop at a schedule-only load-job boundary so an external
+future async system can drain the generic job queue without changing manifest
+load state ownership. A reconcile pass now lets caller-owned completed handle
+catalogs consume that retained load state only when the whole batch is ready,
+remove matching scheduled jobs, and replan readiness without owning async
+execution. A completion adapter also accepts caller-owned completed job output
+records and publishes their handles into a temporary completed-handle catalog
+before reconcile, giving future async workers an explicit handoff-and-return
+contract. A compact diagnostics snapshot lets the sample terrain panel show
 that scheduler tick without retaining or reaching through full per-phase result
 records. Scheduler-driven streaming ticks annotate retained history with copied
 decision/status/pressure fields, so exported traces show policy choices beside
 deferred work. The panel can run that tick once or use it as the continuous
 camera-streaming path while keeping lower-level manual controls available for
-individual phase diagnostics. Later slices can connect callbacks to real async
-IO after the CPU-side policy is proven.
+individual phase diagnostics. Later slices can connect the scheduled jobs to
+real async IO after the CPU-side policy is proven.

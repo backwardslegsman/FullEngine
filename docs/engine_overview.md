@@ -174,9 +174,20 @@ Implemented pieces:
 - a production-facing single-threaded manifest asset load job coordinator that
   owns the repeated mirror, execute, consume, and readiness-replan sequence
   while keeping loader callbacks and renderer resource creation external
+- a schedule-only manifest asset-load job boundary that mirrors pending load
+  intent into generic jobs without executing callbacks or consuming retained
+  requests, giving future async loaders an explicit handoff point
+- an external manifest asset-load job reconcile pass that consumes retained
+  load requests only after caller-owned completed handles satisfy the whole
+  batch, removes matching scheduled jobs, and replans readiness
+- an external manifest asset-load job completion adapter that publishes
+  caller-owned completion records into a temporary completed-handle catalog
+  before reconcile, giving async/threaded loaders an explicit handoff shape
+  without making the engine own workers, IO, or renderer resource creation
 - reusable manifest asset-load job diagnostics that copy coordinator status,
-  pending job counts, mirror/execution/consume counters, and final readiness
-  counters for debug UI or tooling without retaining job or load records
+  pending job counts, mirror/execution/consume/reconcile counters, and final
+  readiness counters for debug UI or tooling without retaining job or load
+  records
 - a CPU-only terrain streaming planner that converts camera/world position,
   chunk size, known chunk IDs, and a terrain runtime snapshot into deterministic
   dry-run setup and residency intent without mutating runtime state
@@ -210,7 +221,8 @@ Implemented pieces:
   manifest asset-load jobs, both, or neither for a future single-threaded tick
 - a policy-driven synchronous streaming scheduler tick helper that executes the
   selected load-job and streaming-loop phases through explicit caller-owned
-  callbacks and state, leaving true async/threaded scheduling as future work
+  callbacks and state, or schedules load jobs for external execution while
+  leaving true async/threaded scheduling as future work
 - compact scheduler tick diagnostics that copy selected decision, pressure,
   load-job, and streaming-loop counters for sample/editor display without
   retaining full tick records
@@ -220,6 +232,9 @@ Implemented pieces:
 - sample debug wiring that can run the scheduler tick once or use it for
   continuous camera-driven streaming, while retaining lower-level manual
   streaming and load-job controls for inspection
+- sample debug wiring for the schedule-only load path, including an external
+  load scheduling toggle and a reconcile action that uses sample-created
+  renderer handles as completed job outputs
 - a simple terrain streaming budget policy that selects deterministic setup,
   residency, and lifecycle caps from named runtime profiles, plus an adaptive
   selector that chooses a profile from retained tick-history pressure before

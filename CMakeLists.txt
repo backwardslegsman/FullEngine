@@ -143,6 +143,8 @@ add_library(full_engine STATIC
     src/engine/renderer_integration/TerrainManifestAssetLoader.hpp
     src/engine/renderer_integration/TerrainManifestAssetLoadJobCoordinator.cpp
     src/engine/renderer_integration/TerrainManifestAssetLoadJobCoordinator.hpp
+    src/engine/renderer_integration/TerrainManifestAssetLoadJobCompletions.cpp
+    src/engine/renderer_integration/TerrainManifestAssetLoadJobCompletions.hpp
     src/engine/renderer_integration/TerrainManifestAssetLoadJobs.cpp
     src/engine/renderer_integration/TerrainManifestAssetLoadJobs.hpp
     src/engine/renderer_integration/TerrainManifestAssetLoadExecutor.cpp

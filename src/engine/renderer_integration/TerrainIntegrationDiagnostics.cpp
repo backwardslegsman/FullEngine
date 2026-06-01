@@ -26,6 +26,34 @@ TerrainManifestAssetLoadJobDiagnostics makeTerrainManifestAssetLoadJobDiagnostic
     return diagnostics;
 }
 
+TerrainManifestAssetLoadJobScheduleDiagnostics makeTerrainManifestAssetLoadJobScheduleDiagnostics(
+    const TerrainManifestAssetLoadJobScheduleResult& result,
+    const EngineJobQueue& jobs)
+{
+    TerrainManifestAssetLoadJobScheduleDiagnostics diagnostics;
+    diagnostics.status = result.status;
+    diagnostics.jobQueue = makeEngineJobQueueDiagnostics(jobs);
+    diagnostics.mirror = result.mirror.summary;
+    diagnostics.initialPendingLoadRequestCount = result.initialPendingLoadRequestCount;
+    diagnostics.finalPendingLoadRequestCount = result.finalPendingLoadRequestCount;
+    diagnostics.pendingJobCount = result.pendingJobCount;
+    return diagnostics;
+}
+
+TerrainManifestAssetLoadJobReconcileDiagnostics makeTerrainManifestAssetLoadJobReconcileDiagnostics(
+    const TerrainManifestAssetLoadJobReconcileResult& result,
+    const EngineJobQueue& jobs)
+{
+    TerrainManifestAssetLoadJobReconcileDiagnostics diagnostics;
+    diagnostics.status = result.status;
+    diagnostics.jobQueue = makeEngineJobQueueDiagnostics(jobs);
+    diagnostics.loadConsume = result.load.summary;
+    diagnostics.loadConsumed = result.load.consumed;
+    diagnostics.reconcile = result.summary;
+    diagnostics.readiness = result.readiness.summary;
+    return diagnostics;
+}
+
 TerrainAssetBatchResolveDiagnostics makeTerrainAssetBatchResolveDiagnostics(
     const TerrainAssetBatchResolveResult& result)
 {

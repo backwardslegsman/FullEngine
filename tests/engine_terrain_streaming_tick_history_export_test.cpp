@@ -44,6 +44,7 @@ full_engine::TerrainStreamingTickEvent makeTick(const std::uint64_t sequence)
     event.scheduler.pressureCount = 38;
     event.scheduler.maxAssetLoadJobs = 39;
     event.scheduler.loadJobsRan = true;
+    event.scheduler.loadJobsScheduled = true;
     event.scheduler.streamingRan = true;
     event.streamingStatus = full_engine::TerrainStreamingManifestUpdateStatus::Success;
     event.runtimeStatus = full_engine::TerrainRuntimeUpdateStatus::PipelineFailed;
@@ -120,6 +121,7 @@ void testSingleTickExportsCounters(std::vector<std::string>& failures)
     expect(content.find("\"schedulerDecisionReason\":\"CatchUp\"") != std::string::npos, "single tick exports scheduler reason", failures);
     expect(content.find("\"schedulerPendingLoadRequestCount\":33") != std::string::npos, "single tick exports scheduler pressure", failures);
     expect(content.find("\"schedulerMaxAssetLoadJobs\":39") != std::string::npos, "single tick exports scheduler max jobs", failures);
+    expect(content.find("\"schedulerLoadJobsScheduled\":true") != std::string::npos, "single tick exports scheduler schedule phase", failures);
     expect(content.find("\"runtimeUpdateRan\":true") != std::string::npos, "single tick exports runtime bool", failures);
     expect(content.find("\"setupRequestsBeforeRuntime\":1") != std::string::npos, "single tick exports setup before count", failures);
     expect(content.find("\"streamingManifestTerrainChunkCount\":5") != std::string::npos, "single tick exports streaming counter", failures);

@@ -395,6 +395,7 @@ bool parseTick(const std::string& line, TerrainStreamingTickEvent& event)
         !parseOptionalSizeField(line, "schedulerPressureCount", event.scheduler.pressureCount) ||
         !parseOptionalSizeField(line, "schedulerMaxAssetLoadJobs", event.scheduler.maxAssetLoadJobs) ||
         !parseOptionalBoolField(line, "schedulerLoadJobsRan", event.scheduler.loadJobsRan) ||
+        !parseOptionalBoolField(line, "schedulerLoadJobsScheduled", event.scheduler.loadJobsScheduled) ||
         !parseOptionalBoolField(line, "schedulerStreamingRan", event.scheduler.streamingRan))
     {
         return false;

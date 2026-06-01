@@ -110,4 +110,141 @@ TerrainManifestAssetLoadJobCoordinatorResult runTerrainManifestAssetLoadJobs(
     void* userData,
     std::size_t maxJobs,
     EngineJobPriority priority = EngineJobPriority::Normal);
+
+/** @brief High-level result for scheduling manifest asset load jobs without executing them. */
+enum class TerrainManifestAssetLoadJobScheduleStatus
+{
+    /** @brief Pending load requests were mirrored, or were already mirrored, into the job queue. */
+    Scheduled,
+
+    /** @brief The retained manifest load state had no pending asset load requests. */
+    NoPendingLoads,
+
+    /** @brief Mirroring rejected one or more requests. */
+    Blocked,
+};
+
+/** @brief Returns a stable diagnostic name for a manifest asset load job schedule status. */
+const char* terrainManifestAssetLoadJobScheduleStatusName(
+    TerrainManifestAssetLoadJobScheduleStatus status) noexcept;
+
+/** @brief Value diagnostics for a schedule-only manifest asset load job pass. */
+struct TerrainManifestAssetLoadJobScheduleResult
+{
+    /** @brief High-level scheduling outcome. */
+    TerrainManifestAssetLoadJobScheduleStatus status =
+        TerrainManifestAssetLoadJobScheduleStatus::NoPendingLoads;
+
+    /** @brief Diagnostics from mirroring retained load requests into jobs. */
+    TerrainManifestAssetLoadJobMirrorResult mirror = {};
+
+    /** @brief Pending retained load request count before scheduling. */
+    std::size_t initialPendingLoadRequestCount = 0;
+
+    /** @brief Pending retained load request count after scheduling. */
+    std::size_t finalPendingLoadRequestCount = 0;
+
+    /** @brief Pending job count after scheduling. */
+    std::size_t pendingJobCount = 0;
+};
+
+/**
+ * @brief Mirrors retained manifest asset-load requests into jobs without executing them.
+ *
+ * This schedule-only helper is the production-facing async boundary for
+ * manifest asset loads. It copies pending load intent into `jobs` and leaves
+ * execution, IO, renderer resource creation, renderer handle catalog mutation,
+ * and retained load-request consumption to caller-owned systems.
+ */
+TerrainManifestAssetLoadJobScheduleResult scheduleTerrainManifestAssetLoadJobs(
+    const TerrainManifestLoadState& manifestLoad,
+    EngineJobQueue& jobs,
+    EngineJobPriority priority = EngineJobPriority::Normal);
+
+/** @brief High-level result for reconciling externally completed manifest asset-load jobs. */
+enum class TerrainManifestAssetLoadJobReconcileStatus
+{
+    /** @brief Pending load requests were consumed, scheduled jobs were cleaned up, and readiness was replanned. */
+    Success,
+
+    /** @brief The retained manifest load state had no pending asset load requests. */
+    NoPendingLoads,
+
+    /** @brief One or more requested externally completed handles are not available yet. */
+    CompletionPending,
+
+    /** @brief Completed handles were present, but the all-or-nothing consume pass failed. */
+    LoadConsumeBlocked,
+};
+
+/** @brief Returns a stable diagnostic name for a manifest asset load job reconcile status. */
+const char* terrainManifestAssetLoadJobReconcileStatusName(
+    TerrainManifestAssetLoadJobReconcileStatus status) noexcept;
+
+/** @brief Compact counters copied from one external load-job reconcile pass. */
+struct TerrainManifestAssetLoadJobReconcileSummary
+{
+    /** @brief Pending retained load request count before reconcile. */
+    std::size_t initialPendingLoadRequestCount = 0;
+
+    /** @brief Pending retained load request count after reconcile. */
+    std::size_t finalPendingLoadRequestCount = 0;
+
+    /** @brief Pending generic job count before reconcile. */
+    std::size_t initialPendingJobCount = 0;
+
+    /** @brief Pending generic job count after reconcile. */
+    std::size_t finalPendingJobCount = 0;
+
+    /** @brief Number of matching scheduled manifest load jobs removed after successful consume. */
+    std::size_t removedScheduledJobCount = 0;
+
+    /** @brief Final ready handle count after a successful consume/replan pass. */
+    std::size_t finalReadyHandleCount = 0;
+
+    /** @brief Final missing handle count after a successful consume/replan pass. */
+    std::size_t finalMissingHandleCount = 0;
+};
+
+/**
+ * @brief Result of reconciling externally completed manifest asset-load jobs.
+ *
+ * The result copies all-or-nothing load consumption diagnostics, final
+ * readiness replanning output, and compact job/request counters. It never
+ * retains renderer handles or job records.
+ */
+struct TerrainManifestAssetLoadJobReconcileResult
+{
+    /** @brief High-level reconcile outcome. */
+    TerrainManifestAssetLoadJobReconcileStatus status =
+        TerrainManifestAssetLoadJobReconcileStatus::NoPendingLoads;
+
+    /** @brief Diagnostics from consuming retained manifest asset load requests. */
+    TerrainManifestAssetLoadResult load = {};
+
+    /** @brief Final readiness plan after successful load consumption. */
+    TerrainManifestAssetReadinessPlan readiness = {};
+
+    /** @brief Compact aggregate counters for UI or logs. */
+    TerrainManifestAssetLoadJobReconcileSummary summary = {};
+};
+
+/**
+ * @brief Reconciles externally completed scheduled load jobs with retained manifest load state.
+ *
+ * This is the schedule-only counterpart to `runTerrainManifestAssetLoadJobs`.
+ * It treats `completedHandles` as caller-owned output from an external job or
+ * async system, consumes retained load requests only when every requested
+ * handle can be satisfied, removes matching scheduled `ManifestAssetLoad` jobs
+ * after successful consume, and replans readiness against `destinationHandles`.
+ *
+ * The helper performs no callback execution, file IO, threading, renderer
+ * calls, renderer-resource creation, terrain setup staging, or terrain runtime
+ * queue application. All supplied state must be externally serialized.
+ */
+TerrainManifestAssetLoadJobReconcileResult reconcileTerrainManifestAssetLoadJobs(
+    TerrainManifestLoadState& manifestLoad,
+    EngineJobQueue& jobs,
+    const RendererAssetHandleCatalog& completedHandles,
+    RendererAssetHandleCatalog& destinationHandles);
 } // namespace full_engine

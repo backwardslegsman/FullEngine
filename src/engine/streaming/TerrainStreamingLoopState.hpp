@@ -32,6 +32,7 @@ struct TerrainStreamingTickSchedulerDiagnostics
     std::size_t pressureCount = 0;
     std::size_t maxAssetLoadJobs = 0;
     bool loadJobsRan = false;
+    bool loadJobsScheduled = false;
     bool streamingRan = false;
 };
 
@@ -129,6 +130,12 @@ struct TerrainStreamingLoopDiagnostics
     /** @brief Latest manifest asset-load job diagnostics. */
     TerrainManifestAssetLoadJobDiagnostics loadJobs = {};
 
+    /** @brief Latest schedule-only manifest asset-load job diagnostics. */
+    TerrainManifestAssetLoadJobScheduleDiagnostics scheduledLoadJobs = {};
+
+    /** @brief Latest external manifest asset-load job reconcile diagnostics. */
+    TerrainManifestAssetLoadJobReconcileDiagnostics reconciledLoadJobs = {};
+
     /** @brief Latest manifest-aware streaming update status. */
     TerrainStreamingManifestUpdateStatus latestStreamingStatus =
         TerrainStreamingManifestUpdateStatus::Success;
@@ -177,6 +184,12 @@ public:
 
     /** @brief Returns latest load-job coordinator diagnostics. */
     const TerrainManifestAssetLoadJobCoordinatorResult& latestLoadJobResult() const noexcept;
+
+    /** @brief Returns latest schedule-only load-job diagnostics. */
+    const TerrainManifestAssetLoadJobScheduleResult& latestLoadJobScheduleResult() const noexcept;
+
+    /** @brief Returns latest external load-job reconcile diagnostics. */
+    const TerrainManifestAssetLoadJobReconcileResult& latestLoadJobReconcileResult() const noexcept;
 
     /** @brief Returns latest manifest-aware streaming update diagnostics. */
     const TerrainStreamingManifestUpdateResult& latestStreamingUpdate() const noexcept;
@@ -264,6 +277,32 @@ public:
         EngineJobPriority priority = EngineJobPriority::Normal);
 
     /**
+     * @brief Mirrors retained manifest asset-load requests into jobs without executing them.
+     *
+     * The call does not invoke loader callbacks, consume retained load
+     * requests, mutate renderer handle catalogs, create renderer resources, or
+     * apply terrain runtime queues. External systems can execute the retained
+     * jobs and later use the existing load-consume path when handles are
+     * available.
+     */
+    const TerrainManifestAssetLoadJobScheduleResult& scheduleAssetLoadJobs(
+        EngineJobPriority priority = EngineJobPriority::Normal);
+
+    /**
+     * @brief Reconciles externally completed scheduled load jobs with retained load state.
+     *
+     * The call treats `completedHandles` as caller-owned output from an
+     * external loader or job system. It consumes retained load requests only
+     * when every request can be satisfied, removes matching scheduled jobs
+     * after successful consumption, and replans readiness against
+     * `destinationHandles`. It does not execute callbacks, perform IO, create
+     * renderer resources, start threads, or apply terrain runtime queues.
+     */
+    const TerrainManifestAssetLoadJobReconcileResult& reconcileScheduledAssetLoadJobs(
+        const RendererAssetHandleCatalog& completedHandles,
+        RendererAssetHandleCatalog& destinationHandles);
+
+    /**
      * @brief Runs one manifest-aware terrain streaming update.
      *
      * The call delegates to `updateTerrainStreamingFromManifest`, storing the
@@ -328,6 +367,10 @@ private:
     TerrainManifestFileReloadPlanResult latestManifestReload_ = {};
     TerrainManifestAssetLoadJobCoordinatorResult latestLoadJobResult_ = {};
     TerrainManifestAssetLoadJobDiagnostics latestLoadJobDiagnostics_ = {};
+    TerrainManifestAssetLoadJobScheduleResult latestLoadJobScheduleResult_ = {};
+    TerrainManifestAssetLoadJobScheduleDiagnostics latestLoadJobScheduleDiagnostics_ = {};
+    TerrainManifestAssetLoadJobReconcileResult latestLoadJobReconcileResult_ = {};
+    TerrainManifestAssetLoadJobReconcileDiagnostics latestLoadJobReconcileDiagnostics_ = {};
     TerrainStreamingManifestUpdateResult latestStreamingUpdate_ = {};
     TerrainStreamingTickHistory tickHistory_ = {};
     TerrainStreamingLoopDiagnostics latestDiagnostics_ = {};

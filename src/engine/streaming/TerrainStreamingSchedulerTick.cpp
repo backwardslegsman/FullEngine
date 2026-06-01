@@ -24,6 +24,11 @@ bool loadJobsBlocked(const TerrainManifestAssetLoadJobCoordinatorStatus status) 
         status == TerrainManifestAssetLoadJobCoordinatorStatus::LoadConsumeBlocked;
 }
 
+bool schedulingBlocked(const TerrainManifestAssetLoadJobScheduleStatus status) noexcept
+{
+    return status == TerrainManifestAssetLoadJobScheduleStatus::Blocked;
+}
+
 TerrainStreamingSchedulerTickStatus mapStreamingStatus(
     const TerrainStreamingLoopUpdateStatus status) noexcept
 {
@@ -104,6 +109,19 @@ TerrainStreamingSchedulerTickResult runTerrainStreamingSchedulerTick(
 
     if (shouldRunLoadJobs(result.decision.status))
     {
+        if (options.loadJobMode == TerrainStreamingSchedulerLoadJobMode::ScheduleOnly)
+        {
+            result.scheduledLoadJobs = loop.scheduleAssetLoadJobs(options.assetLoadJobPriority);
+            result.loadJobsScheduled = true;
+            if (schedulingBlocked(result.scheduledLoadJobs.status))
+            {
+                result.status = TerrainStreamingSchedulerTickStatus::LoadJobsBlocked;
+                return result;
+            }
+            result.status = TerrainStreamingSchedulerTickStatus::Success;
+            return result;
+        }
+
         const std::size_t maxJobs =
             options.overrideMaxAssetLoadJobs ?
                 options.maxAssetLoadJobs :

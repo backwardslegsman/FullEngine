@@ -482,6 +482,59 @@ void testCombinedLoadAndStreamingRunsInOrder(std::vector<std::string>& failures)
     expect(fixture.loop.manifestLoad().pendingLoadRequestCount() == 0, "combined tick clears load requests", failures);
 }
 
+void testScheduleOnlyMirrorsLoadJobsWithoutExecution(std::vector<std::string>& failures)
+{
+    Fixture fixture;
+    preparePendingLoadRequests(fixture);
+    appendPressureTick(fixture.loop);
+    full_engine::RendererAssetHandleCatalog assetHandles;
+    CallbackState callbackState;
+    callbackState.handles = readyHandles();
+    const full_engine::WorldChunkDesc desc = worldDesc();
+    full_engine::TerrainStreamingSchedulerTickOptions options;
+    options.loadJobMode = full_engine::TerrainStreamingSchedulerLoadJobMode::ScheduleOnly;
+
+    const full_engine::TerrainStreamingSchedulerTickResult result =
+        runTick(fixture, assetHandles, callbackState, desc, missingSnapshot(), options);
+
+    expect(result.status == full_engine::TerrainStreamingSchedulerTickStatus::Success, "schedule-only tick succeeds", failures);
+    expect(!result.loadJobsRan, "schedule-only tick does not execute load jobs", failures);
+    expect(result.loadJobsScheduled, "schedule-only tick schedules load jobs", failures);
+    expect(!result.streamingRan, "schedule-only tick stops before streaming", failures);
+    expect(callbackState.calls.empty(), "schedule-only tick does not invoke load callback", failures);
+    expect(result.scheduledLoadJobs.status == full_engine::TerrainManifestAssetLoadJobScheduleStatus::Scheduled, "schedule-only tick stores schedule result", failures);
+    expect(result.scheduledLoadJobs.mirror.summary.queuedCount == 3, "schedule-only tick mirrors pending loads", failures);
+    expect(result.scheduledLoadJobs.finalPendingLoadRequestCount == 3, "schedule-only tick leaves load requests pending", failures);
+    expect(fixture.loop.manifestLoad().pendingLoadRequestCount() == 3, "schedule-only tick preserves retained load queue", failures);
+    expect(fixture.loop.manifestAssetLoadJobs().jobCount() == 3, "schedule-only tick leaves jobs queued for external execution", failures);
+    expect(assetHandles.meshHandleCount() == 0, "schedule-only tick leaves handle catalog unchanged", failures);
+    expect(fixture.renderer.createCalls == 0, "schedule-only tick does not touch renderer", failures);
+    expect(fixture.loop.latestDiagnostics().scheduledLoadJobs.status == full_engine::TerrainManifestAssetLoadJobScheduleStatus::Scheduled, "schedule-only tick updates loop diagnostics", failures);
+}
+
+void testScheduleOnlyDeduplicatesAlreadyQueuedJobs(std::vector<std::string>& failures)
+{
+    Fixture fixture;
+    preparePendingLoadRequests(fixture);
+    full_engine::RendererAssetHandleCatalog assetHandles;
+    CallbackState callbackState;
+    const full_engine::WorldChunkDesc desc = worldDesc();
+    full_engine::TerrainStreamingSchedulerTickOptions options;
+    options.loadJobMode = full_engine::TerrainStreamingSchedulerLoadJobMode::ScheduleOnly;
+
+    const full_engine::TerrainStreamingSchedulerTickResult first =
+        runTick(fixture, assetHandles, callbackState, desc, missingSnapshot(), options);
+    const full_engine::TerrainStreamingSchedulerTickResult second =
+        runTick(fixture, assetHandles, callbackState, desc, missingSnapshot(), options);
+
+    expect(first.status == full_engine::TerrainStreamingSchedulerTickStatus::Success, "first schedule-only tick succeeds", failures);
+    expect(second.status == full_engine::TerrainStreamingSchedulerTickStatus::Success, "second schedule-only tick succeeds", failures);
+    expect(second.scheduledLoadJobs.mirror.summary.alreadyQueuedCount == 3, "second schedule-only tick reports already queued jobs", failures);
+    expect(second.scheduledLoadJobs.mirror.summary.queuedCount == 0, "second schedule-only tick queues no duplicates", failures);
+    expect(fixture.loop.manifestAssetLoadJobs().jobCount() == 3, "schedule-only duplicate pass preserves job count", failures);
+    expect(callbackState.calls.empty(), "schedule-only duplicate pass still does not invoke callback", failures);
+}
+
 void testBlockedLoadJobsStopBeforeStreaming(std::vector<std::string>& failures)
 {
     Fixture fixture;
@@ -615,8 +668,10 @@ void testSchedulerTickDiagnosticsDefaultAndCopiesCounters(std::vector<std::strin
         expect(diagnostics.decisionReason == full_engine::TerrainStreamingSchedulerReason::NoWork, "default diagnostics reason", failures);
         expect(diagnostics.history.hasSchedulerDecision, "default diagnostics has history decision", failures);
         expect(!diagnostics.loadJobsRan, "default diagnostics load phase skipped", failures);
+        expect(!diagnostics.loadJobsScheduled, "default diagnostics schedule phase skipped", failures);
         expect(!diagnostics.streamingRan, "default diagnostics streaming phase skipped", failures);
         expect(diagnostics.loadJobExecution.completedCount == 0, "default diagnostics load counters zero", failures);
+        expect(diagnostics.scheduledLoadJobMirror.queuedCount == 0, "default diagnostics schedule counters zero", failures);
         expect(diagnostics.streamingSummary.streamingPlanOperationCount == 0, "default diagnostics streaming counters zero", failures);
     }
 
@@ -633,6 +688,7 @@ void testSchedulerTickDiagnosticsDefaultAndCopiesCounters(std::vector<std::strin
     result.decision.pressureCount = 6;
     result.decision.maxAssetLoadJobs = 7;
     result.loadJobsRan = true;
+    result.loadJobsScheduled = true;
     result.streamingRan = true;
     result.loadJobs.status = full_engine::TerrainManifestAssetLoadJobCoordinatorStatus::Success;
     result.loadJobs.mirror.summary.queuedCount = 8;
@@ -645,6 +701,13 @@ void testSchedulerTickDiagnosticsDefaultAndCopiesCounters(std::vector<std::strin
     result.loadJobs.jobs.records.push_back({});
     result.loadJobs.load.consume.records.push_back({});
     result.loadJobs.readiness.records.push_back({});
+    result.scheduledLoadJobs.status = full_engine::TerrainManifestAssetLoadJobScheduleStatus::Scheduled;
+    result.scheduledLoadJobs.mirror.summary.queuedCount = 31;
+    result.scheduledLoadJobs.mirror.summary.alreadyQueuedCount = 32;
+    result.scheduledLoadJobs.mirror.summary.invalidArgumentCount = 33;
+    result.scheduledLoadJobs.initialPendingLoadRequestCount = 34;
+    result.scheduledLoadJobs.finalPendingLoadRequestCount = 35;
+    result.scheduledLoadJobs.pendingJobCount = 36;
     result.streaming.status = full_engine::TerrainStreamingLoopUpdateStatus::Success;
     result.streaming.streaming.status = full_engine::TerrainStreamingManifestUpdateStatus::Success;
     result.streaming.runtime.status = full_engine::TerrainRuntimeUpdateStatus::Success;
@@ -681,6 +744,7 @@ void testSchedulerTickDiagnosticsDefaultAndCopiesCounters(std::vector<std::strin
     expect(diagnostics.history.budgetProfile == diagnostics.budgetProfile, "diagnostics history copies profile", failures);
     expect(diagnostics.history.pressureCount == diagnostics.pressureCount, "diagnostics history copies pressure", failures);
     expect(diagnostics.loadJobsRan, "diagnostics copies load phase bool", failures);
+    expect(diagnostics.loadJobsScheduled, "diagnostics copies schedule phase bool", failures);
     expect(diagnostics.streamingRan, "diagnostics copies streaming phase bool", failures);
     expect(diagnostics.loadJobStatus == full_engine::TerrainManifestAssetLoadJobCoordinatorStatus::Success, "diagnostics copies load status", failures);
     expect(diagnostics.loadJobMirror.queuedCount == 8, "diagnostics copies mirror counters", failures);
@@ -689,6 +753,13 @@ void testSchedulerTickDiagnosticsDefaultAndCopiesCounters(std::vector<std::strin
     expect(diagnostics.loadConsumed, "diagnostics copies consumed flag", failures);
     expect(diagnostics.loadJobCoordinator.finalReadyHandleCount == 11, "diagnostics copies coordinator summary", failures);
     expect(diagnostics.loadReadiness.readyCount == 12, "diagnostics copies readiness summary", failures);
+    expect(diagnostics.scheduledLoadJobStatus == full_engine::TerrainManifestAssetLoadJobScheduleStatus::Scheduled, "diagnostics copies schedule status", failures);
+    expect(diagnostics.scheduledLoadJobMirror.queuedCount == 31, "diagnostics copies schedule queued count", failures);
+    expect(diagnostics.scheduledLoadJobMirror.alreadyQueuedCount == 32, "diagnostics copies schedule already queued count", failures);
+    expect(diagnostics.scheduledLoadJobMirror.invalidArgumentCount == 33, "diagnostics copies schedule invalid count", failures);
+    expect(diagnostics.scheduledInitialPendingLoadRequestCount == 34, "diagnostics copies schedule initial pending", failures);
+    expect(diagnostics.scheduledFinalPendingLoadRequestCount == 35, "diagnostics copies schedule final pending", failures);
+    expect(diagnostics.scheduledPendingJobCount == 36, "diagnostics copies schedule pending jobs", failures);
     expect(diagnostics.streamingStatus == full_engine::TerrainStreamingLoopUpdateStatus::Success, "diagnostics copies streaming status", failures);
     expect(diagnostics.manifestStreamingStatus == full_engine::TerrainStreamingManifestUpdateStatus::Success, "diagnostics copies manifest status", failures);
     expect(diagnostics.runtimeStatus == full_engine::TerrainRuntimeUpdateStatus::Success, "diagnostics copies runtime status", failures);
@@ -714,6 +785,8 @@ int main()
     testPendingLoadRequestsRunLoadJobsOnly(failures);
     testDeferredPressureRunsStreamingOnly(failures);
     testCombinedLoadAndStreamingRunsInOrder(failures);
+    testScheduleOnlyMirrorsLoadJobsWithoutExecution(failures);
+    testScheduleOnlyDeduplicatesAlreadyQueuedJobs(failures);
     testBlockedLoadJobsStopBeforeStreaming(failures);
     testStreamingBlockedMapsStatus(failures);
     testRuntimeSetupFailureMapsStatus(failures);

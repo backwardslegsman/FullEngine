@@ -279,6 +279,54 @@ void testRunLoadJobsBlockedPreservesPending(std::vector<std::string>& failures)
     std::remove(path);
 }
 
+void testReconcileScheduledLoadJobs(std::vector<std::string>& failures)
+{
+    const char* path = "terrain_streaming_loop_reconcile.jsonl";
+    writeManifest(path);
+
+    full_engine::TerrainStreamingLoopState state;
+    (void)state.reloadManifestAndQueueMissingAssetLoads(path, {});
+    const full_engine::TerrainManifestAssetLoadJobScheduleResult& scheduled =
+        state.scheduleAssetLoadJobs();
+    expect(scheduled.status == full_engine::TerrainManifestAssetLoadJobScheduleStatus::Scheduled, "loop schedule load jobs succeeds", failures);
+    expect(state.manifestAssetLoadJobs().jobCount() == 3, "loop schedule load jobs queues jobs", failures);
+
+    full_engine::RendererAssetHandleCatalog destination;
+    const full_engine::TerrainManifestAssetLoadJobReconcileResult& result =
+        state.reconcileScheduledAssetLoadJobs(readyHandles(), destination);
+
+    expect(result.status == full_engine::TerrainManifestAssetLoadJobReconcileStatus::Success, "loop reconcile succeeds", failures);
+    expect(state.manifestLoad().pendingLoadRequestCount() == 0, "loop reconcile clears load requests", failures);
+    expect(state.manifestAssetLoadJobs().jobCount() == 0, "loop reconcile clears scheduled jobs", failures);
+    expect(state.latestLoadJobReconcileResult().status == full_engine::TerrainManifestAssetLoadJobReconcileStatus::Success, "loop reconcile stores latest result", failures);
+    expect(state.latestDiagnostics().reconciledLoadJobs.status == full_engine::TerrainManifestAssetLoadJobReconcileStatus::Success, "loop reconcile stores diagnostics status", failures);
+    expect(state.latestDiagnostics().reconciledLoadJobs.loadConsumed, "loop reconcile diagnostics report consumed", failures);
+    expect(state.latestDiagnostics().reconciledLoadJobs.reconcile.finalReadyHandleCount == 3, "loop reconcile diagnostics copy ready count", failures);
+
+    (void)state.reloadManifestAndQueueMissingAssetLoads(path, {});
+    (void)state.scheduleAssetLoadJobs();
+    full_engine::RendererAssetHandleCatalog incomplete = readyHandles();
+    (void)incomplete.removeTextureHandle(asset(30));
+    full_engine::RendererAssetHandleCatalog blockedDestination;
+    const full_engine::TerrainManifestAssetLoadJobReconcileResult& blocked =
+        state.reconcileScheduledAssetLoadJobs(incomplete, blockedDestination);
+
+    expect(blocked.status == full_engine::TerrainManifestAssetLoadJobReconcileStatus::CompletionPending, "loop reconcile missing handle is pending", failures);
+    expect(state.manifestLoad().pendingLoadRequestCount() == 3, "loop reconcile missing handle preserves load requests", failures);
+    expect(state.manifestAssetLoadJobs().jobCount() == 3, "loop reconcile missing handle preserves jobs", failures);
+    expect(state.latestDiagnostics().reconciledLoadJobs.status == full_engine::TerrainManifestAssetLoadJobReconcileStatus::CompletionPending, "loop reconcile missing handle stores diagnostics", failures);
+
+    state.clearJobs();
+    expect(state.latestDiagnostics().reconciledLoadJobs.status == full_engine::TerrainManifestAssetLoadJobReconcileStatus::NoPendingLoads, "clearJobs resets reconcile diagnostics", failures);
+
+    (void)state.scheduleAssetLoadJobs();
+    expect(state.manifestAssetLoadJobs().jobCount() == 3, "loop schedule after clearJobs restores jobs", failures);
+    state.clearManifest();
+    expect(state.latestDiagnostics().reconciledLoadJobs.status == full_engine::TerrainManifestAssetLoadJobReconcileStatus::NoPendingLoads, "clearManifest resets reconcile diagnostics", failures);
+
+    std::remove(path);
+}
+
 void testStreamingUpdateQueuesRuntimeIntent(std::vector<std::string>& failures)
 {
     full_engine::TerrainStreamingLoopState state;
@@ -421,6 +469,7 @@ int main()
     testReloadFailureClearsState(failures);
     testRunLoadJobsSuccess(failures);
     testRunLoadJobsBlockedPreservesPending(failures);
+    testReconcileScheduledLoadJobs(failures);
     testStreamingUpdateQueuesRuntimeIntent(failures);
     testTickHistoryRetainsRecentEvents(failures);
     testClearResetsOwnedState(failures);

@@ -111,6 +111,16 @@ const TerrainManifestAssetLoadJobCoordinatorResult& TerrainStreamingLoopState::l
     return latestLoadJobResult_;
 }
 
+const TerrainManifestAssetLoadJobScheduleResult& TerrainStreamingLoopState::latestLoadJobScheduleResult() const noexcept
+{
+    return latestLoadJobScheduleResult_;
+}
+
+const TerrainManifestAssetLoadJobReconcileResult& TerrainStreamingLoopState::latestLoadJobReconcileResult() const noexcept
+{
+    return latestLoadJobReconcileResult_;
+}
+
 const TerrainStreamingManifestUpdateResult& TerrainStreamingLoopState::latestStreamingUpdate() const noexcept
 {
     return latestStreamingUpdate_;
@@ -199,6 +209,40 @@ const TerrainManifestAssetLoadJobCoordinatorResult& TerrainStreamingLoopState::r
     return latestLoadJobResult_;
 }
 
+const TerrainManifestAssetLoadJobScheduleResult& TerrainStreamingLoopState::scheduleAssetLoadJobs(
+    const EngineJobPriority priority)
+{
+    latestLoadJobScheduleResult_ = scheduleTerrainManifestAssetLoadJobs(
+        manifestLoad_,
+        manifestAssetLoadJobs_,
+        priority);
+    latestLoadJobScheduleDiagnostics_ = makeTerrainManifestAssetLoadJobScheduleDiagnostics(
+        latestLoadJobScheduleResult_,
+        manifestAssetLoadJobs_);
+    refreshDiagnostics();
+    return latestLoadJobScheduleResult_;
+}
+
+const TerrainManifestAssetLoadJobReconcileResult& TerrainStreamingLoopState::reconcileScheduledAssetLoadJobs(
+    const RendererAssetHandleCatalog& completedHandles,
+    RendererAssetHandleCatalog& destinationHandles)
+{
+    latestLoadJobReconcileResult_ = reconcileTerrainManifestAssetLoadJobs(
+        manifestLoad_,
+        manifestAssetLoadJobs_,
+        completedHandles,
+        destinationHandles);
+    latestLoadJobReconcileDiagnostics_ = makeTerrainManifestAssetLoadJobReconcileDiagnostics(
+        latestLoadJobReconcileResult_,
+        manifestAssetLoadJobs_);
+    if (latestLoadJobReconcileResult_.status == TerrainManifestAssetLoadJobReconcileStatus::Success)
+    {
+        (void)manifestLoad_.planAssetLoadRequests();
+    }
+    refreshDiagnostics();
+    return latestLoadJobReconcileResult_;
+}
+
 const TerrainStreamingManifestUpdateResult& TerrainStreamingLoopState::updateStreamingFromManifest(
     const RendererAssetHandleCatalog& handles,
     const WorldChunkRegistry& registry,
@@ -273,6 +317,8 @@ void TerrainStreamingLoopState::refreshDiagnostics() noexcept
     latestDiagnostics_.latestFileAssetCount = latestManifestReload_.load.assetCount;
     latestDiagnostics_.latestFileTerrainChunkCount = latestManifestReload_.load.terrainChunkCount;
     latestDiagnostics_.loadJobs = latestLoadJobDiagnostics_;
+    latestDiagnostics_.scheduledLoadJobs = latestLoadJobScheduleDiagnostics_;
+    latestDiagnostics_.reconciledLoadJobs = latestLoadJobReconcileDiagnostics_;
     latestDiagnostics_.latestStreamingStatus = latestStreamingUpdate_.status;
     latestDiagnostics_.latestStreamingSummary = latestStreamingUpdate_.summary;
 }
@@ -282,6 +328,14 @@ void TerrainStreamingLoopState::resetLoadJobDiagnostics() noexcept
     latestLoadJobResult_ = {};
     latestLoadJobDiagnostics_ = makeTerrainManifestAssetLoadJobDiagnostics(
         latestLoadJobResult_,
+        manifestAssetLoadJobs_);
+    latestLoadJobScheduleResult_ = {};
+    latestLoadJobScheduleDiagnostics_ = makeTerrainManifestAssetLoadJobScheduleDiagnostics(
+        latestLoadJobScheduleResult_,
+        manifestAssetLoadJobs_);
+    latestLoadJobReconcileResult_ = {};
+    latestLoadJobReconcileDiagnostics_ = makeTerrainManifestAssetLoadJobReconcileDiagnostics(
+        latestLoadJobReconcileResult_,
         manifestAssetLoadJobs_);
 }
 

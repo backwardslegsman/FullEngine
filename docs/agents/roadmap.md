@@ -638,9 +638,28 @@ move gameplay, streaming policy, or editor concepts into renderer internals.
   diagnostics are folded into retained streaming tick history, exported/imported
   with the JSONL trace, and shown beside recent deferred-work ticks in the
   sample panel.
-- Next slice: either summarize scheduler decisions from imported tick history
-  or start designing the async/threaded scheduler boundary over the same
-  explicit phase/result contract.
+- Twenty-fourth slice is implemented: scheduler ticks can use a schedule-only
+  manifest asset-load mode that mirrors pending load intent into the retained
+  `EngineJobQueue` without executing callbacks, consuming retained requests, or
+  running streaming in the same tick. The sample exposes this as an external
+  load scheduling toggle, preserving the synchronous mode as the default.
+- Twenty-fifth slice is implemented: external manifest asset-load job
+  reconciliation consumes retained load requests from caller-owned completed
+  handle catalogs only when the full batch is ready, removes matching scheduled
+  jobs, replans readiness, and exposes compact diagnostics through retained
+  streaming loop state.
+- Twenty-sixth slice is implemented: the sample debug panel exposes
+  `Reconcile Load Jobs` beside the external scheduling toggle, uses the
+  sample-created renderer handle catalog as completed job output, and displays
+  retained reconcile diagnostics with scheduler/load-job counters.
+- Twenty-seventh slice is implemented: an external manifest asset-load job
+  completion adapter accepts caller-owned completion records, publishes valid
+  handles into a temporary completed-handle catalog, and then delegates to the
+  existing all-or-nothing reconcile path without owning threads, IO, renderer
+  calls, or resource creation.
+- Next slice: add a tiny external worker-demo/test harness or sample-only
+  completion-record path that produces these completion values from scheduled
+  jobs, keeping the actual worker lifecycle outside the engine.
 - Initial sample integration is in place: the debug UI can run the
   manifest-aware streaming coordinator once or continuously from camera
   position, display readiness/load/staging/streaming queue counters, and keep

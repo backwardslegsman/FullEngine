@@ -56,6 +56,9 @@ struct TerrainStreamingSchedulerTickDiagnostics
     /** @brief True when the load-job phase ran. */
     bool loadJobsRan = false;
 
+    /** @brief True when the load-job phase only scheduled external work. */
+    bool loadJobsScheduled = false;
+
     /** @brief True when the streaming phase ran. */
     bool streamingRan = false;
 
@@ -80,6 +83,22 @@ struct TerrainStreamingSchedulerTickDiagnostics
 
     /** @brief Final asset-handle readiness counters from the load-job phase. */
     TerrainManifestAssetReadinessSummary loadReadiness = {};
+
+    /** @brief High-level schedule-only status from the tick. */
+    TerrainManifestAssetLoadJobScheduleStatus scheduledLoadJobStatus =
+        TerrainManifestAssetLoadJobScheduleStatus::NoPendingLoads;
+
+    /** @brief Counters from schedule-only job mirroring. */
+    TerrainManifestAssetLoadJobMirrorSummary scheduledLoadJobMirror = {};
+
+    /** @brief Pending retained load requests before schedule-only mirroring. */
+    std::size_t scheduledInitialPendingLoadRequestCount = 0;
+
+    /** @brief Pending retained load requests after schedule-only mirroring. */
+    std::size_t scheduledFinalPendingLoadRequestCount = 0;
+
+    /** @brief Pending job count after schedule-only mirroring. */
+    std::size_t scheduledPendingJobCount = 0;
 
     /** @brief High-level streaming-loop update status from the tick. */
     TerrainStreamingLoopUpdateStatus streamingStatus =

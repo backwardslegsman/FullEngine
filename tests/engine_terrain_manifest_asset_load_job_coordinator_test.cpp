@@ -159,6 +159,172 @@ void testNoPendingLoads(std::vector<std::string>& failures)
     expect(destination.meshHandleCount() == 0, "no pending loads leaves destination unchanged", failures);
 }
 
+void testScheduleNoPendingLoads(std::vector<std::string>& failures)
+{
+    full_engine::TerrainManifestLoadState state;
+    full_engine::EngineJobQueue jobs;
+
+    const full_engine::TerrainManifestAssetLoadJobScheduleResult result =
+        full_engine::scheduleTerrainManifestAssetLoadJobs(state, jobs);
+
+    expect(result.status == full_engine::TerrainManifestAssetLoadJobScheduleStatus::NoPendingLoads, "schedule no pending loads reports NoPendingLoads", failures);
+    expect(result.initialPendingLoadRequestCount == 0, "schedule no pending loads initial count is zero", failures);
+    expect(result.finalPendingLoadRequestCount == 0, "schedule no pending loads final count is zero", failures);
+    expect(result.pendingJobCount == 0, "schedule no pending loads leaves jobs empty", failures);
+    expect(std::string(full_engine::terrainManifestAssetLoadJobScheduleStatusName(result.status)) == "NoPendingLoads", "schedule status name is stable", failures);
+}
+
+void testSchedulePendingLoadsMirrorsJobsOnly(std::vector<std::string>& failures)
+{
+    full_engine::TerrainManifestLoadState state;
+    queueManifestLoadRequests(state);
+    full_engine::EngineJobQueue jobs;
+
+    const full_engine::TerrainManifestAssetLoadJobScheduleResult result =
+        full_engine::scheduleTerrainManifestAssetLoadJobs(
+            state,
+            jobs,
+            full_engine::EngineJobPriority::High);
+
+    expect(result.status == full_engine::TerrainManifestAssetLoadJobScheduleStatus::Scheduled, "schedule pending loads succeeds", failures);
+    expect(result.initialPendingLoadRequestCount == 3, "schedule pending loads copies initial count", failures);
+    expect(result.finalPendingLoadRequestCount == 3, "schedule pending loads leaves retained load requests pending", failures);
+    expect(result.pendingJobCount == 3, "schedule pending loads reports pending jobs", failures);
+    expect(result.mirror.summary.queuedCount == 3, "schedule pending loads mirrors three jobs", failures);
+    expect(state.pendingLoadRequestCount() == 3, "schedule pending loads does not consume retained queue", failures);
+    expect(jobs.jobCount() == 3, "schedule pending loads queues three jobs", failures);
+    for (const full_engine::EngineJobRecord& job : jobs.jobs())
+    {
+        expect(job.request.kind == full_engine::EngineJobKind::ManifestAssetLoad, "scheduled job kind is manifest asset load", failures);
+        expect(job.request.priority == full_engine::EngineJobPriority::High, "scheduled job priority is copied", failures);
+    }
+}
+
+void testSchedulePendingLoadsDeduplicatesExistingJobs(std::vector<std::string>& failures)
+{
+    full_engine::TerrainManifestLoadState state;
+    queueManifestLoadRequests(state);
+    full_engine::EngineJobQueue jobs;
+
+    const full_engine::TerrainManifestAssetLoadJobScheduleResult first =
+        full_engine::scheduleTerrainManifestAssetLoadJobs(state, jobs);
+    const full_engine::TerrainManifestAssetLoadJobScheduleResult second =
+        full_engine::scheduleTerrainManifestAssetLoadJobs(state, jobs);
+
+    expect(first.status == full_engine::TerrainManifestAssetLoadJobScheduleStatus::Scheduled, "first schedule pass succeeds", failures);
+    expect(second.status == full_engine::TerrainManifestAssetLoadJobScheduleStatus::Scheduled, "second schedule pass succeeds", failures);
+    expect(second.mirror.summary.alreadyQueuedCount == 3, "second schedule pass reports already queued jobs", failures);
+    expect(second.mirror.summary.queuedCount == 0, "second schedule pass queues no duplicates", failures);
+    expect(second.finalPendingLoadRequestCount == 3, "second schedule pass leaves retained queue pending", failures);
+    expect(jobs.jobCount() == 3, "second schedule pass preserves one job per request", failures);
+}
+
+void testReconcileNoPendingLoads(std::vector<std::string>& failures)
+{
+    full_engine::TerrainManifestLoadState state;
+    full_engine::EngineJobQueue jobs;
+    full_engine::RendererAssetHandleCatalog completed = completeHandles();
+    full_engine::RendererAssetHandleCatalog destination;
+
+    const full_engine::TerrainManifestAssetLoadJobReconcileResult result =
+        full_engine::reconcileTerrainManifestAssetLoadJobs(
+            state,
+            jobs,
+            completed,
+            destination);
+
+    expect(result.status == full_engine::TerrainManifestAssetLoadJobReconcileStatus::NoPendingLoads, "reconcile no pending loads reports NoPendingLoads", failures);
+    expect(result.summary.initialPendingLoadRequestCount == 0, "reconcile no pending loads initial count is zero", failures);
+    expect(result.summary.finalPendingLoadRequestCount == 0, "reconcile no pending loads final count is zero", failures);
+    expect(destination.meshHandleCount() == 0, "reconcile no pending loads leaves destination unchanged", failures);
+    expect(std::string(full_engine::terrainManifestAssetLoadJobReconcileStatusName(result.status)) == "NoPendingLoads", "reconcile status name is stable", failures);
+}
+
+void testReconcileCompletedHandlesConsumeAndRemoveScheduledJobs(std::vector<std::string>& failures)
+{
+    full_engine::TerrainManifestLoadState state;
+    queueManifestLoadRequests(state);
+    full_engine::EngineJobQueue jobs;
+    (void)jobs.push(customJob());
+    (void)full_engine::scheduleTerrainManifestAssetLoadJobs(state, jobs);
+    full_engine::RendererAssetHandleCatalog completed = completeHandles();
+    full_engine::RendererAssetHandleCatalog destination;
+
+    const full_engine::TerrainManifestAssetLoadJobReconcileResult result =
+        full_engine::reconcileTerrainManifestAssetLoadJobs(
+            state,
+            jobs,
+            completed,
+            destination);
+
+    expect(result.status == full_engine::TerrainManifestAssetLoadJobReconcileStatus::Success, "reconcile complete handles succeeds", failures);
+    expect(result.load.consumed, "reconcile complete handles consumes load queue", failures);
+    expect(result.load.summary.loadedCount == 3, "reconcile complete handles copies three handles", failures);
+    expect(result.readiness.summary.readyCount == 3, "reconcile complete handles replans ready", failures);
+    expect(result.summary.initialPendingLoadRequestCount == 3, "reconcile complete handles copies initial load count", failures);
+    expect(result.summary.finalPendingLoadRequestCount == 0, "reconcile complete handles clears load count", failures);
+    expect(result.summary.initialPendingJobCount == 4, "reconcile complete handles copies initial job count", failures);
+    expect(result.summary.finalPendingJobCount == 1, "reconcile complete handles preserves unrelated job only", failures);
+    expect(result.summary.removedScheduledJobCount == 3, "reconcile complete handles removes scheduled load jobs", failures);
+    expect(state.pendingLoadRequestCount() == 0, "reconcile complete handles clears retained load queue", failures);
+    expect(jobs.jobCount() == 1, "reconcile complete handles leaves one unrelated job", failures);
+    expect(jobs.jobs()[0].request.kind == full_engine::EngineJobKind::Custom, "reconcile complete handles preserves custom job", failures);
+    expect(destination.findMeshHandle(asset(1)) != nullptr, "reconcile complete handles writes mesh destination", failures);
+    expect(destination.findMaterialHandle(asset(2)) != nullptr, "reconcile complete handles writes material destination", failures);
+    expect(destination.findTextureHandle(asset(3)) != nullptr, "reconcile complete handles writes texture destination", failures);
+}
+
+void testReconcileMissingCompletedHandlePreservesState(std::vector<std::string>& failures)
+{
+    full_engine::TerrainManifestLoadState state;
+    queueManifestLoadRequests(state);
+    full_engine::EngineJobQueue jobs;
+    (void)full_engine::scheduleTerrainManifestAssetLoadJobs(state, jobs);
+    full_engine::RendererAssetHandleCatalog completed = completeHandles();
+    (void)completed.removeMaterialHandle(asset(2));
+    full_engine::RendererAssetHandleCatalog destination;
+
+    const full_engine::TerrainManifestAssetLoadJobReconcileResult result =
+        full_engine::reconcileTerrainManifestAssetLoadJobs(
+            state,
+            jobs,
+            completed,
+            destination);
+
+    expect(result.status == full_engine::TerrainManifestAssetLoadJobReconcileStatus::CompletionPending, "reconcile missing completed handle reports pending", failures);
+    expect(!result.load.consumed, "reconcile missing completed handle does not consume", failures);
+    expect(result.load.summary.missingHandleCount == 1, "reconcile missing completed handle counts missing handle", failures);
+    expect(result.summary.finalPendingLoadRequestCount == 3, "reconcile missing completed handle preserves load requests", failures);
+    expect(result.summary.finalPendingJobCount == 3, "reconcile missing completed handle preserves jobs", failures);
+    expect(state.pendingLoadRequestCount() == 3, "reconcile missing completed handle leaves retained load queue", failures);
+    expect(jobs.jobCount() == 3, "reconcile missing completed handle leaves scheduled jobs", failures);
+    expect(destination.meshHandleCount() == 0, "reconcile missing completed handle leaves destination unchanged", failures);
+}
+
+void testReconcileAlreadyLoadedDestinationConsumesWithoutCompletedSource(std::vector<std::string>& failures)
+{
+    full_engine::TerrainManifestLoadState state;
+    queueManifestLoadRequests(state);
+    full_engine::EngineJobQueue jobs;
+    (void)full_engine::scheduleTerrainManifestAssetLoadJobs(state, jobs);
+    const full_engine::RendererAssetHandleCatalog completed;
+    full_engine::RendererAssetHandleCatalog destination = completeHandles();
+
+    const full_engine::TerrainManifestAssetLoadJobReconcileResult result =
+        full_engine::reconcileTerrainManifestAssetLoadJobs(
+            state,
+            jobs,
+            completed,
+            destination);
+
+    expect(result.status == full_engine::TerrainManifestAssetLoadJobReconcileStatus::Success, "reconcile already-loaded destination succeeds", failures);
+    expect(result.load.summary.alreadyLoadedCount == 3, "reconcile already-loaded destination counts existing handles", failures);
+    expect(result.summary.removedScheduledJobCount == 3, "reconcile already-loaded destination removes scheduled jobs", failures);
+    expect(state.pendingLoadRequestCount() == 0, "reconcile already-loaded destination clears load queue", failures);
+    expect(jobs.jobCount() == 0, "reconcile already-loaded destination clears scheduled jobs", failures);
+    expect(result.readiness.summary.readyCount == 3, "reconcile already-loaded destination replans ready", failures);
+}
+
 void testPendingLoadsCompleteAndReplanReady(std::vector<std::string>& failures)
 {
     full_engine::TerrainManifestLoadState state;
@@ -331,6 +497,13 @@ int main()
 {
     std::vector<std::string> failures;
     testNoPendingLoads(failures);
+    testScheduleNoPendingLoads(failures);
+    testSchedulePendingLoadsMirrorsJobsOnly(failures);
+    testSchedulePendingLoadsDeduplicatesExistingJobs(failures);
+    testReconcileNoPendingLoads(failures);
+    testReconcileCompletedHandlesConsumeAndRemoveScheduledJobs(failures);
+    testReconcileMissingCompletedHandlePreservesState(failures);
+    testReconcileAlreadyLoadedDestinationConsumesWithoutCompletedSource(failures);
     testPendingLoadsCompleteAndReplanReady(failures);
     testMissingCallbackHandleBlocks(failures);
     testFailedCallbackBlocks(failures);

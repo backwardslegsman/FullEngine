@@ -18,6 +18,7 @@ TerrainStreamingSchedulerTickDiagnostics makeTerrainStreamingSchedulerTickDiagno
     diagnostics.pressureCount = result.decision.pressureCount;
     diagnostics.maxAssetLoadJobs = result.decision.maxAssetLoadJobs;
     diagnostics.loadJobsRan = result.loadJobsRan;
+    diagnostics.loadJobsScheduled = result.loadJobsScheduled;
     diagnostics.streamingRan = result.streamingRan;
     diagnostics.history.hasSchedulerDecision = true;
     diagnostics.history.status = diagnostics.status;
@@ -32,6 +33,7 @@ TerrainStreamingSchedulerTickDiagnostics makeTerrainStreamingSchedulerTickDiagno
     diagnostics.history.pressureCount = diagnostics.pressureCount;
     diagnostics.history.maxAssetLoadJobs = diagnostics.maxAssetLoadJobs;
     diagnostics.history.loadJobsRan = diagnostics.loadJobsRan;
+    diagnostics.history.loadJobsScheduled = diagnostics.loadJobsScheduled;
     diagnostics.history.streamingRan = diagnostics.streamingRan;
 
     diagnostics.loadJobStatus = result.loadJobs.status;
@@ -41,6 +43,13 @@ TerrainStreamingSchedulerTickDiagnostics makeTerrainStreamingSchedulerTickDiagno
     diagnostics.loadConsumed = result.loadJobs.load.consume.consumed;
     diagnostics.loadJobCoordinator = result.loadJobs.summary;
     diagnostics.loadReadiness = result.loadJobs.readiness.summary;
+    diagnostics.scheduledLoadJobStatus = result.scheduledLoadJobs.status;
+    diagnostics.scheduledLoadJobMirror = result.scheduledLoadJobs.mirror.summary;
+    diagnostics.scheduledInitialPendingLoadRequestCount =
+        result.scheduledLoadJobs.initialPendingLoadRequestCount;
+    diagnostics.scheduledFinalPendingLoadRequestCount =
+        result.scheduledLoadJobs.finalPendingLoadRequestCount;
+    diagnostics.scheduledPendingJobCount = result.scheduledLoadJobs.pendingJobCount;
 
     diagnostics.streamingStatus = result.streaming.status;
     diagnostics.manifestStreamingStatus = result.streaming.streaming.status;

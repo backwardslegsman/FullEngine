@@ -46,6 +46,7 @@ full_engine::TerrainStreamingTickEvent makeTick(
     event.scheduler.pressureCount = base + 47;
     event.scheduler.maxAssetLoadJobs = base + 48;
     event.scheduler.loadJobsRan = true;
+    event.scheduler.loadJobsScheduled = true;
     event.scheduler.streamingRan = true;
     event.runtimeUpdateRan = true;
     event.setupRequestsBeforeRuntime = base + 1;
@@ -137,6 +138,7 @@ void testExportImportRoundTrip(std::vector<std::string>& failures)
         expect(imported.events[1].scheduler.pendingLoadRequestCount == 142, "round trip preserves scheduler pressure", failures);
         expect(imported.events[0].scheduler.maxAssetLoadJobs == 48, "round trip preserves scheduler max jobs", failures);
         expect(imported.events[0].scheduler.loadJobsRan, "round trip preserves scheduler load phase", failures);
+        expect(imported.events[0].scheduler.loadJobsScheduled, "round trip preserves scheduler schedule phase", failures);
         expect(imported.events[0].scheduler.streamingRan, "round trip preserves scheduler streaming phase", failures);
         expect(imported.events[0].runtimeUpdateRan, "round trip preserves runtime bool", failures);
         expect(imported.events[1].streaming.deferredMakeUnloadedCount == 118, "round trip preserves deferred streaming counter", failures);

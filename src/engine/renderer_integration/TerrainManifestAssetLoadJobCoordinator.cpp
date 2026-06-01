@@ -192,19 +192,22 @@ std::vector<EngineJobId> jobIdsForRequests(const TerrainManifestAssetLoadRequest
     return ids;
 }
 
-void removeRelevantLoadJobs(EngineJobQueue& jobs, const std::vector<EngineJobId>& ids)
+std::size_t removeRelevantLoadJobs(EngineJobQueue& jobs, const std::vector<EngineJobId>& ids)
 {
     const std::vector<EngineJobRecord> before = jobs.jobs();
     jobs.clear();
+    std::size_t removedCount = 0;
     for (const EngineJobRecord& record : before)
     {
         if (record.request.kind == EngineJobKind::ManifestAssetLoad &&
             containsJobId(ids, record.request.id))
         {
+            ++removedCount;
             continue;
         }
         (void)jobs.push(record.request);
     }
+    return removedCount;
 }
 } // namespace
 
@@ -224,6 +227,112 @@ const char* terrainManifestAssetLoadJobCoordinatorStatusName(
     }
 
     return "Unknown";
+}
+
+const char* terrainManifestAssetLoadJobScheduleStatusName(
+    const TerrainManifestAssetLoadJobScheduleStatus status) noexcept
+{
+    switch (status)
+    {
+    case TerrainManifestAssetLoadJobScheduleStatus::Scheduled:
+        return "Scheduled";
+    case TerrainManifestAssetLoadJobScheduleStatus::NoPendingLoads:
+        return "NoPendingLoads";
+    case TerrainManifestAssetLoadJobScheduleStatus::Blocked:
+        return "Blocked";
+    }
+
+    return "Unknown";
+}
+
+const char* terrainManifestAssetLoadJobReconcileStatusName(
+    const TerrainManifestAssetLoadJobReconcileStatus status) noexcept
+{
+    switch (status)
+    {
+    case TerrainManifestAssetLoadJobReconcileStatus::Success:
+        return "Success";
+    case TerrainManifestAssetLoadJobReconcileStatus::NoPendingLoads:
+        return "NoPendingLoads";
+    case TerrainManifestAssetLoadJobReconcileStatus::CompletionPending:
+        return "CompletionPending";
+    case TerrainManifestAssetLoadJobReconcileStatus::LoadConsumeBlocked:
+        return "LoadConsumeBlocked";
+    }
+
+    return "Unknown";
+}
+
+TerrainManifestAssetLoadJobScheduleResult scheduleTerrainManifestAssetLoadJobs(
+    const TerrainManifestLoadState& manifestLoad,
+    EngineJobQueue& jobs,
+    const EngineJobPriority priority)
+{
+    TerrainManifestAssetLoadJobScheduleResult result;
+    result.initialPendingLoadRequestCount = manifestLoad.pendingLoadRequestCount();
+    if (result.initialPendingLoadRequestCount == 0)
+    {
+        result.status = TerrainManifestAssetLoadJobScheduleStatus::NoPendingLoads;
+        result.finalPendingLoadRequestCount = manifestLoad.pendingLoadRequestCount();
+        result.pendingJobCount = jobs.jobCount();
+        return result;
+    }
+
+    result.mirror = mirrorTerrainManifestAssetLoadRequestsToJobs(
+        manifestLoad.loadRequestQueue(),
+        jobs,
+        priority);
+    result.finalPendingLoadRequestCount = manifestLoad.pendingLoadRequestCount();
+    result.pendingJobCount = jobs.jobCount();
+    result.status =
+        result.mirror.summary.invalidArgumentCount == 0 ?
+            TerrainManifestAssetLoadJobScheduleStatus::Scheduled :
+            TerrainManifestAssetLoadJobScheduleStatus::Blocked;
+    return result;
+}
+
+TerrainManifestAssetLoadJobReconcileResult reconcileTerrainManifestAssetLoadJobs(
+    TerrainManifestLoadState& manifestLoad,
+    EngineJobQueue& jobs,
+    const RendererAssetHandleCatalog& completedHandles,
+    RendererAssetHandleCatalog& destinationHandles)
+{
+    TerrainManifestAssetLoadJobReconcileResult result;
+    result.summary.initialPendingLoadRequestCount = manifestLoad.pendingLoadRequestCount();
+    result.summary.initialPendingJobCount = jobs.jobCount();
+
+    if (result.summary.initialPendingLoadRequestCount == 0)
+    {
+        result.status = TerrainManifestAssetLoadJobReconcileStatus::NoPendingLoads;
+        result.summary.finalPendingLoadRequestCount = manifestLoad.pendingLoadRequestCount();
+        result.summary.finalPendingJobCount = jobs.jobCount();
+        return result;
+    }
+
+    const std::vector<EngineJobId> relevantJobIds = jobIdsForRequests(manifestLoad.loadRequestQueue());
+    result.load = manifestLoad.consumePendingAssetLoadRequests(
+        completedHandles,
+        destinationHandles);
+
+    if (!result.load.consumed)
+    {
+        result.status =
+            result.load.summary.missingHandleCount > 0 ?
+                TerrainManifestAssetLoadJobReconcileStatus::CompletionPending :
+                TerrainManifestAssetLoadJobReconcileStatus::LoadConsumeBlocked;
+        result.summary.finalPendingLoadRequestCount = manifestLoad.pendingLoadRequestCount();
+        result.summary.finalPendingJobCount = jobs.jobCount();
+        return result;
+    }
+
+    result.summary.removedScheduledJobCount = removeRelevantLoadJobs(jobs, relevantJobIds);
+    result.readiness = manifestLoad.planAssetReadiness(destinationHandles);
+    result.summary.finalPendingLoadRequestCount = manifestLoad.pendingLoadRequestCount();
+    result.summary.finalPendingJobCount = jobs.jobCount();
+    result.summary.finalReadyHandleCount = result.readiness.summary.readyCount;
+    result.summary.finalMissingHandleCount = result.readiness.summary.missingHandleCount;
+    result.status = TerrainManifestAssetLoadJobReconcileStatus::Success;
+    return result;
 }
 
 TerrainManifestAssetLoadJobCoordinatorResult runTerrainManifestAssetLoadJobs(
@@ -284,7 +393,7 @@ TerrainManifestAssetLoadJobCoordinatorResult runTerrainManifestAssetLoadJobs(
         return result;
     }
 
-    removeRelevantLoadJobs(jobs, relevantJobIds);
+    (void)removeRelevantLoadJobs(jobs, relevantJobIds);
     result.readiness = manifestLoad.planAssetReadiness(destinationHandles);
     result.summary.finalPendingLoadRequestCount = manifestLoad.pendingLoadRequestCount();
     result.summary.finalReadyHandleCount = result.readiness.summary.readyCount;

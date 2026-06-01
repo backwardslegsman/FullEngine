@@ -55,6 +55,52 @@ struct TerrainManifestAssetLoadJobDiagnostics
     TerrainManifestAssetReadinessSummary readiness = {};
 };
 
+/** @brief Value snapshot of schedule-only manifest asset-load job mirroring. */
+struct TerrainManifestAssetLoadJobScheduleDiagnostics
+{
+    /** @brief High-level schedule-only status. */
+    TerrainManifestAssetLoadJobScheduleStatus status =
+        TerrainManifestAssetLoadJobScheduleStatus::NoPendingLoads;
+
+    /** @brief Current generic job queue counters after scheduling. */
+    EngineJobQueueDiagnostics jobQueue = {};
+
+    /** @brief Counters from mirroring pending load requests into jobs. */
+    TerrainManifestAssetLoadJobMirrorSummary mirror = {};
+
+    /** @brief Pending retained load request count before scheduling. */
+    std::size_t initialPendingLoadRequestCount = 0;
+
+    /** @brief Pending retained load request count after scheduling. */
+    std::size_t finalPendingLoadRequestCount = 0;
+
+    /** @brief Pending generic job count reported by the schedule-only result. */
+    std::size_t pendingJobCount = 0;
+};
+
+/** @brief Value snapshot of external manifest asset-load job reconciliation. */
+struct TerrainManifestAssetLoadJobReconcileDiagnostics
+{
+    /** @brief High-level reconcile status. */
+    TerrainManifestAssetLoadJobReconcileStatus status =
+        TerrainManifestAssetLoadJobReconcileStatus::NoPendingLoads;
+
+    /** @brief Current generic job queue counters after reconcile. */
+    EngineJobQueueDiagnostics jobQueue = {};
+
+    /** @brief Counters from consuming retained manifest asset load requests. */
+    TerrainManifestAssetLoadSummary loadConsume = {};
+
+    /** @brief True when retained load requests were fully consumed. */
+    bool loadConsumed = false;
+
+    /** @brief Compact reconcile counters such as pending jobs and final readiness totals. */
+    TerrainManifestAssetLoadJobReconcileSummary reconcile = {};
+
+    /** @brief Final manifest asset handle readiness counters after successful replanning. */
+    TerrainManifestAssetReadinessSummary readiness = {};
+};
+
 /** @brief Value snapshot of the most recent terrain asset batch resolution. */
 struct TerrainAssetBatchResolveDiagnostics
 {
@@ -137,6 +183,30 @@ EngineJobQueueDiagnostics makeEngineJobQueueDiagnostics(const EngineJobQueue& qu
  */
 TerrainManifestAssetLoadJobDiagnostics makeTerrainManifestAssetLoadJobDiagnostics(
     const TerrainManifestAssetLoadJobCoordinatorResult& result,
+    const EngineJobQueue& jobs);
+
+/**
+ * @brief Builds reusable diagnostics from schedule-only manifest asset-load job mirroring.
+ *
+ * The returned value copies counters only. It does not retain references to
+ * job records, manifests, load requests, renderer handles, or resource
+ * descriptors. The job queue is inspected for current pending counts and is
+ * not mutated.
+ */
+TerrainManifestAssetLoadJobScheduleDiagnostics makeTerrainManifestAssetLoadJobScheduleDiagnostics(
+    const TerrainManifestAssetLoadJobScheduleResult& result,
+    const EngineJobQueue& jobs);
+
+/**
+ * @brief Builds reusable diagnostics from external manifest asset-load job reconciliation.
+ *
+ * The returned value copies counters only. It does not retain references to
+ * job records, manifests, load requests, renderer handles, or readiness
+ * records. The job queue is inspected for current pending counts and is not
+ * mutated.
+ */
+TerrainManifestAssetLoadJobReconcileDiagnostics makeTerrainManifestAssetLoadJobReconcileDiagnostics(
+    const TerrainManifestAssetLoadJobReconcileResult& result,
     const EngineJobQueue& jobs);
 
 /**

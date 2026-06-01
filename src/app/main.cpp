@@ -755,6 +755,7 @@ struct SampleTerrainResidencyControls
     bool terrainStreamingRunOnce = false;
     bool terrainStreamingUseSchedulerTick = false;
     bool terrainStreamingSchedulerRunOnce = false;
+    bool terrainStreamingSchedulerExternalLoadScheduling = false;
     int streamingLoadRadius = 0;
     int streamingResidentRadius = 0;
     bool streamingUseAutomaticBudgets = true;
@@ -1123,6 +1124,10 @@ full_engine::TerrainStreamingSchedulerTickResult runSampleTerrainStreamingSchedu
 
     full_engine::TerrainStreamingSchedulerTickOptions options;
     options.loopUpdate.runtime = runtimeOptions;
+    if (controls.terrainStreamingSchedulerExternalLoadScheduling)
+    {
+        options.loadJobMode = full_engine::TerrainStreamingSchedulerLoadJobMode::ScheduleOnly;
+    }
 
     return full_engine::runTerrainStreamingSchedulerTick(
         controls.streamingLoop,
@@ -1893,6 +1898,16 @@ void drawTerrainDiagnosticsPanel(
         {
             terrainResidencyControls.terrainStreamingSchedulerRunOnce = true;
         }
+        ImGui::Checkbox(
+            "External Load Scheduling",
+            &terrainResidencyControls.terrainStreamingSchedulerExternalLoadScheduling);
+        ImGui::SameLine();
+        if (ImGui::Button("Reconcile Load Jobs"))
+        {
+            (void)streamingLoop.reconcileScheduledAssetLoadJobs(
+                engineTerrainAssetHandles,
+                engineTerrainAssetHandles);
+        }
         ImGui::InputInt("Streaming Load Radius", &terrainResidencyControls.streamingLoadRadius);
         ImGui::InputInt("Streaming Resident Radius", &terrainResidencyControls.streamingResidentRadius);
         ImGui::Checkbox("Automatic streaming budgets", &terrainResidencyControls.streamingUseAutomaticBudgets);
@@ -2001,13 +2016,53 @@ void drawTerrainDiagnosticsPanel(
             static_cast<unsigned long long>(schedulerTick.runtimeBacklogCount),
             static_cast<unsigned long long>(schedulerTick.maxAssetLoadJobs));
         ImGui::Text(
-            "Scheduler phases: load %s (%s), streaming %s (%s)",
+            "Scheduler phases: load %s (%s), schedule %s (%s), streaming %s (%s)",
             schedulerTick.loadJobsRan ? "ran" : "skipped",
             full_engine::terrainManifestAssetLoadJobCoordinatorStatusName(
                 schedulerTick.loadJobStatus),
+            schedulerTick.loadJobsScheduled ? "ran" : "skipped",
+            full_engine::terrainManifestAssetLoadJobScheduleStatusName(
+                schedulerTick.scheduledLoadJobStatus),
             schedulerTick.streamingRan ? "ran" : "skipped",
             full_engine::terrainStreamingLoopUpdateStatusName(
                 schedulerTick.streamingStatus));
+        ImGui::Text(
+            "Scheduler scheduled jobs: pending loads %llu/%llu, jobs %llu, mirror %llu/%llu/%llu",
+            static_cast<unsigned long long>(schedulerTick.scheduledInitialPendingLoadRequestCount),
+            static_cast<unsigned long long>(schedulerTick.scheduledFinalPendingLoadRequestCount),
+            static_cast<unsigned long long>(schedulerTick.scheduledPendingJobCount),
+            static_cast<unsigned long long>(schedulerTick.scheduledLoadJobMirror.queuedCount),
+            static_cast<unsigned long long>(schedulerTick.scheduledLoadJobMirror.alreadyQueuedCount),
+            static_cast<unsigned long long>(schedulerTick.scheduledLoadJobMirror.invalidArgumentCount));
+        ImGui::Text(
+            "Load job reconcile: %s, pending loads %llu/%llu, jobs %llu/%llu, removed %llu",
+            full_engine::terrainManifestAssetLoadJobReconcileStatusName(
+                loopDiagnostics.reconciledLoadJobs.status),
+            static_cast<unsigned long long>(
+                loopDiagnostics.reconciledLoadJobs.reconcile.initialPendingLoadRequestCount),
+            static_cast<unsigned long long>(
+                loopDiagnostics.reconciledLoadJobs.reconcile.finalPendingLoadRequestCount),
+            static_cast<unsigned long long>(
+                loopDiagnostics.reconciledLoadJobs.reconcile.initialPendingJobCount),
+            static_cast<unsigned long long>(
+                loopDiagnostics.reconciledLoadJobs.reconcile.finalPendingJobCount),
+            static_cast<unsigned long long>(
+                loopDiagnostics.reconciledLoadJobs.reconcile.removedScheduledJobCount));
+        ImGui::Text(
+            "Reconcile consume: loaded/already/missing/rejected %llu/%llu/%llu/%llu%s, ready/missing %llu/%llu",
+            static_cast<unsigned long long>(
+                loopDiagnostics.reconciledLoadJobs.loadConsume.loadedCount),
+            static_cast<unsigned long long>(
+                loopDiagnostics.reconciledLoadJobs.loadConsume.alreadyLoadedCount),
+            static_cast<unsigned long long>(
+                loopDiagnostics.reconciledLoadJobs.loadConsume.missingHandleCount),
+            static_cast<unsigned long long>(
+                loopDiagnostics.reconciledLoadJobs.loadConsume.catalogRejectedCount),
+            loopDiagnostics.reconciledLoadJobs.loadConsumed ? ", consumed" : "",
+            static_cast<unsigned long long>(
+                loopDiagnostics.reconciledLoadJobs.reconcile.finalReadyHandleCount),
+            static_cast<unsigned long long>(
+                loopDiagnostics.reconciledLoadJobs.reconcile.finalMissingHandleCount));
         const std::vector<full_engine::TerrainStreamingTickEvent> streamingTicks =
             streamingLoop.tickEvents();
         const std::size_t firstStreamingTick =
