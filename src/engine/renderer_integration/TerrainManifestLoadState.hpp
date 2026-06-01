@@ -7,6 +7,7 @@
 #include "engine/renderer_integration/TerrainManifestAssetLoadRequests.hpp"
 #include "engine/renderer_integration/TerrainManifestAssetReadiness.hpp"
 #include "engine/renderer_integration/TerrainManifestAssetSourcePlan.hpp"
+#include "engine/renderer_integration/AssetSourceUploadIntent.hpp"
 
 #include <cstddef>
 
@@ -109,6 +110,9 @@ public:
     /** @brief Returns the latest source lookup result for retained load requests. */
     const TerrainManifestAssetSourceRequestPlan& latestSourceRequests() const noexcept;
 
+    /** @brief Returns the latest renderer-facing upload-intent plan for retained source records. */
+    const AssetSourceUploadIntentPlan& latestSourceUploadIntents() const noexcept;
+
     /** @brief Returns the number of pending retained asset load requests. */
     std::size_t pendingLoadRequestCount() const noexcept;
 
@@ -170,12 +174,28 @@ public:
      * This uses `latestLoadRequests()` and the retained source catalog. Missing
      * source metadata is diagnostic-only in this slice and does not change the
      * pending load request queue, job queues, handle catalogs, manifests, or
-     * runtime state.
+     * runtime state. The latest source upload-intent plan is refreshed from the
+     * resulting source request plan.
      *
      * @return Retained value plan owned by this state until the next source
      * planning, source mutation, load-plan mutation, or manifest mutation call.
      */
     const TerrainManifestAssetSourceRequestPlan& planAssetSources();
+
+    /**
+     * @brief Translates latest retained source mappings into renderer upload expectations.
+     *
+     * This uses `latestSourceRequests()` and copies source metadata into a
+     * renderer-facing upload-intent plan. It does not read files, allocate
+     * bytes, resolve renderer handles, create renderer resources, mutate load
+     * queues, run jobs, or call renderer APIs.
+     *
+     * @return Retained value plan owned by this state until the next upload
+     * intent planning, source planning, source mutation, load-plan mutation, or
+     * manifest mutation call.
+     */
+    const AssetSourceUploadIntentPlan& planAssetSourceUploadIntents();
+
 
     /**
      * @brief Consumes retained pending load requests using externally supplied handles.
@@ -297,5 +317,6 @@ private:
     AssetSourceCatalog assetSources_ = {};
     bool hasAssetSources_ = false;
     TerrainManifestAssetSourceRequestPlan latestSourceRequests_ = {};
+    AssetSourceUploadIntentPlan latestSourceUploadIntents_ = {};
 };
 } // namespace full_engine

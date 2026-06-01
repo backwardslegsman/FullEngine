@@ -134,6 +134,15 @@ full_engine::AssetSourceCatalog sourceCatalog()
     return catalog;
 }
 
+full_engine::AssetSourceCatalog sourceCatalogWithUnsupportedTextureUpload()
+{
+    full_engine::AssetSourceCatalog catalog = sourceCatalog();
+    full_engine::AssetSourceRecord texture = source(30, full_engine::AssetKind::Texture, "textures/terrain-mips.dds");
+    texture.descriptor.texture.mipCount = 2;
+    (void)catalog.updateSource(texture);
+    return catalog;
+}
+
 full_engine::TerrainManifestAssetLoadJobCompletion completion(
     const std::uint64_t id,
     const full_engine::AssetKind kind,
@@ -270,6 +279,7 @@ void testDefaultState(std::vector<std::string>& failures)
     expect(state.latestDiagnostics().loadService.retainedRequestCount == 0, "default diagnostics have no retained service work", failures);
     expect(state.latestDiagnostics().assetSources.retainedSourceCount == 0, "default diagnostics have no retained sources", failures);
     expect(state.latestDiagnostics().assetSources.requests.mappedCount == 0, "default diagnostics have no mapped sources", failures);
+    expect(state.latestDiagnostics().assetSourceUploadIntents.recordCount == 0, "default diagnostics have no upload intents", failures);
     expect(
         state.latestDiagnostics().loadService.completionReconcileStatus ==
             full_engine::TerrainManifestAssetLoadJobCompletionReconcileStatus::NoPendingLoads,
@@ -325,23 +335,33 @@ void testAssetSourcePlanningDiagnostics(std::vector<std::string>& failures)
     state.setAssetSources(sourceCatalog());
     const full_engine::TerrainManifestAssetSourceRequestPlan& planned =
         state.planAssetSources();
+    const full_engine::AssetSourceUploadIntentPlan& uploadIntents =
+        state.planAssetSourceUploadIntents();
 
     expect(planned.summary.mappedCount == 3, "loop source planning maps load requests", failures);
     expect(state.manifestLoad().hasAssetSources(), "loop source planning retains sources", failures);
     expect(state.latestAssetSourceRequests().summary.mappedCount == 3, "loop source planning stores latest source plan", failures);
+    expect(state.latestAssetSourceUploadIntents().summary.plannedCount == 3, "loop upload intent planning stores latest plan", failures);
     expect(state.latestDiagnostics().assetSources.retainedSourceCount == 3, "loop diagnostics copy retained source count", failures);
     expect(state.latestDiagnostics().assetSources.requests.mappedCount == 3, "loop diagnostics copy mapped source count", failures);
+    expect(uploadIntents.records.size() == 3, "loop upload intent planning returns records", failures);
+    expect(state.latestDiagnostics().assetSourceUploadIntents.recordCount == 3, "loop diagnostics copy upload intent count", failures);
+    expect(state.latestDiagnostics().assetSourceUploadIntents.summary.plannedCount == 3, "loop diagnostics copy planned upload intents", failures);
     expect(state.latestDiagnostics().pendingLoadRequestCount == 3, "loop source planning preserves pending load requests", failures);
 
     state.clearAssetSources();
     expect(!state.manifestLoad().hasAssetSources(), "loop clearAssetSources clears sources", failures);
     expect(state.latestDiagnostics().assetSources.retainedSourceCount == 0, "loop clearAssetSources refreshes source diagnostics", failures);
     expect(state.latestAssetSourceRequests().records.empty(), "loop clearAssetSources clears source plan", failures);
+    expect(state.latestAssetSourceUploadIntents().records.empty(), "loop clearAssetSources clears upload intent plan", failures);
+    expect(state.latestDiagnostics().assetSourceUploadIntents.recordCount == 0, "loop clearAssetSources refreshes upload intent diagnostics", failures);
 
     state.setAssetSources(sourceCatalog());
     (void)state.planAssetSources();
+    (void)state.planAssetSourceUploadIntents();
     state.clearManifest();
     expect(state.latestDiagnostics().assetSources.retainedSourceCount == 0, "loop clearManifest clears source diagnostics", failures);
+    expect(state.latestDiagnostics().assetSourceUploadIntents.recordCount == 0, "loop clearManifest clears upload intent diagnostics", failures);
 
     std::remove(path);
 }
@@ -546,10 +566,13 @@ void testRetainedLoadServiceReconcilesScheduledJobs(std::vector<std::string>& fa
 
     full_engine::TerrainStreamingLoopState state;
     (void)state.reloadManifestAndQueueMissingAssetLoads(path, {});
+    state.setAssetSources(sourceCatalog());
     (void)state.scheduleAssetLoadJobs();
 
     const full_engine::TerrainManifestAssetLoadServiceEnqueueResult& enqueued =
         state.enqueueScheduledAssetLoadWork();
+    const full_engine::TerrainManifestAssetLoadServiceInputDiagnostics inputDiagnostics =
+        state.latestDiagnostics().loadService.input;
     CallbackState callback;
     callback.handles = readyHandles();
     const full_engine::TerrainManifestAssetLoadServiceTickResult& tick =
@@ -560,6 +583,11 @@ void testRetainedLoadServiceReconcilesScheduledJobs(std::vector<std::string>& fa
 
     expect(enqueued.summary.queuedCount == 3, "loop service enqueues scheduled work", failures);
     expect(state.latestLoadServiceWorkPackets().summary.packetizedCount == 3, "loop service stores packet diagnostics", failures);
+    expect(inputDiagnostics.retainedRequestCount == 3, "loop service input diagnostics count retained requests", failures);
+    expect(inputDiagnostics.sourceMappedCount == 3, "loop service input diagnostics count mapped sources", failures);
+    expect(inputDiagnostics.sourceMissingCount == 0, "loop service input diagnostics count no missing sources", failures);
+    expect(inputDiagnostics.uploadIntentPlannedCount == 3, "loop service input diagnostics count planned upload intents", failures);
+    expect(inputDiagnostics.uploadIntentMissingCount == 0, "loop service input diagnostics count no missing upload intents", failures);
     expect(tick.summary.loadedCount == 3, "loop service tick loads three requests", failures);
     expect(state.manifestAssetLoadService().completedCount() == 3, "loop service retains completed records", failures);
     expect(state.latestDiagnostics().loadService.workPackets.packetizedCount == 3, "loop service diagnostics copy packet count", failures);
@@ -597,6 +625,8 @@ void testRetainedLoadServiceMissingAndFailedCallbacks(std::vector<std::string>& 
     (void)state.reloadManifestAndQueueMissingAssetLoads(path, {});
     (void)state.scheduleAssetLoadJobs();
     (void)state.enqueueScheduledAssetLoadWork();
+    expect(state.latestDiagnostics().loadService.input.sourceMissingCount == 3, "loop service input diagnostics count missing sources", failures);
+    expect(state.latestDiagnostics().loadService.input.uploadIntentMissingCount == 3, "loop service input diagnostics count missing upload intents", failures);
 
     CallbackState missing;
     missing.handles = readyHandles();
@@ -657,6 +687,28 @@ void testRetainedLoadServiceMissingAndFailedCallbacks(std::vector<std::string>& 
     expect(state.latestLoadServiceTickResult().summary.attemptedCount == 0, "clearJobs resets service tick diagnostics", failures);
     expect(state.latestDiagnostics().loadService.retainedRequestCount == 0, "clearJobs resets service diagnostics", failures);
     expect(state.latestDiagnostics().loadService.tick.attemptedCount == 0, "clearJobs resets service tick diagnostics snapshot", failures);
+
+    std::remove(path);
+}
+
+void testRetainedLoadServiceReportsUnsupportedUploadIntent(std::vector<std::string>& failures)
+{
+    const char* path = "terrain_streaming_loop_service_upload_unsupported.jsonl";
+    writeManifest(path);
+
+    full_engine::TerrainStreamingLoopState state;
+    (void)state.reloadManifestAndQueueMissingAssetLoads(path, {});
+    state.setAssetSources(sourceCatalogWithUnsupportedTextureUpload());
+    (void)state.scheduleAssetLoadJobs();
+    (void)state.enqueueScheduledAssetLoadWork();
+
+    expect(state.latestDiagnostics().loadService.input.retainedRequestCount == 3, "loop service unsupported upload diagnostics count retained requests", failures);
+    expect(state.latestDiagnostics().loadService.input.sourceMappedCount == 3, "loop service unsupported upload diagnostics count mapped sources", failures);
+    expect(state.latestDiagnostics().loadService.input.uploadIntentPlannedCount == 2, "loop service unsupported upload diagnostics count planned intents", failures);
+    expect(
+        state.latestDiagnostics().loadService.input.uploadIntentUnsupportedRendererContractCount == 1,
+        "loop service unsupported upload diagnostics count unsupported intent",
+        failures);
 
     std::remove(path);
 }
@@ -813,6 +865,7 @@ int main()
     testExternalCompletionInboxBlockedAndCleared(failures);
     testRetainedLoadServiceReconcilesScheduledJobs(failures);
     testRetainedLoadServiceMissingAndFailedCallbacks(failures);
+    testRetainedLoadServiceReportsUnsupportedUploadIntent(failures);
     testStreamingUpdateQueuesRuntimeIntent(failures);
     testTickHistoryRetainsRecentEvents(failures);
     testClearResetsOwnedState(failures);

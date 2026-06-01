@@ -152,12 +152,24 @@ Implemented pieces:
   asset IDs to opaque caller-supplied source URIs and typed renderer-free
   mesh/material/texture source descriptors, plus request-order lookup
   diagnostics for mapping missing load intent to those source records
+- renderer-free loaded asset payloads for mesh, texture, and material data,
+  giving future importers a copied CPU data contract before renderer upload,
+  handle creation, async IO, or renderer-resource ownership
 - upload-intent planning that translates mapped source descriptors into public
   renderer mesh/texture/material upload expectations without source bytes,
   renderer handles, renderer calls, or resource creation
+- loaded-payload upload planning that translates validated CPU mesh/texture
+  payloads into owned renderer descriptor work and material upload
+  expectations, ready for a later caller-owned upload executor without
+  invoking renderer APIs or creating resources
+- loaded-payload upload execution that consumes that planned mesh/texture work
+  through caller-owned public renderer `createMesh`/`createTexture` calls and
+  records successful handles in `RendererAssetHandleCatalog`, while leaving
+  material handle resolution and renderer resource destruction policy external
 - retained manifest asset source planning that stores caller-supplied source
   catalogs on `TerrainManifestLoadState` and exposes mapped/missing source
-  counters through loop diagnostics without changing loader or streaming policy
+  counters plus renderer upload-intent counters through loop diagnostics
+  without changing loader or streaming policy
 - retained manifest asset load request queues that deduplicate pending
   mesh/material/texture load intent over repeated readiness scans without
   consuming requests or creating renderer resources
@@ -197,6 +209,9 @@ Implemented pieces:
 - retained streaming loop ownership of that asset-load service, so scheduled
   external load jobs can be packetized, progressed, and reconciled from engine
   loop state instead of temporary sample-side vectors
+- retained asset-load service input diagnostics that report whether queued
+  service work has mapped source metadata and renderer upload-intent coverage
+  before caller-owned callbacks or workers attempt to produce handles
 - an external manifest asset-load job reconcile pass that consumes retained
   load requests only after caller-owned completed handles satisfy the whole
   batch, removes matching scheduled jobs, and replans readiness
@@ -359,6 +374,8 @@ Still future work:
   creation policy
 - production terrain streaming policy and editor-owned residency controls
 - real engine-owned mesh/material/texture creation and lifetime policy
+- material upload execution once material texture asset IDs can be resolved to
+  renderer texture handles
 - renderer descriptor conversion for non-terrain draws and cameras
 - scene/entity ownership, gameplay simulation, persistence, and editor tooling
 

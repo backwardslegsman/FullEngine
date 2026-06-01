@@ -148,6 +148,9 @@ struct TerrainStreamingLoopDiagnostics
     /** @brief Latest retained manifest asset source lookup diagnostics. */
     TerrainManifestAssetSourceDiagnostics assetSources = {};
 
+    /** @brief Latest retained source-to-renderer-upload intent diagnostics. */
+    AssetSourceUploadIntentDiagnostics assetSourceUploadIntents = {};
+
     /** @brief Pending caller-owned completion records retained for external-completion scheduling. */
     std::size_t pendingExternalCompletionCount = 0;
 
@@ -254,6 +257,9 @@ public:
     /** @brief Returns latest retained asset source lookup diagnostics. */
     const TerrainManifestAssetSourceRequestPlan& latestAssetSourceRequests() const noexcept;
 
+    /** @brief Returns latest retained source-to-renderer-upload intent diagnostics. */
+    const AssetSourceUploadIntentPlan& latestAssetSourceUploadIntents() const noexcept;
+
     /**
      * @brief Maps latest retained load requests to retained asset source metadata.
      *
@@ -261,6 +267,15 @@ public:
      * load-service, streaming, or runtime update behavior in this slice.
      */
     const TerrainManifestAssetSourceRequestPlan& planAssetSources();
+
+    /**
+     * @brief Translates latest source mappings into renderer upload expectations.
+     *
+     * The retained plan describes renderer-facing upload contracts only. It
+     * does not read files, allocate bytes, resolve handles, run importers,
+     * create renderer resources, or apply terrain runtime queues.
+     */
+    const AssetSourceUploadIntentPlan& planAssetSourceUploadIntents();
 
     /** @brief Returns latest manifest-aware streaming update diagnostics. */
     const TerrainStreamingManifestUpdateResult& latestStreamingUpdate() const noexcept;

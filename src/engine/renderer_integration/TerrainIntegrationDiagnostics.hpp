@@ -1,6 +1,7 @@
 #pragma once
 
 #include "engine/jobs/JobQueue.hpp"
+#include "engine/renderer_integration/AssetSourceUploadIntent.hpp"
 #include "engine/renderer_integration/TerrainAssetResolver.hpp"
 #include "engine/renderer_integration/TerrainChunkRequests.hpp"
 #include "engine/renderer_integration/TerrainDescriptorBuilder.hpp"
@@ -103,6 +104,34 @@ struct TerrainManifestAssetLoadJobReconcileDiagnostics
     TerrainManifestAssetReadinessSummary readiness = {};
 };
 
+/** @brief Value snapshot of source/upload readiness for retained load-service work. */
+struct TerrainManifestAssetLoadServiceInputDiagnostics
+{
+    /** @brief Number of retained load-service work records inspected. */
+    std::size_t retainedRequestCount = 0;
+
+    /** @brief Retained work records with matching source metadata. */
+    std::size_t sourceMappedCount = 0;
+
+    /** @brief Retained work records without matching source metadata. */
+    std::size_t sourceMissingCount = 0;
+
+    /** @brief Retained work records whose matching source request is invalid. */
+    std::size_t sourceInvalidCount = 0;
+
+    /** @brief Retained work records with renderer-facing upload intent ready. */
+    std::size_t uploadIntentPlannedCount = 0;
+
+    /** @brief Retained work records without a matching upload intent. */
+    std::size_t uploadIntentMissingCount = 0;
+
+    /** @brief Retained work records whose source cannot produce upload intent. */
+    std::size_t uploadIntentInvalidSourceCount = 0;
+
+    /** @brief Retained work records outside the current renderer upload contract. */
+    std::size_t uploadIntentUnsupportedRendererContractCount = 0;
+};
+
 /** @brief Value snapshot of retained manifest asset-load service progress. */
 struct TerrainManifestAssetLoadServiceDiagnostics
 {
@@ -111,6 +140,9 @@ struct TerrainManifestAssetLoadServiceDiagnostics
 
     /** @brief Counters from retaining converted packets in the service. */
     TerrainManifestAssetLoadServiceEnqueueSummary enqueue = {};
+
+    /** @brief Source metadata and upload-intent readiness for retained work. */
+    TerrainManifestAssetLoadServiceInputDiagnostics input = {};
 
     /** @brief High-level status from the latest retained service tick. */
     TerrainManifestAssetLoadServiceTickStatus tickStatus =
@@ -162,6 +194,16 @@ struct TerrainManifestAssetSourceDiagnostics
 
     /** @brief Counters from mapping latest manifest load requests to source records. */
     TerrainManifestAssetSourceRequestSummary requests = {};
+};
+
+/** @brief Value snapshot of retained manifest asset source upload-intent planning. */
+struct AssetSourceUploadIntentDiagnostics
+{
+    /** @brief Number of upload-intent records in the latest plan. */
+    std::size_t recordCount = 0;
+
+    /** @brief Counters from translating source mappings to renderer upload expectations. */
+    AssetSourceUploadIntentSummary summary = {};
 };
 
 /** @brief Value snapshot of the most recent terrain asset batch resolution. */
@@ -288,6 +330,24 @@ TerrainManifestAssetLoadServiceDiagnostics makeTerrainManifestAssetLoadServiceDi
     const TerrainManifestAssetLoadService& service);
 
 /**
+ * @brief Builds reusable diagnostics from retained service work and source/upload plans.
+ *
+ * In addition to the basic service counters, the returned value reports
+ * whether retained work has matching source metadata and renderer-facing
+ * upload intent. It copies counters only and does not retain work records,
+ * source records, upload records, descriptors, manifests, handles, or renderer
+ * resources.
+ */
+TerrainManifestAssetLoadServiceDiagnostics makeTerrainManifestAssetLoadServiceDiagnostics(
+    const TerrainManifestAssetLoadJobWorkPacketResult& workPackets,
+    const TerrainManifestAssetLoadServiceEnqueueResult& enqueue,
+    const TerrainManifestAssetLoadServiceTickResult& tick,
+    const TerrainManifestAssetLoadJobCompletionReconcileResult& completionReconcile,
+    const TerrainManifestAssetLoadService& service,
+    const TerrainManifestAssetSourceRequestPlan& sourceRequests,
+    const AssetSourceUploadIntentPlan& uploadIntents);
+
+/**
  * @brief Builds reusable diagnostics from manifest asset source planning.
  *
  * The returned value copies counters only. It does not retain source records,
@@ -298,6 +358,16 @@ TerrainManifestAssetLoadServiceDiagnostics makeTerrainManifestAssetLoadServiceDi
 TerrainManifestAssetSourceDiagnostics makeTerrainManifestAssetSourceDiagnostics(
     const AssetSourceCatalog& sources,
     const TerrainManifestAssetSourceRequestPlan& plan);
+
+/**
+ * @brief Builds reusable diagnostics from source upload-intent planning.
+ *
+ * The returned value copies counters only. It does not retain upload-intent
+ * records, source records, manifests, renderer handles, byte buffers, or
+ * renderer resources. The plan is inspected read-only and is not mutated.
+ */
+AssetSourceUploadIntentDiagnostics makeAssetSourceUploadIntentDiagnostics(
+    const AssetSourceUploadIntentPlan& plan);
 
 /**
  * @brief Builds reusable diagnostics from a terrain asset batch resolve result.

@@ -1858,6 +1858,7 @@ void drawTerrainDiagnosticsPanel(
                 terrainResidencyControls.lastImportedManifestTerrainChunkCount = manifestReload.load.terrainChunkCount;
                 streamingLoop.setAssetSources(makeSampleTerrainAssetSourceCatalog());
                 (void)streamingLoop.planAssetSources();
+                (void)streamingLoop.planAssetSourceUploadIntents();
 
                 const std::vector<full_engine::WorldChunkDesc> sampleWorldDescs =
                     sampleTerrainWorldDescs(sampleTerrainChunks);
@@ -1923,6 +1924,18 @@ void drawTerrainDiagnosticsPanel(
                 loopDiagnostics.assetSources.requests.missingSourceCount),
             static_cast<unsigned long long>(
                 loopDiagnostics.assetSources.requests.invalidRequestCount));
+        ImGui::Text(
+            "Manifest upload intents: records %llu, planned/unmapped/invalid/unsupported %llu/%llu/%llu/%llu",
+            static_cast<unsigned long long>(
+                loopDiagnostics.assetSourceUploadIntents.recordCount),
+            static_cast<unsigned long long>(
+                loopDiagnostics.assetSourceUploadIntents.summary.plannedCount),
+            static_cast<unsigned long long>(
+                loopDiagnostics.assetSourceUploadIntents.summary.sourceNotMappedCount),
+            static_cast<unsigned long long>(
+                loopDiagnostics.assetSourceUploadIntents.summary.invalidSourceCount),
+            static_cast<unsigned long long>(
+                loopDiagnostics.assetSourceUploadIntents.summary.unsupportedRendererContractCount));
         ImGui::Text(
             "Manifest load queue: pending %llu, queued/already/invalid %llu/%llu/%llu",
             static_cast<unsigned long long>(manifestLoad.pendingLoadRequestCount()),
@@ -2298,6 +2311,22 @@ void drawTerrainDiagnosticsPanel(
                 loopDiagnostics.loadService.tick.missingCount),
             static_cast<unsigned long long>(
                 loopDiagnostics.loadService.tick.failedCount));
+        ImGui::Text(
+            "External load service inputs: source mapped/missing/invalid %llu/%llu/%llu, upload planned/missing/invalid/unsupported %llu/%llu/%llu/%llu",
+            static_cast<unsigned long long>(
+                loopDiagnostics.loadService.input.sourceMappedCount),
+            static_cast<unsigned long long>(
+                loopDiagnostics.loadService.input.sourceMissingCount),
+            static_cast<unsigned long long>(
+                loopDiagnostics.loadService.input.sourceInvalidCount),
+            static_cast<unsigned long long>(
+                loopDiagnostics.loadService.input.uploadIntentPlannedCount),
+            static_cast<unsigned long long>(
+                loopDiagnostics.loadService.input.uploadIntentMissingCount),
+            static_cast<unsigned long long>(
+                loopDiagnostics.loadService.input.uploadIntentInvalidSourceCount),
+            static_cast<unsigned long long>(
+                loopDiagnostics.loadService.input.uploadIntentUnsupportedRendererContractCount));
         ImGui::Text(
             "External load service retained: pending/completed/failed/completions %llu/%llu/%llu/%llu, completion reconcile %s",
             static_cast<unsigned long long>(loopDiagnostics.loadService.retainedPendingCount),

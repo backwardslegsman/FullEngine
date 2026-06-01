@@ -72,7 +72,10 @@ inbox, and let a later scheduler tick reconcile those records before streaming
 proceeds. This remains a demo of the handoff contract rather than engine-owned
 worker execution. The same panel also builds an opaque sample asset source
 catalog after manifest validation and displays retained/mapped/missing source
-counters without treating missing source metadata as a streaming failure.
+counters plus upload-intent counters without treating missing source metadata
+as a streaming failure. Retained load-service diagnostics also report whether
+the actual queued service work has mapped source metadata and renderer
+upload-intent coverage before worker callbacks attempt to produce handles.
 
 Worker-facing completion publish helpers live in `renderer_integration` beside
 the inbox, so external worker code can publish batches into an inbox without

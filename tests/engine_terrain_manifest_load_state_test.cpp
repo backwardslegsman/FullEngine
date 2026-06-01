@@ -153,6 +153,7 @@ void testDefaultState(std::vector<std::string>& failures)
     expect(!state.hasAssetSources(), "default state has no retained source catalog", failures);
     expect(state.assetSources().sourceCount() == 0, "default retained source catalog is empty", failures);
     expect(state.latestSourceRequests().records.empty(), "default source request diagnostics are empty", failures);
+    expect(state.latestSourceUploadIntents().records.empty(), "default source upload intent diagnostics are empty", failures);
     expect(
         full_engine::terrainManifestLoadStageStatusName(full_engine::TerrainManifestLoadStageStatus::NoManifest) ==
             std::string("NoManifest"),
@@ -294,6 +295,8 @@ void testAssetSourcesMapLatestLoadRequests(std::vector<std::string>& failures)
     (void)state.planAssetLoadRequests();
     const full_engine::TerrainManifestAssetSourceRequestPlan& sources =
         state.planAssetSources();
+    const full_engine::AssetSourceUploadIntentPlan& uploadIntents =
+        state.planAssetSourceUploadIntents();
 
     expect(state.hasAssetSources(), "setAssetSources retains source catalog", failures);
     expect(state.assetSources().sourceCount() == 3, "setAssetSources stores source records", failures);
@@ -303,6 +306,14 @@ void testAssetSourcesMapLatestLoadRequests(std::vector<std::string>& failures)
     expect(sources.records[0].source.uri == "meshes/terrain.mesh", "source planning copies mesh source", failures);
     expect(sources.records[1].source.uri == "materials/terrain.mat", "source planning copies material source", failures);
     expect(sources.records[2].source.uri == "textures/terrain_splat.dds", "source planning copies texture source", failures);
+    expect(uploadIntents.summary.plannedCount == 3, "upload intent planning maps all source records", failures);
+    expect(uploadIntents.summary.sourceNotMappedCount == 0, "upload intent planning has no unmapped records", failures);
+    expect(uploadIntents.records.size() == 3, "upload intent planning returns records", failures);
+    expect(uploadIntents.records[0].mesh.vertexCount == 4, "upload intent planning copies mesh expectation", failures);
+    expect(
+        uploadIntents.records[2].texture.semantic == full_renderer::TextureSemantic::TerrainSplat,
+        "upload intent planning maps texture semantic",
+        failures);
     expect(state.pendingLoadRequestCount() == 0, "source planning does not queue load requests", failures);
 
     (void)state.queueLatestAssetLoadRequests();
@@ -327,26 +338,35 @@ void testAssetSourceMissingAndReset(std::vector<std::string>& failures)
     expect(planned.summary.mappedCount == 1, "source planning maps available source", failures);
     expect(planned.summary.missingSourceCount == 2, "source planning reports missing and wrong-kind sources", failures);
     expect(planned.summary.invalidRequestCount == 0, "source planning has no invalid requests", failures);
+    expect(
+        state.latestSourceUploadIntents().summary.sourceNotMappedCount == 2,
+        "upload intent diagnostics count source records that were not mapped",
+        failures);
 
     state.clearAssetSources();
     expect(!state.hasAssetSources(), "clearAssetSources clears retained source flag", failures);
     expect(state.assetSources().sourceCount() == 0, "clearAssetSources clears source records", failures);
     expect(state.latestSourceRequests().records.empty(), "clearAssetSources clears source diagnostics", failures);
+    expect(state.latestSourceUploadIntents().records.empty(), "clearAssetSources clears upload intent diagnostics", failures);
     expect(state.latestLoadRequests().requests.size() == 3, "clearAssetSources preserves load request plan", failures);
 
     state.setAssetSources(sourceCatalog());
     (void)state.planAssetSources();
+    (void)state.planAssetSourceUploadIntents();
     state.setManifest(validManifest());
     expect(!state.hasAssetSources(), "setManifest clears retained source catalog", failures);
     expect(state.latestSourceRequests().records.empty(), "setManifest clears source diagnostics", failures);
+    expect(state.latestSourceUploadIntents().records.empty(), "setManifest clears upload intent diagnostics", failures);
 
     state.setAssetSources(sourceCatalog());
     (void)state.planAssetReadiness({});
     (void)state.planAssetLoadRequests();
     (void)state.planAssetSources();
+    (void)state.planAssetSourceUploadIntents();
     state.clearManifest();
     expect(!state.hasAssetSources(), "clearManifest clears retained source catalog", failures);
     expect(state.latestSourceRequests().records.empty(), "clearManifest clears source diagnostics", failures);
+    expect(state.latestSourceUploadIntents().records.empty(), "clearManifest clears upload intent diagnostics", failures);
 }
 
 void testLoadRequestsCanBeConsumed(std::vector<std::string>& failures)

@@ -38,6 +38,11 @@ int main()
         const full_engine::TerrainManifestAssetLoadServiceDiagnostics loadService;
         assert(loadService.workPackets.packetizedCount == 0);
         assert(loadService.enqueue.queuedCount == 0);
+        assert(loadService.input.retainedRequestCount == 0);
+        assert(loadService.input.sourceMappedCount == 0);
+        assert(loadService.input.sourceMissingCount == 0);
+        assert(loadService.input.uploadIntentPlannedCount == 0);
+        assert(loadService.input.uploadIntentMissingCount == 0);
         assert(loadService.tickStatus == full_engine::TerrainManifestAssetLoadServiceTickStatus::Idle);
         assert(loadService.tick.attemptedCount == 0);
         assert(loadService.retainedRequestCount == 0);
@@ -59,6 +64,13 @@ int main()
         assert(assetSources.requests.mappedCount == 0);
         assert(assetSources.requests.missingSourceCount == 0);
         assert(assetSources.requests.invalidRequestCount == 0);
+
+        const full_engine::AssetSourceUploadIntentDiagnostics uploadIntents;
+        assert(uploadIntents.recordCount == 0);
+        assert(uploadIntents.summary.plannedCount == 0);
+        assert(uploadIntents.summary.sourceNotMappedCount == 0);
+        assert(uploadIntents.summary.invalidSourceCount == 0);
+        assert(uploadIntents.summary.unsupportedRendererContractCount == 0);
     }
 
     {
@@ -328,6 +340,23 @@ int main()
         completion.reconcile.load.records.push_back({});
         completion.reconcile.readiness.records.push_back({});
 
+        full_engine::TerrainManifestAssetSourceRequestPlan sourceRequests;
+        full_engine::TerrainManifestAssetSourceRequestRecord mappedSource;
+        mappedSource.request = request;
+        mappedSource.status = full_engine::TerrainManifestAssetSourceRequestStatus::Mapped;
+        mappedSource.source.id = request.id;
+        mappedSource.source.kind = request.kind;
+        mappedSource.source.uri = "meshes/service.mesh";
+        mappedSource.source.descriptor.mesh.vertexCount = 4;
+        mappedSource.source.descriptor.mesh.indexCount = 6;
+        mappedSource.source.descriptor.mesh.localBounds.max[0] = 1.0f;
+        mappedSource.source.descriptor.mesh.localBounds.max[1] = 1.0f;
+        mappedSource.source.descriptor.mesh.localBounds.max[2] = 1.0f;
+        sourceRequests.records.push_back(mappedSource);
+        sourceRequests.summary.mappedCount = 1;
+        full_engine::AssetSourceUploadIntentPlan uploadIntents =
+            full_engine::buildAssetSourceUploadIntentPlan(sourceRequests);
+
         const std::size_t sourcePacketRecordCount = packets.records.size();
         const std::size_t sourcePacketCount = packets.packets.size();
         const std::size_t sourceEnqueueRecordCount = enqueue.records.size();
@@ -343,13 +372,20 @@ int main()
                 enqueue,
                 tick,
                 completion,
-                service);
+                service,
+                sourceRequests,
+                uploadIntents);
 
         assert(diagnostics.workPackets.packetizedCount == 1);
         assert(diagnostics.workPackets.skippedUnsupportedJobCount == 2);
         assert(diagnostics.workPackets.invalidPayloadCount == 3);
         assert(diagnostics.enqueue.queuedCount == 1);
         assert(diagnostics.enqueue.alreadyQueuedCount == 0);
+        assert(diagnostics.input.retainedRequestCount == 1);
+        assert(diagnostics.input.sourceMappedCount == 1);
+        assert(diagnostics.input.sourceMissingCount == 0);
+        assert(diagnostics.input.uploadIntentPlannedCount == 1);
+        assert(diagnostics.input.uploadIntentMissingCount == 0);
         assert(diagnostics.tickStatus == full_engine::TerrainManifestAssetLoadServiceTickStatus::Progressed);
         assert(diagnostics.tick.attemptedCount == 1);
         assert(diagnostics.tick.loadedCount == 1);
@@ -379,6 +415,34 @@ int main()
         assert(completion.publish.records.size() == sourceCompletionPublishRecordCount);
         assert(completion.reconcile.load.records.size() == sourceLoadRecordCount);
         assert(completion.reconcile.readiness.records.size() == sourceReadinessRecordCount);
+    }
+
+    {
+        const full_engine::TerrainManifestAssetLoadRequest request{
+            full_engine::AssetId{71},
+            full_engine::AssetKind::Texture};
+        const full_engine::TerrainManifestAssetLoadJobWorkPacket packet{
+            full_engine::engineJobIdForTerrainManifestAssetLoadRequest(request),
+            request,
+            full_engine::EngineJobPriority::Normal};
+
+        full_engine::TerrainManifestAssetLoadService service;
+        (void)service.enqueueWorkPackets(&packet, 1);
+
+        const full_engine::TerrainManifestAssetLoadServiceDiagnostics diagnostics =
+            full_engine::makeTerrainManifestAssetLoadServiceDiagnostics(
+                {},
+                {},
+                {},
+                {},
+                service,
+                full_engine::TerrainManifestAssetSourceRequestPlan{},
+                full_engine::AssetSourceUploadIntentPlan{});
+
+        assert(diagnostics.input.retainedRequestCount == 1);
+        assert(diagnostics.input.sourceMissingCount == 1);
+        assert(diagnostics.input.uploadIntentMissingCount == 1);
+        assert(diagnostics.input.uploadIntentPlannedCount == 0);
     }
 
     {
@@ -445,6 +509,28 @@ int main()
         assert(diagnostics.requests.invalidRequestCount == 5);
         assert(sources.sourceCount() == sourceCount);
         assert(plan.records.size() == recordCount);
+    }
+
+    {
+        full_engine::AssetSourceUploadIntentPlan plan;
+        plan.summary.plannedCount = 1;
+        plan.summary.sourceNotMappedCount = 2;
+        plan.summary.invalidSourceCount = 3;
+        plan.summary.unsupportedRendererContractCount = 4;
+        plan.records.push_back({});
+        plan.records.back().status = full_engine::AssetSourceUploadIntentStatus::Planned;
+
+        const std::size_t recordCount = plan.records.size();
+        const full_engine::AssetSourceUploadIntentDiagnostics diagnostics =
+            full_engine::makeAssetSourceUploadIntentDiagnostics(plan);
+
+        assert(diagnostics.recordCount == 1);
+        assert(diagnostics.summary.plannedCount == 1);
+        assert(diagnostics.summary.sourceNotMappedCount == 2);
+        assert(diagnostics.summary.invalidSourceCount == 3);
+        assert(diagnostics.summary.unsupportedRendererContractCount == 4);
+        assert(plan.records.size() == recordCount);
+        assert(plan.records[0].status == full_engine::AssetSourceUploadIntentStatus::Planned);
     }
 
     {

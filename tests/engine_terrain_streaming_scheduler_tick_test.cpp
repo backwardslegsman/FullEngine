@@ -1066,6 +1066,8 @@ void testSchedulerTickDiagnosticsDefaultAndCopiesCounters(std::vector<std::strin
     result.scheduledLoadJobs.pendingJobCount = 36;
     result.loadService.workPackets.packetizedCount = 37;
     result.loadService.enqueue.queuedCount = 38;
+    result.loadService.input.sourceMappedCount = 46;
+    result.loadService.input.uploadIntentPlannedCount = 47;
     result.loadService.tick.loadedCount = 39;
     result.loadService.completionReconcileStatus =
         full_engine::TerrainManifestAssetLoadJobCompletionReconcileStatus::Success;
@@ -1140,6 +1142,8 @@ void testSchedulerTickDiagnosticsDefaultAndCopiesCounters(std::vector<std::strin
     expect(diagnostics.scheduledPendingJobCount == 36, "diagnostics copies schedule pending jobs", failures);
     expect(diagnostics.loadService.workPackets.packetizedCount == 37, "diagnostics copies service packets", failures);
     expect(diagnostics.loadService.enqueue.queuedCount == 38, "diagnostics copies service enqueue", failures);
+    expect(diagnostics.loadService.input.sourceMappedCount == 46, "diagnostics copies service source input counters", failures);
+    expect(diagnostics.loadService.input.uploadIntentPlannedCount == 47, "diagnostics copies service upload input counters", failures);
     expect(diagnostics.loadService.tick.loadedCount == 39, "diagnostics copies service tick", failures);
     expect(
         diagnostics.loadService.completionReconcileStatus ==

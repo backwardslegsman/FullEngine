@@ -2,6 +2,114 @@
 
 namespace full_engine
 {
+namespace
+{
+bool requestMatches(
+    const TerrainManifestAssetLoadRequest& request,
+    const AssetId id,
+    const AssetKind kind) noexcept
+{
+    return request.id == id && request.kind == kind;
+}
+
+const TerrainManifestAssetSourceRequestRecord* findSourceRequest(
+    const TerrainManifestAssetSourceRequestPlan& sourceRequests,
+    const TerrainManifestAssetLoadRequest& request) noexcept
+{
+    for (const TerrainManifestAssetSourceRequestRecord& record : sourceRequests.records)
+    {
+        if (requestMatches(request, record.request.id, record.request.kind))
+        {
+            return &record;
+        }
+    }
+    return nullptr;
+}
+
+const AssetSourceUploadIntentRecord* findUploadIntent(
+    const AssetSourceUploadIntentPlan& uploadIntents,
+    const TerrainManifestAssetLoadRequest& request) noexcept
+{
+    for (const AssetSourceUploadIntentRecord& record : uploadIntents.records)
+    {
+        if (requestMatches(request, record.id, record.kind))
+        {
+            return &record;
+        }
+    }
+    return nullptr;
+}
+
+void countSourceRequest(
+    TerrainManifestAssetLoadServiceInputDiagnostics& diagnostics,
+    const TerrainManifestAssetSourceRequestRecord* const record) noexcept
+{
+    if (record == nullptr)
+    {
+        ++diagnostics.sourceMissingCount;
+        return;
+    }
+
+    switch (record->status)
+    {
+    case TerrainManifestAssetSourceRequestStatus::Mapped:
+        ++diagnostics.sourceMappedCount;
+        break;
+    case TerrainManifestAssetSourceRequestStatus::MissingSource:
+        ++diagnostics.sourceMissingCount;
+        break;
+    case TerrainManifestAssetSourceRequestStatus::InvalidRequest:
+        ++diagnostics.sourceInvalidCount;
+        break;
+    }
+}
+
+void countUploadIntent(
+    TerrainManifestAssetLoadServiceInputDiagnostics& diagnostics,
+    const AssetSourceUploadIntentRecord* const record) noexcept
+{
+    if (record == nullptr)
+    {
+        ++diagnostics.uploadIntentMissingCount;
+        return;
+    }
+
+    switch (record->status)
+    {
+    case AssetSourceUploadIntentStatus::Planned:
+        ++diagnostics.uploadIntentPlannedCount;
+        break;
+    case AssetSourceUploadIntentStatus::SourceNotMapped:
+        ++diagnostics.uploadIntentMissingCount;
+        break;
+    case AssetSourceUploadIntentStatus::InvalidSource:
+        ++diagnostics.uploadIntentInvalidSourceCount;
+        break;
+    case AssetSourceUploadIntentStatus::UnsupportedRendererContract:
+        ++diagnostics.uploadIntentUnsupportedRendererContractCount;
+        break;
+    }
+}
+
+TerrainManifestAssetLoadServiceInputDiagnostics makeLoadServiceInputDiagnostics(
+    const TerrainManifestAssetLoadService& service,
+    const TerrainManifestAssetSourceRequestPlan& sourceRequests,
+    const AssetSourceUploadIntentPlan& uploadIntents) noexcept
+{
+    TerrainManifestAssetLoadServiceInputDiagnostics diagnostics;
+    diagnostics.retainedRequestCount = service.requestCount();
+
+    for (const TerrainManifestAssetLoadServiceRecord& serviceRecord : service.records())
+    {
+        const TerrainManifestAssetLoadRequest& request = serviceRecord.packet.request;
+        countSourceRequest(diagnostics, findSourceRequest(sourceRequests, request));
+        countUploadIntent(diagnostics, findUploadIntent(uploadIntents, request));
+    }
+
+    return diagnostics;
+}
+} // namespace
+
 EngineJobQueueDiagnostics makeEngineJobQueueDiagnostics(const EngineJobQueue& queue)
 {
     EngineJobQueueDiagnostics diagnostics;
@@ -61,9 +169,29 @@ TerrainManifestAssetLoadServiceDiagnostics makeTerrainManifestAssetLoadServiceDi
     const TerrainManifestAssetLoadJobCompletionReconcileResult& completionReconcile,
     const TerrainManifestAssetLoadService& service)
 {
+    return makeTerrainManifestAssetLoadServiceDiagnostics(
+        workPackets,
+        enqueue,
+        tick,
+        completionReconcile,
+        service,
+        TerrainManifestAssetSourceRequestPlan{},
+        AssetSourceUploadIntentPlan{});
+}
+
+TerrainManifestAssetLoadServiceDiagnostics makeTerrainManifestAssetLoadServiceDiagnostics(
+    const TerrainManifestAssetLoadJobWorkPacketResult& workPackets,
+    const TerrainManifestAssetLoadServiceEnqueueResult& enqueue,
+    const TerrainManifestAssetLoadServiceTickResult& tick,
+    const TerrainManifestAssetLoadJobCompletionReconcileResult& completionReconcile,
+    const TerrainManifestAssetLoadService& service,
+    const TerrainManifestAssetSourceRequestPlan& sourceRequests,
+    const AssetSourceUploadIntentPlan& uploadIntents)
+{
     TerrainManifestAssetLoadServiceDiagnostics diagnostics;
     diagnostics.workPackets = workPackets.summary;
     diagnostics.enqueue = enqueue.summary;
+    diagnostics.input = makeLoadServiceInputDiagnostics(service, sourceRequests, uploadIntents);
     diagnostics.tickStatus = tick.status;
     diagnostics.tick = tick.summary;
     diagnostics.retainedRequestCount = service.requestCount();
@@ -87,6 +215,15 @@ TerrainManifestAssetSourceDiagnostics makeTerrainManifestAssetSourceDiagnostics(
     TerrainManifestAssetSourceDiagnostics diagnostics;
     diagnostics.retainedSourceCount = sources.sourceCount();
     diagnostics.requests = plan.summary;
+    return diagnostics;
+}
+
+AssetSourceUploadIntentDiagnostics makeAssetSourceUploadIntentDiagnostics(
+    const AssetSourceUploadIntentPlan& plan)
+{
+    AssetSourceUploadIntentDiagnostics diagnostics;
+    diagnostics.recordCount = plan.records.size();
+    diagnostics.summary = plan.summary;
     return diagnostics;
 }
 

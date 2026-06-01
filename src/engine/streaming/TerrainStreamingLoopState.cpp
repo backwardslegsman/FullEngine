@@ -126,6 +126,7 @@ const TerrainManifestAssetLoadCompletionInbox& TerrainStreamingLoopState::extern
 void TerrainStreamingLoopState::setAssetSources(AssetSourceCatalog sources)
 {
     manifestLoad_.setAssetSources(std::move(sources));
+    (void)manifestLoad_.planAssetSources();
     refreshDiagnostics();
 }
 
@@ -193,9 +194,21 @@ const TerrainManifestAssetSourceRequestPlan& TerrainStreamingLoopState::latestAs
     return manifestLoad_.latestSourceRequests();
 }
 
+const AssetSourceUploadIntentPlan& TerrainStreamingLoopState::latestAssetSourceUploadIntents() const noexcept
+{
+    return manifestLoad_.latestSourceUploadIntents();
+}
+
 const TerrainManifestAssetSourceRequestPlan& TerrainStreamingLoopState::planAssetSources()
 {
     const TerrainManifestAssetSourceRequestPlan& result = manifestLoad_.planAssetSources();
+    refreshDiagnostics();
+    return result;
+}
+
+const AssetSourceUploadIntentPlan& TerrainStreamingLoopState::planAssetSourceUploadIntents()
+{
+    const AssetSourceUploadIntentPlan& result = manifestLoad_.planAssetSourceUploadIntents();
     refreshDiagnostics();
     return result;
 }
@@ -315,6 +328,7 @@ const TerrainManifestAssetLoadServiceEnqueueResult& TerrainStreamingLoopState::e
     latestLoadServiceWorkPackets_ = buildTerrainManifestAssetLoadJobWorkPackets(manifestAssetLoadJobs_);
     latestLoadServiceEnqueueResult_ = manifestAssetLoadService_.enqueueWorkPackets(
         latestLoadServiceWorkPackets_);
+    (void)manifestLoad_.planAssetSources();
     refreshDiagnostics();
     return latestLoadServiceEnqueueResult_;
 }
@@ -324,6 +338,7 @@ const TerrainManifestAssetLoadServiceTickResult& TerrainStreamingLoopState::tick
     const TerrainManifestAssetLoadCallback callback,
     void* const userData)
 {
+    (void)manifestLoad_.planAssetSources();
     latestLoadServiceTickResult_ = manifestAssetLoadService_.tick(maxLoads, callback, userData);
     refreshDiagnostics();
     return latestLoadServiceTickResult_;
@@ -582,10 +597,14 @@ void TerrainStreamingLoopState::refreshDiagnostics() noexcept
         latestLoadServiceEnqueueResult_,
         latestLoadServiceTickResult_,
         latestLoadServiceCompletionReconcileResult_,
-        manifestAssetLoadService_);
+        manifestAssetLoadService_,
+        manifestLoad_.latestSourceRequests(),
+        manifestLoad_.latestSourceUploadIntents());
     latestDiagnostics_.assetSources = makeTerrainManifestAssetSourceDiagnostics(
         manifestLoad_.assetSources(),
         manifestLoad_.latestSourceRequests());
+    latestDiagnostics_.assetSourceUploadIntents = makeAssetSourceUploadIntentDiagnostics(
+        manifestLoad_.latestSourceUploadIntents());
     latestDiagnostics_.pendingExternalCompletionCount = externalLoadCompletions_.completionCount();
     latestDiagnostics_.externalCompletionPublish = latestExternalCompletionPublishResult_.summary;
     latestDiagnostics_.latestStreamingStatus = latestStreamingUpdate_.status;

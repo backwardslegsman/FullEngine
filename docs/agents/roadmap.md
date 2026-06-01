@@ -490,10 +490,33 @@ move gameplay, streaming policy, or editor concepts into renderer internals.
   texture references. Manifest load intent can be checked against those source
   records in request order before any real importer, IO, async work, or
   renderer-resource creation exists.
+- CPU loaded asset payloads are in place: mesh vertices/indices/bounds,
+  texture RGBA8 bytes/metadata, and material texture references now have a
+  renderer-free copied data contract with validation, establishing the first
+  concrete importer-output shape without IO, async work, renderer calls, or
+  renderer-resource creation.
 - Asset source upload-intent planning is in place: mapped source descriptors
   can be translated into public renderer mesh/texture/material upload
   expectations, including current renderer-contract limits, without source
-  bytes, handle resolution, renderer calls, or resource creation.
+  bytes, handle resolution, renderer calls, or resource creation. Retained
+  manifest load and streaming loop diagnostics expose the planned/unmapped/
+  invalid/unsupported counters beside source mapping counters.
+- Loaded asset upload planning is in place: validated CPU mesh/texture payloads
+  can be copied into owned renderer descriptor work, and material payloads can
+  be translated into renderer material-policy expectations while preserving
+  texture asset IDs for a later handle resolver. This is the first bridge from
+  importer-output data to renderer upload work without calling renderer APIs or
+  creating resources.
+- Loaded asset upload execution is in place: planned mesh/texture upload work
+  can be submitted through caller-owned public renderer `createMesh` and
+  `createTexture` calls, with successful handles recorded in
+  `RendererAssetHandleCatalog`. The executor is ordered and diagnostic, does
+  not roll back renderer resources, and keeps material upload deferred until
+  texture asset IDs can be resolved to renderer handles.
+- Retained asset-load service input diagnostics now fold source and
+  upload-intent planning into queued service work, so tools can see whether
+  each pending service batch has source metadata and renderer-upload-ready
+  intent before caller-owned callbacks or workers attempt to produce handles.
 - Retained manifest asset source planning is in place: `TerrainManifestLoadState`
   can own caller-supplied source metadata, map latest missing-handle load
   requests to source records, and expose mapped/missing source counters through
