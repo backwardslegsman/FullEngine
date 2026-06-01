@@ -171,6 +171,13 @@ void testDefaultState(std::vector<std::string>& failures)
     expect(state.manifestAssetLoadService().requestCount() == 0, "default loop has no retained service work", failures);
     expect(state.latestLoadServiceWorkPackets().packets.empty(), "default loop has no service packets", failures);
     expect(state.latestLoadServiceTickResult().summary.attemptedCount == 0, "default loop has no service tick attempts", failures);
+    expect(state.latestDiagnostics().loadService.workPackets.packetizedCount == 0, "default diagnostics have no service packets", failures);
+    expect(state.latestDiagnostics().loadService.retainedRequestCount == 0, "default diagnostics have no retained service work", failures);
+    expect(
+        state.latestDiagnostics().loadService.completionReconcileStatus ==
+            full_engine::TerrainManifestAssetLoadJobCompletionReconcileStatus::NoPendingLoads,
+        "default diagnostics have no service completion reconcile",
+        failures);
     expect(state.manifestLoad().pendingLoadRequestCount() == 0, "default loop has no load requests", failures);
     expect(!state.latestDiagnostics().hasManifest, "default diagnostics report no manifest", failures);
     expect(state.latestDiagnostics().pendingJobCount == 0, "default diagnostics report no jobs", failures);
@@ -205,6 +212,7 @@ void testReloadSuccessQueuesMissingLoads(std::vector<std::string>& failures)
     expect(state.latestDiagnostics().pendingLoadRequestCount == 3, "reload diagnostics copy pending load requests", failures);
     expect(state.latestDiagnostics().pendingJobCount == 0, "reload clears stale jobs", failures);
     expect(state.manifestAssetLoadService().requestCount() == 0, "reload clears stale service work", failures);
+    expect(state.latestDiagnostics().loadService.retainedRequestCount == 0, "reload clears stale service diagnostics", failures);
 
     std::remove(path);
 }
@@ -228,6 +236,7 @@ void testReloadFailureClearsState(std::vector<std::string>& failures)
     expect(state.manifestAssetLoadService().requestCount() == 0, "invalid reload clears service work", failures);
     expect(!state.latestDiagnostics().hasManifest, "invalid reload diagnostics report no manifest", failures);
     expect(state.latestDiagnostics().pendingLoadRequestCount == 0, "invalid reload diagnostics clear load requests", failures);
+    expect(state.latestDiagnostics().loadService.retainedRequestCount == 0, "invalid reload diagnostics clear service work", failures);
 
     std::remove(path);
 }
@@ -355,10 +364,22 @@ void testRetainedLoadServiceReconcilesScheduledJobs(std::vector<std::string>& fa
     expect(state.latestLoadServiceWorkPackets().summary.packetizedCount == 3, "loop service stores packet diagnostics", failures);
     expect(tick.summary.loadedCount == 3, "loop service tick loads three requests", failures);
     expect(state.manifestAssetLoadService().completedCount() == 3, "loop service retains completed records", failures);
+    expect(state.latestDiagnostics().loadService.workPackets.packetizedCount == 3, "loop service diagnostics copy packet count", failures);
+    expect(state.latestDiagnostics().loadService.enqueue.queuedCount == 3, "loop service diagnostics copy enqueue count", failures);
+    expect(state.latestDiagnostics().loadService.tick.loadedCount == 3, "loop service diagnostics copy loaded count", failures);
+    expect(state.latestDiagnostics().loadService.retainedCompletedCount == 3, "loop service diagnostics copy completed retained count", failures);
     expect(reconciled.status == full_engine::TerrainManifestAssetLoadJobCompletionReconcileStatus::Success, "loop service completion reconcile succeeds", failures);
     expect(state.manifestLoad().pendingLoadRequestCount() == 0, "loop service reconcile clears load requests", failures);
     expect(state.manifestAssetLoadJobs().jobCount() == 0, "loop service reconcile removes scheduled jobs", failures);
     expect(state.manifestAssetLoadService().completions().empty(), "loop service reconcile clears emitted completions", failures);
+    expect(state.latestDiagnostics().loadService.retainedCompletionCount == 0, "loop service diagnostics refresh completion count", failures);
+    expect(
+        state.latestDiagnostics().loadService.completionReconcileStatus ==
+            full_engine::TerrainManifestAssetLoadJobCompletionReconcileStatus::Success,
+        "loop service diagnostics copy completion reconcile status",
+        failures);
+    expect(state.latestDiagnostics().loadService.completionPublish.publishedCount == 3, "loop service diagnostics copy publish count", failures);
+    expect(state.latestDiagnostics().loadService.completionReconcile.finalReadyHandleCount == 3, "loop service diagnostics copy nested reconcile count", failures);
     expect(state.latestLoadJobReconcileResult().status == full_engine::TerrainManifestAssetLoadJobReconcileStatus::Success, "loop service reconcile updates lower-level reconcile result", failures);
     expect(state.latestDiagnostics().reconciledLoadJobs.status == full_engine::TerrainManifestAssetLoadJobReconcileStatus::Success, "loop service reconcile updates retained diagnostics", failures);
     expect(state.latestDiagnostics().reconciledLoadJobs.reconcile.finalReadyHandleCount == 3, "loop service reconcile diagnostics copy ready count", failures);
@@ -389,6 +410,9 @@ void testRetainedLoadServiceMissingAndFailedCallbacks(std::vector<std::string>& 
     expect(missingTick.summary.missingCount == 1, "loop service missing tick counts missing handle", failures);
     expect(state.manifestAssetLoadService().pendingCount() == 1, "loop service missing tick keeps one pending record", failures);
     expect(state.manifestAssetLoadService().completions().size() == 2, "loop service missing tick emits only loaded completions", failures);
+    expect(state.latestDiagnostics().loadService.tick.missingCount == 1, "loop service diagnostics copy missing tick count", failures);
+    expect(state.latestDiagnostics().loadService.retainedPendingCount == 1, "loop service diagnostics copy pending retained count", failures);
+    expect(state.latestDiagnostics().loadService.retainedCompletionCount == 2, "loop service diagnostics copy emitted completions", failures);
 
     full_engine::RendererAssetHandleCatalog missingDestination;
     const full_engine::TerrainManifestAssetLoadJobCompletionReconcileResult& missingReconcile =
@@ -398,6 +422,11 @@ void testRetainedLoadServiceMissingAndFailedCallbacks(std::vector<std::string>& 
     expect(state.manifestLoad().pendingLoadRequestCount() == 3, "loop service missing reconcile preserves load requests", failures);
     expect(state.manifestAssetLoadJobs().jobCount() == 3, "loop service missing reconcile preserves jobs", failures);
     expect(missingDestination.meshHandleCount() == 0, "loop service missing reconcile leaves destination unchanged", failures);
+    expect(
+        state.latestDiagnostics().loadService.completionReconcileStatus ==
+            full_engine::TerrainManifestAssetLoadJobCompletionReconcileStatus::CompletionPending,
+        "loop service diagnostics copy pending completion reconcile",
+        failures);
 
     state.clearJobs();
     (void)state.scheduleAssetLoadJobs();
@@ -417,10 +446,19 @@ void testRetainedLoadServiceMissingAndFailedCallbacks(std::vector<std::string>& 
     expect(state.manifestLoad().pendingLoadRequestCount() == 3, "loop service failed reconcile preserves load requests", failures);
     expect(state.manifestAssetLoadJobs().jobCount() == 3, "loop service failed reconcile preserves jobs", failures);
     expect(failedDestination.materialHandleCount() == 0, "loop service failed reconcile leaves destination unchanged", failures);
+    expect(state.latestDiagnostics().loadService.tick.failedCount == 1, "loop service diagnostics copy failed tick count", failures);
+    expect(state.latestDiagnostics().loadService.retainedFailedCount == 1, "loop service diagnostics copy retained failed count", failures);
+    expect(
+        state.latestDiagnostics().loadService.completionReconcileStatus ==
+            full_engine::TerrainManifestAssetLoadJobCompletionReconcileStatus::CompletionPublishFailed,
+        "loop service diagnostics copy failed completion reconcile",
+        failures);
 
     state.clearJobs();
     expect(state.manifestAssetLoadService().requestCount() == 0, "clearJobs clears retained service records", failures);
     expect(state.latestLoadServiceTickResult().summary.attemptedCount == 0, "clearJobs resets service tick diagnostics", failures);
+    expect(state.latestDiagnostics().loadService.retainedRequestCount == 0, "clearJobs resets service diagnostics", failures);
+    expect(state.latestDiagnostics().loadService.tick.attemptedCount == 0, "clearJobs resets service tick diagnostics snapshot", failures);
 
     std::remove(path);
 }
@@ -545,6 +583,7 @@ void testClearResetsOwnedState(std::vector<std::string>& failures)
     expect(state.manifestLoad().pendingLoadRequestCount() == 0, "clearManifest clears load requests", failures);
     expect(state.manifestAssetLoadJobs().jobCount() == 0, "clearManifest clears jobs", failures);
     expect(state.manifestAssetLoadService().requestCount() == 0, "clearManifest clears service work", failures);
+    expect(state.latestDiagnostics().loadService.retainedRequestCount == 0, "clearManifest clears service diagnostics", failures);
     expect(!state.streamingRuntime().hasLatestPlan(), "clearManifest clears streaming plan", failures);
     expect(state.tickHistoryCount() == 0, "clearManifest clears tick history", failures);
 
@@ -554,6 +593,7 @@ void testClearResetsOwnedState(std::vector<std::string>& failures)
     expect(state.latestDiagnostics().pendingLoadRequestCount == 0, "clear refreshes diagnostics", failures);
     expect(state.latestDiagnostics().pendingJobCount == 0, "clear clears diagnostic job count", failures);
     expect(state.manifestAssetLoadService().requestCount() == 0, "clear clears service work", failures);
+    expect(state.latestDiagnostics().loadService.retainedRequestCount == 0, "clear clears service diagnostics", failures);
     expect(state.latestDiagnostics().tickHistoryCount == 0, "clear clears diagnostic tick count", failures);
 
     std::remove(path);

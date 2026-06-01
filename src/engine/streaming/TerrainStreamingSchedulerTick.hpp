@@ -13,6 +13,12 @@ enum class TerrainStreamingSchedulerLoadJobMode
 
     /** @brief Mirror load jobs into the retained queue and leave execution external. */
     ScheduleOnly,
+
+    /** @brief Schedule jobs, advance retained service work, and reconcile completions synchronously. */
+    RetainedService,
+
+    /** @brief Schedule jobs now and reconcile caller-owned completions when supplied. */
+    ExternalCompletions,
 };
 
 /**
@@ -33,12 +39,27 @@ struct TerrainStreamingSchedulerTickOptions
      * @brief Whether load-job phases execute synchronously or are only scheduled.
      *
      * In `ScheduleOnly` mode, a tick that selects asset-load work stops after
-     * mirroring pending requests into jobs. The streaming phase is deferred so
-     * a caller-owned loader can complete jobs and publish renderer handles
-     * before terrain setup/resource resolution is attempted.
+     * mirroring pending requests into jobs. In `RetainedService` mode, the tick
+     * also packetizes those jobs into the retained load service, advances
+     * caller-owned callbacks synchronously, and reconciles emitted completions
+     * before the streaming phase. In `ExternalCompletions` mode, the tick
+     * schedules jobs, then reconciles caller-owned completion records only when
+     * they are provided through `externalCompletions`.
      */
     TerrainStreamingSchedulerLoadJobMode loadJobMode =
         TerrainStreamingSchedulerLoadJobMode::ExecuteSynchronously;
+
+    /**
+     * @brief Caller-owned completed load-job records for `ExternalCompletions` mode.
+     *
+     * The array is read only during `runTerrainStreamingSchedulerTick` and is
+     * never retained. The caller owns any worker state and renderer handles
+     * represented by these records.
+     */
+    const TerrainManifestAssetLoadJobCompletion* externalCompletions = nullptr;
+
+    /** @brief Number of records in `externalCompletions`; zero means no completions yet. */
+    std::size_t externalCompletionCount = 0;
 
     /** @brief Default streaming/runtime options; policy-selected budgets overwrite `budgets`. */
     TerrainStreamingLoopUpdateOptions loopUpdate = {};
@@ -67,9 +88,17 @@ struct TerrainStreamingSchedulerTickResult
     TerrainStreamingTickHistorySummary historySummary = {};
     TerrainManifestAssetLoadJobCoordinatorResult loadJobs = {};
     TerrainManifestAssetLoadJobScheduleResult scheduledLoadJobs = {};
+    TerrainManifestAssetLoadJobWorkPacketResult loadServiceWorkPackets = {};
+    TerrainManifestAssetLoadServiceEnqueueResult loadServiceEnqueue = {};
+    TerrainManifestAssetLoadServiceTickResult loadServiceTick = {};
+    TerrainManifestAssetLoadJobCompletionReconcileResult loadServiceReconcile = {};
+    TerrainManifestAssetLoadServiceDiagnostics loadService = {};
+    TerrainManifestAssetLoadJobCompletionReconcileResult externalCompletionReconcile = {};
     TerrainStreamingLoopUpdateResult streaming = {};
     bool loadJobsRan = false;
     bool loadJobsScheduled = false;
+    bool loadServiceRan = false;
+    bool externalCompletionsReconciled = false;
     bool streamingRan = false;
 };
 

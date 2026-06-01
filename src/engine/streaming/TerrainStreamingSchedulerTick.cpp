@@ -29,6 +29,28 @@ bool schedulingBlocked(const TerrainManifestAssetLoadJobScheduleStatus status) n
     return status == TerrainManifestAssetLoadJobScheduleStatus::Blocked;
 }
 
+bool serviceEnqueueBlocked(const TerrainManifestAssetLoadServiceEnqueueSummary& summary) noexcept
+{
+    return summary.invalidPacketCount > 0;
+}
+
+bool serviceTickBlocked(const TerrainManifestAssetLoadServiceTickStatus status) noexcept
+{
+    return status == TerrainManifestAssetLoadServiceTickStatus::Blocked;
+}
+
+bool serviceReconcileBlocked(const TerrainManifestAssetLoadJobCompletionReconcileStatus status) noexcept
+{
+    return status == TerrainManifestAssetLoadJobCompletionReconcileStatus::CompletionPublishFailed ||
+        status == TerrainManifestAssetLoadJobCompletionReconcileStatus::CompletionPending ||
+        status == TerrainManifestAssetLoadJobCompletionReconcileStatus::LoadConsumeBlocked;
+}
+
+bool hasExternalCompletions(const TerrainStreamingSchedulerTickOptions& options) noexcept
+{
+    return options.externalCompletionCount > 0;
+}
+
 TerrainStreamingSchedulerTickStatus mapStreamingStatus(
     const TerrainStreamingLoopUpdateStatus status) noexcept
 {
@@ -122,21 +144,95 @@ TerrainStreamingSchedulerTickResult runTerrainStreamingSchedulerTick(
             return result;
         }
 
-        const std::size_t maxJobs =
-            options.overrideMaxAssetLoadJobs ?
-                options.maxAssetLoadJobs :
-                result.decision.maxAssetLoadJobs;
-        result.loadJobs = loop.runAssetLoadJobs(
-            assetHandles,
-            assetLoadCallback,
-            assetLoadUserData,
-            maxJobs,
-            options.assetLoadJobPriority);
-        result.loadJobsRan = true;
-        if (loadJobsBlocked(result.loadJobs.status))
+        if (options.loadJobMode == TerrainStreamingSchedulerLoadJobMode::ExternalCompletions)
         {
-            result.status = TerrainStreamingSchedulerTickStatus::LoadJobsBlocked;
-            return result;
+            result.scheduledLoadJobs = loop.scheduleAssetLoadJobs(options.assetLoadJobPriority);
+            result.loadJobsScheduled = true;
+            if (schedulingBlocked(result.scheduledLoadJobs.status))
+            {
+                result.status = TerrainStreamingSchedulerTickStatus::LoadJobsBlocked;
+                return result;
+            }
+
+            if (!hasExternalCompletions(options))
+            {
+                result.status = TerrainStreamingSchedulerTickStatus::Success;
+                return result;
+            }
+
+            result.externalCompletionReconcile = loop.reconcileScheduledAssetLoadCompletions(
+                options.externalCompletions,
+                options.externalCompletionCount,
+                assetHandles);
+            result.externalCompletionsReconciled = true;
+            if (serviceReconcileBlocked(result.externalCompletionReconcile.status))
+            {
+                result.status = TerrainStreamingSchedulerTickStatus::LoadJobsBlocked;
+                return result;
+            }
+        }
+
+        else if (options.loadJobMode == TerrainStreamingSchedulerLoadJobMode::RetainedService)
+        {
+            const std::size_t maxJobs =
+                options.overrideMaxAssetLoadJobs ?
+                    options.maxAssetLoadJobs :
+                    result.decision.maxAssetLoadJobs;
+            result.scheduledLoadJobs = loop.scheduleAssetLoadJobs(options.assetLoadJobPriority);
+            result.loadJobsScheduled = true;
+            if (schedulingBlocked(result.scheduledLoadJobs.status))
+            {
+                result.status = TerrainStreamingSchedulerTickStatus::LoadJobsBlocked;
+                return result;
+            }
+
+            result.loadServiceEnqueue = loop.enqueueScheduledAssetLoadWork();
+            result.loadServiceWorkPackets = loop.latestLoadServiceWorkPackets();
+            result.loadService = loop.latestDiagnostics().loadService;
+            if (serviceEnqueueBlocked(result.loadServiceEnqueue.summary))
+            {
+                result.status = TerrainStreamingSchedulerTickStatus::LoadJobsBlocked;
+                return result;
+            }
+
+            result.loadServiceTick = loop.tickAssetLoadService(
+                maxJobs,
+                assetLoadCallback,
+                assetLoadUserData);
+            result.loadServiceRan = true;
+            result.loadService = loop.latestDiagnostics().loadService;
+            if (serviceTickBlocked(result.loadServiceTick.status))
+            {
+                result.status = TerrainStreamingSchedulerTickStatus::LoadJobsBlocked;
+                return result;
+            }
+
+            result.loadServiceReconcile = loop.reconcileAssetLoadServiceCompletions(assetHandles);
+            result.loadService = loop.latestDiagnostics().loadService;
+            if (serviceReconcileBlocked(result.loadServiceReconcile.status))
+            {
+                result.status = TerrainStreamingSchedulerTickStatus::LoadJobsBlocked;
+                return result;
+            }
+        }
+        else
+        {
+            const std::size_t maxJobs =
+                options.overrideMaxAssetLoadJobs ?
+                    options.maxAssetLoadJobs :
+                    result.decision.maxAssetLoadJobs;
+            result.loadJobs = loop.runAssetLoadJobs(
+                assetHandles,
+                assetLoadCallback,
+                assetLoadUserData,
+                maxJobs,
+                options.assetLoadJobPriority);
+            result.loadJobsRan = true;
+            if (loadJobsBlocked(result.loadJobs.status))
+            {
+                result.status = TerrainStreamingSchedulerTickStatus::LoadJobsBlocked;
+                return result;
+            }
         }
     }
 

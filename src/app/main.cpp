@@ -1127,7 +1127,7 @@ full_engine::TerrainStreamingSchedulerTickResult runSampleTerrainStreamingSchedu
     options.loopUpdate.runtime = runtimeOptions;
     if (controls.terrainStreamingSchedulerExternalLoadScheduling)
     {
-        options.loadJobMode = full_engine::TerrainStreamingSchedulerLoadJobMode::ScheduleOnly;
+        options.loadJobMode = full_engine::TerrainStreamingSchedulerLoadJobMode::RetainedService;
     }
 
     return full_engine::runTerrainStreamingSchedulerTick(
@@ -1906,34 +1906,33 @@ void drawTerrainDiagnosticsPanel(
         if (ImGui::Button("Reconcile Load Jobs"))
         {
             (void)streamingLoop.enqueueScheduledAssetLoadWork();
+            const std::size_t pendingServiceLoads =
+                streamingLoop.latestDiagnostics().loadService.retainedPendingCount;
             (void)streamingLoop.tickAssetLoadService(
-                streamingLoop.manifestAssetLoadService().pendingCount(),
+                pendingServiceLoads,
                 sampleTerrainManifestAssetLoadCallback,
                 &engineTerrainAssetHandles);
-            const full_engine::TerrainManifestAssetLoadJobCompletionReconcileResult& serviceReconcile =
-                streamingLoop.reconcileAssetLoadServiceCompletions(engineTerrainAssetHandles);
-            const full_engine::TerrainManifestAssetLoadJobWorkPacketResult& servicePackets =
-                streamingLoop.latestLoadServiceWorkPackets();
-            const full_engine::TerrainManifestAssetLoadServiceTickResult& serviceTick =
-                streamingLoop.latestLoadServiceTickResult();
-            if (servicePackets.summary.invalidPayloadCount > 0 ||
-                serviceReconcile.status ==
+            (void)streamingLoop.reconcileAssetLoadServiceCompletions(engineTerrainAssetHandles);
+            const full_engine::TerrainManifestAssetLoadServiceDiagnostics& serviceDiagnostics =
+                streamingLoop.latestDiagnostics().loadService;
+            if (serviceDiagnostics.workPackets.invalidPayloadCount > 0 ||
+                serviceDiagnostics.completionReconcileStatus ==
                     full_engine::TerrainManifestAssetLoadJobCompletionReconcileStatus::CompletionPublishFailed ||
-                serviceReconcile.status ==
+                serviceDiagnostics.completionReconcileStatus ==
                     full_engine::TerrainManifestAssetLoadJobCompletionReconcileStatus::CompletionPending ||
-                serviceReconcile.status ==
+                serviceDiagnostics.completionReconcileStatus ==
                     full_engine::TerrainManifestAssetLoadJobCompletionReconcileStatus::LoadConsumeBlocked)
             {
                 std::cerr << "Sample external load job completion publish blocked: packets "
-                          << servicePackets.summary.packetizedCount
+                          << serviceDiagnostics.workPackets.packetizedCount
                           << ", invalid payloads "
-                          << servicePackets.summary.invalidPayloadCount
+                          << serviceDiagnostics.workPackets.invalidPayloadCount
                           << ", loaded "
-                          << serviceTick.summary.loadedCount
+                          << serviceDiagnostics.tick.loadedCount
                           << ", missing handles "
-                          << serviceReconcile.publish.summary.missingHandleCount
+                          << serviceDiagnostics.completionPublish.missingHandleCount
                           << ", rejected "
-                          << serviceReconcile.publish.summary.catalogRejectedCount
+                          << serviceDiagnostics.completionPublish.catalogRejectedCount
                           << '\n';
             }
         }
@@ -2045,13 +2044,14 @@ void drawTerrainDiagnosticsPanel(
             static_cast<unsigned long long>(schedulerTick.runtimeBacklogCount),
             static_cast<unsigned long long>(schedulerTick.maxAssetLoadJobs));
         ImGui::Text(
-            "Scheduler phases: load %s (%s), schedule %s (%s), streaming %s (%s)",
+            "Scheduler phases: load %s (%s), schedule %s (%s), service %s, streaming %s (%s)",
             schedulerTick.loadJobsRan ? "ran" : "skipped",
             full_engine::terrainManifestAssetLoadJobCoordinatorStatusName(
                 schedulerTick.loadJobStatus),
             schedulerTick.loadJobsScheduled ? "ran" : "skipped",
             full_engine::terrainManifestAssetLoadJobScheduleStatusName(
                 schedulerTick.scheduledLoadJobStatus),
+            schedulerTick.loadServiceRan ? "ran" : "skipped",
             schedulerTick.streamingRan ? "ran" : "skipped",
             full_engine::terrainStreamingLoopUpdateStatusName(
                 schedulerTick.streamingStatus));
@@ -2064,35 +2064,45 @@ void drawTerrainDiagnosticsPanel(
             static_cast<unsigned long long>(schedulerTick.scheduledLoadJobMirror.alreadyQueuedCount),
             static_cast<unsigned long long>(schedulerTick.scheduledLoadJobMirror.invalidArgumentCount));
         ImGui::Text(
+            "Scheduler load service: queued/already/invalid %llu/%llu/%llu, loaded/missing/failed %llu/%llu/%llu, reconcile %s",
+            static_cast<unsigned long long>(schedulerTick.loadService.enqueue.queuedCount),
+            static_cast<unsigned long long>(schedulerTick.loadService.enqueue.alreadyQueuedCount),
+            static_cast<unsigned long long>(schedulerTick.loadService.enqueue.invalidPacketCount),
+            static_cast<unsigned long long>(schedulerTick.loadService.tick.loadedCount),
+            static_cast<unsigned long long>(schedulerTick.loadService.tick.missingCount),
+            static_cast<unsigned long long>(schedulerTick.loadService.tick.failedCount),
+            full_engine::terrainManifestAssetLoadJobCompletionReconcileStatusName(
+                schedulerTick.loadService.completionReconcileStatus));
+        ImGui::Text(
             "External load work packets: packets/skipped/invalid %llu/%llu/%llu",
             static_cast<unsigned long long>(
-                streamingLoop.latestLoadServiceWorkPackets().summary.packetizedCount),
+                loopDiagnostics.loadService.workPackets.packetizedCount),
             static_cast<unsigned long long>(
-                streamingLoop.latestLoadServiceWorkPackets().summary.skippedUnsupportedJobCount),
+                loopDiagnostics.loadService.workPackets.skippedUnsupportedJobCount),
             static_cast<unsigned long long>(
-                streamingLoop.latestLoadServiceWorkPackets().summary.invalidPayloadCount));
+                loopDiagnostics.loadService.workPackets.invalidPayloadCount));
         ImGui::Text(
             "External load service: queued/already/invalid %llu/%llu/%llu, attempted loaded/missing/failed %llu/%llu/%llu",
             static_cast<unsigned long long>(
-                streamingLoop.latestLoadServiceEnqueueResult().summary.queuedCount),
+                loopDiagnostics.loadService.enqueue.queuedCount),
             static_cast<unsigned long long>(
-                streamingLoop.latestLoadServiceEnqueueResult().summary.alreadyQueuedCount),
+                loopDiagnostics.loadService.enqueue.alreadyQueuedCount),
             static_cast<unsigned long long>(
-                streamingLoop.latestLoadServiceEnqueueResult().summary.invalidPacketCount),
+                loopDiagnostics.loadService.enqueue.invalidPacketCount),
             static_cast<unsigned long long>(
-                streamingLoop.latestLoadServiceTickResult().summary.loadedCount),
+                loopDiagnostics.loadService.tick.loadedCount),
             static_cast<unsigned long long>(
-                streamingLoop.latestLoadServiceTickResult().summary.missingCount),
+                loopDiagnostics.loadService.tick.missingCount),
             static_cast<unsigned long long>(
-                streamingLoop.latestLoadServiceTickResult().summary.failedCount));
+                loopDiagnostics.loadService.tick.failedCount));
         ImGui::Text(
             "External load service retained: pending/completed/failed/completions %llu/%llu/%llu/%llu, completion reconcile %s",
-            static_cast<unsigned long long>(streamingLoop.manifestAssetLoadService().pendingCount()),
-            static_cast<unsigned long long>(streamingLoop.manifestAssetLoadService().completedCount()),
-            static_cast<unsigned long long>(streamingLoop.manifestAssetLoadService().failedCount()),
-            static_cast<unsigned long long>(streamingLoop.manifestAssetLoadService().completions().size()),
+            static_cast<unsigned long long>(loopDiagnostics.loadService.retainedPendingCount),
+            static_cast<unsigned long long>(loopDiagnostics.loadService.retainedCompletedCount),
+            static_cast<unsigned long long>(loopDiagnostics.loadService.retainedFailedCount),
+            static_cast<unsigned long long>(loopDiagnostics.loadService.retainedCompletionCount),
             full_engine::terrainManifestAssetLoadJobCompletionReconcileStatusName(
-                streamingLoop.latestLoadServiceCompletionReconcileResult().status));
+                loopDiagnostics.loadService.completionReconcileStatus));
         ImGui::Text(
             "Load job reconcile: %s, pending loads %llu/%llu, jobs %llu/%llu, removed %llu",
             full_engine::terrainManifestAssetLoadJobReconcileStatusName(

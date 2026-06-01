@@ -5,6 +5,7 @@
 #include "engine/renderer_integration/TerrainChunkRequests.hpp"
 #include "engine/renderer_integration/TerrainDescriptorBuilder.hpp"
 #include "engine/renderer_integration/TerrainManifestAssetLoadJobCoordinator.hpp"
+#include "engine/renderer_integration/TerrainManifestAssetLoadService.hpp"
 #include "engine/renderer_integration/TerrainManifestRuntimeStaging.hpp"
 #include "engine/renderer_integration/TerrainRenderPrep.hpp"
 #include "engine/renderer_integration/TerrainRendererCommands.hpp"
@@ -99,6 +100,57 @@ struct TerrainManifestAssetLoadJobReconcileDiagnostics
 
     /** @brief Final manifest asset handle readiness counters after successful replanning. */
     TerrainManifestAssetReadinessSummary readiness = {};
+};
+
+/** @brief Value snapshot of retained manifest asset-load service progress. */
+struct TerrainManifestAssetLoadServiceDiagnostics
+{
+    /** @brief Counters from converting scheduled jobs into load-service work packets. */
+    TerrainManifestAssetLoadJobWorkPacketSummary workPackets = {};
+
+    /** @brief Counters from retaining converted packets in the service. */
+    TerrainManifestAssetLoadServiceEnqueueSummary enqueue = {};
+
+    /** @brief High-level status from the latest retained service tick. */
+    TerrainManifestAssetLoadServiceTickStatus tickStatus =
+        TerrainManifestAssetLoadServiceTickStatus::Idle;
+
+    /** @brief Counters from the latest retained service tick. */
+    TerrainManifestAssetLoadServiceTickSummary tick = {};
+
+    /** @brief Number of work records retained by the service. */
+    std::size_t retainedRequestCount = 0;
+
+    /** @brief Number of retained service records still pending. */
+    std::size_t retainedPendingCount = 0;
+
+    /** @brief Number of retained service records completed. */
+    std::size_t retainedCompletedCount = 0;
+
+    /** @brief Number of retained service records failed. */
+    std::size_t retainedFailedCount = 0;
+
+    /** @brief Number of emitted completion values waiting for reconcile. */
+    std::size_t retainedCompletionCount = 0;
+
+    /** @brief High-level status from the latest service completion reconcile. */
+    TerrainManifestAssetLoadJobCompletionReconcileStatus completionReconcileStatus =
+        TerrainManifestAssetLoadJobCompletionReconcileStatus::NoPendingLoads;
+
+    /** @brief Counters from publishing emitted service completion values. */
+    TerrainManifestAssetLoadJobCompletionSummary completionPublish = {};
+
+    /** @brief Counters from consuming retained load requests during completion reconcile. */
+    TerrainManifestAssetLoadSummary completionLoadConsume = {};
+
+    /** @brief True when service completion reconcile consumed retained load requests. */
+    bool completionLoadConsumed = false;
+
+    /** @brief Compact nested reconcile counters after publishing service completions. */
+    TerrainManifestAssetLoadJobReconcileSummary completionReconcile = {};
+
+    /** @brief Final readiness counters after successful service completion reconcile. */
+    TerrainManifestAssetReadinessSummary completionReadiness = {};
 };
 
 /** @brief Value snapshot of the most recent terrain asset batch resolution. */
@@ -208,6 +260,21 @@ TerrainManifestAssetLoadJobScheduleDiagnostics makeTerrainManifestAssetLoadJobSc
 TerrainManifestAssetLoadJobReconcileDiagnostics makeTerrainManifestAssetLoadJobReconcileDiagnostics(
     const TerrainManifestAssetLoadJobReconcileResult& result,
     const EngineJobQueue& jobs);
+
+/**
+ * @brief Builds reusable diagnostics from retained manifest asset-load service state.
+ *
+ * The returned value copies counters and statuses only. It does not retain
+ * work records, completion records, manifests, job records, renderer handles,
+ * descriptors, catalogs, resource data, or renderer resources. The service and
+ * result values are inspected read-only and are not mutated.
+ */
+TerrainManifestAssetLoadServiceDiagnostics makeTerrainManifestAssetLoadServiceDiagnostics(
+    const TerrainManifestAssetLoadJobWorkPacketResult& workPackets,
+    const TerrainManifestAssetLoadServiceEnqueueResult& enqueue,
+    const TerrainManifestAssetLoadServiceTickResult& tick,
+    const TerrainManifestAssetLoadJobCompletionReconcileResult& completionReconcile,
+    const TerrainManifestAssetLoadService& service);
 
 /**
  * @brief Builds reusable diagnostics from a terrain asset batch resolve result.

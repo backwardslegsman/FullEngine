@@ -19,6 +19,8 @@ TerrainStreamingSchedulerTickDiagnostics makeTerrainStreamingSchedulerTickDiagno
     diagnostics.maxAssetLoadJobs = result.decision.maxAssetLoadJobs;
     diagnostics.loadJobsRan = result.loadJobsRan;
     diagnostics.loadJobsScheduled = result.loadJobsScheduled;
+    diagnostics.loadServiceRan = result.loadServiceRan;
+    diagnostics.externalCompletionsReconciled = result.externalCompletionsReconciled;
     diagnostics.streamingRan = result.streamingRan;
     diagnostics.history.hasSchedulerDecision = true;
     diagnostics.history.status = diagnostics.status;
@@ -34,6 +36,8 @@ TerrainStreamingSchedulerTickDiagnostics makeTerrainStreamingSchedulerTickDiagno
     diagnostics.history.maxAssetLoadJobs = diagnostics.maxAssetLoadJobs;
     diagnostics.history.loadJobsRan = diagnostics.loadJobsRan;
     diagnostics.history.loadJobsScheduled = diagnostics.loadJobsScheduled;
+    diagnostics.history.loadServiceRan = diagnostics.loadServiceRan;
+    diagnostics.history.externalCompletionsReconciled = diagnostics.externalCompletionsReconciled;
     diagnostics.history.streamingRan = diagnostics.streamingRan;
 
     diagnostics.loadJobStatus = result.loadJobs.status;
@@ -50,6 +54,13 @@ TerrainStreamingSchedulerTickDiagnostics makeTerrainStreamingSchedulerTickDiagno
     diagnostics.scheduledFinalPendingLoadRequestCount =
         result.scheduledLoadJobs.finalPendingLoadRequestCount;
     diagnostics.scheduledPendingJobCount = result.scheduledLoadJobs.pendingJobCount;
+    diagnostics.loadService = result.loadService;
+    diagnostics.externalCompletionStatus = result.externalCompletionReconcile.status;
+    diagnostics.externalCompletionPublish = result.externalCompletionReconcile.publish.summary;
+    diagnostics.externalCompletionLoadConsume = result.externalCompletionReconcile.reconcile.load.summary;
+    diagnostics.externalCompletionLoadConsumed = result.externalCompletionReconcile.reconcile.load.consumed;
+    diagnostics.externalCompletionReconcile = result.externalCompletionReconcile.reconcile.summary;
+    diagnostics.externalCompletionReadiness = result.externalCompletionReconcile.reconcile.readiness.summary;
 
     diagnostics.streamingStatus = result.streaming.status;
     diagnostics.manifestStreamingStatus = result.streaming.streaming.status;

@@ -34,6 +34,25 @@ int main()
         assert(!reconciledLoadJobs.loadConsumed);
         assert(reconciledLoadJobs.reconcile.finalPendingLoadRequestCount == 0);
         assert(reconciledLoadJobs.readiness.readyCount == 0);
+
+        const full_engine::TerrainManifestAssetLoadServiceDiagnostics loadService;
+        assert(loadService.workPackets.packetizedCount == 0);
+        assert(loadService.enqueue.queuedCount == 0);
+        assert(loadService.tickStatus == full_engine::TerrainManifestAssetLoadServiceTickStatus::Idle);
+        assert(loadService.tick.attemptedCount == 0);
+        assert(loadService.retainedRequestCount == 0);
+        assert(loadService.retainedPendingCount == 0);
+        assert(loadService.retainedCompletedCount == 0);
+        assert(loadService.retainedFailedCount == 0);
+        assert(loadService.retainedCompletionCount == 0);
+        assert(
+            loadService.completionReconcileStatus ==
+            full_engine::TerrainManifestAssetLoadJobCompletionReconcileStatus::NoPendingLoads);
+        assert(loadService.completionPublish.publishedCount == 0);
+        assert(loadService.completionLoadConsume.loadedCount == 0);
+        assert(!loadService.completionLoadConsumed);
+        assert(loadService.completionReconcile.finalReadyHandleCount == 0);
+        assert(loadService.completionReadiness.readyCount == 0);
     }
 
     {
@@ -256,6 +275,126 @@ int main()
         assert(jobs.jobCount() == sourceJobCount);
         assert(result.load.records.size() == sourceLoadRecordCount);
         assert(result.readiness.records.size() == sourceReadinessRecordCount);
+    }
+
+    {
+        const full_engine::TerrainManifestAssetLoadRequest request{
+            full_engine::AssetId{70},
+            full_engine::AssetKind::Mesh};
+        const full_engine::TerrainManifestAssetLoadJobWorkPacket packet{
+            full_engine::engineJobIdForTerrainManifestAssetLoadRequest(request),
+            request,
+            full_engine::EngineJobPriority::High};
+
+        full_engine::TerrainManifestAssetLoadJobWorkPacketResult packets;
+        packets.packets.push_back(packet);
+        packets.records.push_back({});
+        packets.summary.packetizedCount = 1;
+        packets.summary.skippedUnsupportedJobCount = 2;
+        packets.summary.invalidPayloadCount = 3;
+
+        full_engine::TerrainManifestAssetLoadService service;
+        const full_engine::TerrainManifestAssetLoadServiceEnqueueResult enqueue =
+            service.enqueueWorkPackets(packets);
+        const full_engine::TerrainManifestAssetLoadServiceTickResult tick =
+            service.tick(
+                1,
+                [](const full_engine::TerrainManifestAssetLoadRequest&, void*) {
+                    full_engine::TerrainManifestAssetLoadCallbackResult result;
+                    result.status = full_engine::TerrainManifestAssetLoadCallbackStatus::Loaded;
+                    result.mesh = {70};
+                    return result;
+                });
+
+        full_engine::TerrainManifestAssetLoadJobCompletionReconcileResult completion;
+        completion.status = full_engine::TerrainManifestAssetLoadJobCompletionReconcileStatus::Success;
+        completion.publish.summary.publishedCount = 4;
+        completion.publish.summary.alreadyPublishedCount = 5;
+        completion.publish.summary.missingHandleCount = 6;
+        completion.reconcile.load.summary.loadedCount = 7;
+        completion.reconcile.load.summary.alreadyLoadedCount = 8;
+        completion.reconcile.load.consumed = true;
+        completion.reconcile.summary.finalReadyHandleCount = 9;
+        completion.reconcile.summary.finalMissingHandleCount = 10;
+        completion.reconcile.readiness.summary.readyCount = 11;
+        completion.reconcile.readiness.summary.missingHandleCount = 12;
+        completion.publish.records.push_back({});
+        completion.reconcile.load.records.push_back({});
+        completion.reconcile.readiness.records.push_back({});
+
+        const std::size_t sourcePacketRecordCount = packets.records.size();
+        const std::size_t sourcePacketCount = packets.packets.size();
+        const std::size_t sourceEnqueueRecordCount = enqueue.records.size();
+        const std::size_t sourceTickRecordCount = tick.records.size();
+        const std::size_t sourceCompletionCount = service.completions().size();
+        const std::size_t sourceCompletionPublishRecordCount = completion.publish.records.size();
+        const std::size_t sourceLoadRecordCount = completion.reconcile.load.records.size();
+        const std::size_t sourceReadinessRecordCount = completion.reconcile.readiness.records.size();
+
+        const full_engine::TerrainManifestAssetLoadServiceDiagnostics diagnostics =
+            full_engine::makeTerrainManifestAssetLoadServiceDiagnostics(
+                packets,
+                enqueue,
+                tick,
+                completion,
+                service);
+
+        assert(diagnostics.workPackets.packetizedCount == 1);
+        assert(diagnostics.workPackets.skippedUnsupportedJobCount == 2);
+        assert(diagnostics.workPackets.invalidPayloadCount == 3);
+        assert(diagnostics.enqueue.queuedCount == 1);
+        assert(diagnostics.enqueue.alreadyQueuedCount == 0);
+        assert(diagnostics.tickStatus == full_engine::TerrainManifestAssetLoadServiceTickStatus::Progressed);
+        assert(diagnostics.tick.attemptedCount == 1);
+        assert(diagnostics.tick.loadedCount == 1);
+        assert(diagnostics.retainedRequestCount == 1);
+        assert(diagnostics.retainedPendingCount == 0);
+        assert(diagnostics.retainedCompletedCount == 1);
+        assert(diagnostics.retainedFailedCount == 0);
+        assert(diagnostics.retainedCompletionCount == 1);
+        assert(
+            diagnostics.completionReconcileStatus ==
+            full_engine::TerrainManifestAssetLoadJobCompletionReconcileStatus::Success);
+        assert(diagnostics.completionPublish.publishedCount == 4);
+        assert(diagnostics.completionPublish.alreadyPublishedCount == 5);
+        assert(diagnostics.completionPublish.missingHandleCount == 6);
+        assert(diagnostics.completionLoadConsume.loadedCount == 7);
+        assert(diagnostics.completionLoadConsume.alreadyLoadedCount == 8);
+        assert(diagnostics.completionLoadConsumed);
+        assert(diagnostics.completionReconcile.finalReadyHandleCount == 9);
+        assert(diagnostics.completionReconcile.finalMissingHandleCount == 10);
+        assert(diagnostics.completionReadiness.readyCount == 11);
+        assert(diagnostics.completionReadiness.missingHandleCount == 12);
+        assert(packets.records.size() == sourcePacketRecordCount);
+        assert(packets.packets.size() == sourcePacketCount);
+        assert(enqueue.records.size() == sourceEnqueueRecordCount);
+        assert(tick.records.size() == sourceTickRecordCount);
+        assert(service.completions().size() == sourceCompletionCount);
+        assert(completion.publish.records.size() == sourceCompletionPublishRecordCount);
+        assert(completion.reconcile.load.records.size() == sourceLoadRecordCount);
+        assert(completion.reconcile.readiness.records.size() == sourceReadinessRecordCount);
+    }
+
+    {
+        const full_engine::TerrainManifestAssetLoadService service;
+        full_engine::TerrainManifestAssetLoadJobCompletionReconcileResult completion;
+        completion.status =
+            full_engine::TerrainManifestAssetLoadJobCompletionReconcileStatus::CompletionPublishFailed;
+        completion.publish.summary.catalogRejectedCount = 1;
+
+        const full_engine::TerrainManifestAssetLoadServiceDiagnostics diagnostics =
+            full_engine::makeTerrainManifestAssetLoadServiceDiagnostics(
+                {},
+                {},
+                {},
+                completion,
+                service);
+
+        assert(
+            diagnostics.completionReconcileStatus ==
+            full_engine::TerrainManifestAssetLoadJobCompletionReconcileStatus::CompletionPublishFailed);
+        assert(diagnostics.completionPublish.catalogRejectedCount == 1);
+        assert(!diagnostics.completionLoadConsumed);
     }
 
     {

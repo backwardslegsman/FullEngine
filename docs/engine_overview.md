@@ -326,7 +326,10 @@ recent deferred-work pressure or use manual debug budget overrides, can run the
 manifest asset load job coordinator from
 the debug panel using its sample-created renderer handles as the external load
 callback source, can optionally drive camera streaming through the
-policy-driven scheduler tick, can export retained streaming tick history, and
+policy-driven scheduler tick, can run that scheduler load phase through the
+retained load-service path or an external-completion handoff, displays retained
+load-service progress through a compact diagnostics snapshot, can export
+retained streaming tick history, and
 submits the mapped renderer terrain handles in its render packet.
 
 Still future work:

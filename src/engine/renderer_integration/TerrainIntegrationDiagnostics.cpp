@@ -54,6 +54,32 @@ TerrainManifestAssetLoadJobReconcileDiagnostics makeTerrainManifestAssetLoadJobR
     return diagnostics;
 }
 
+TerrainManifestAssetLoadServiceDiagnostics makeTerrainManifestAssetLoadServiceDiagnostics(
+    const TerrainManifestAssetLoadJobWorkPacketResult& workPackets,
+    const TerrainManifestAssetLoadServiceEnqueueResult& enqueue,
+    const TerrainManifestAssetLoadServiceTickResult& tick,
+    const TerrainManifestAssetLoadJobCompletionReconcileResult& completionReconcile,
+    const TerrainManifestAssetLoadService& service)
+{
+    TerrainManifestAssetLoadServiceDiagnostics diagnostics;
+    diagnostics.workPackets = workPackets.summary;
+    diagnostics.enqueue = enqueue.summary;
+    diagnostics.tickStatus = tick.status;
+    diagnostics.tick = tick.summary;
+    diagnostics.retainedRequestCount = service.requestCount();
+    diagnostics.retainedPendingCount = service.pendingCount();
+    diagnostics.retainedCompletedCount = service.completedCount();
+    diagnostics.retainedFailedCount = service.failedCount();
+    diagnostics.retainedCompletionCount = service.completions().size();
+    diagnostics.completionReconcileStatus = completionReconcile.status;
+    diagnostics.completionPublish = completionReconcile.publish.summary;
+    diagnostics.completionLoadConsume = completionReconcile.reconcile.load.summary;
+    diagnostics.completionLoadConsumed = completionReconcile.reconcile.load.consumed;
+    diagnostics.completionReconcile = completionReconcile.reconcile.summary;
+    diagnostics.completionReadiness = completionReconcile.reconcile.readiness.summary;
+    return diagnostics;
+}
+
 TerrainAssetBatchResolveDiagnostics makeTerrainAssetBatchResolveDiagnostics(
     const TerrainAssetBatchResolveResult& result)
 {

@@ -77,6 +77,44 @@ full_engine::RendererAssetHandleCatalog readyHandles()
     return handles;
 }
 
+full_engine::TerrainManifestAssetLoadJobCompletion completion(
+    const std::uint64_t id,
+    const full_engine::AssetKind kind,
+    const std::uint32_t handleValue)
+{
+    full_engine::TerrainManifestAssetLoadJobCompletion result;
+    result.request.id = asset(id);
+    result.request.kind = kind;
+    result.output.status = full_engine::TerrainManifestAssetLoadCallbackStatus::Loaded;
+    switch (kind)
+    {
+    case full_engine::AssetKind::Mesh:
+        result.output.mesh = {handleValue};
+        break;
+    case full_engine::AssetKind::Material:
+        result.output.material = {handleValue};
+        break;
+    case full_engine::AssetKind::Texture:
+        result.output.texture = {handleValue};
+        break;
+    case full_engine::AssetKind::Unknown:
+    case full_engine::AssetKind::TerrainChunk:
+    case full_engine::AssetKind::Skeleton:
+    case full_engine::AssetKind::SkinnedMesh:
+    case full_engine::AssetKind::Shader:
+        break;
+    }
+    return result;
+}
+
+std::vector<full_engine::TerrainManifestAssetLoadJobCompletion> readyCompletions()
+{
+    return {
+        completion(1, full_engine::AssetKind::Mesh, 10),
+        completion(2, full_engine::AssetKind::Material, 20),
+        completion(3, full_engine::AssetKind::Texture, 30)};
+}
+
 full_engine::TerrainChunkResourceDesc terrainResources(const full_engine::ChunkId id = chunk()) noexcept
 {
     full_engine::TerrainChunkResourceDesc desc;
@@ -535,6 +573,317 @@ void testScheduleOnlyDeduplicatesAlreadyQueuedJobs(std::vector<std::string>& fai
     expect(callbackState.calls.empty(), "schedule-only duplicate pass still does not invoke callback", failures);
 }
 
+void testExternalCompletionModeSchedulesWithoutCompletions(std::vector<std::string>& failures)
+{
+    Fixture fixture;
+    preparePendingLoadRequests(fixture);
+    appendPressureTick(fixture.loop);
+    full_engine::RendererAssetHandleCatalog assetHandles;
+    CallbackState callbackState;
+    callbackState.handles = readyHandles();
+    const full_engine::WorldChunkDesc desc = worldDesc();
+    full_engine::TerrainStreamingSchedulerTickOptions options;
+    options.loadJobMode = full_engine::TerrainStreamingSchedulerLoadJobMode::ExternalCompletions;
+
+    const full_engine::TerrainStreamingSchedulerTickResult result =
+        runTick(fixture, assetHandles, callbackState, desc, missingSnapshot(), options);
+
+    expect(result.status == full_engine::TerrainStreamingSchedulerTickStatus::Success, "external completion schedule tick succeeds", failures);
+    expect(result.loadJobsScheduled, "external completion tick schedules jobs", failures);
+    expect(!result.loadJobsRan, "external completion tick does not run direct jobs", failures);
+    expect(!result.loadServiceRan, "external completion tick does not run service", failures);
+    expect(!result.externalCompletionsReconciled, "external completion tick does not reconcile without completions", failures);
+    expect(!result.streamingRan, "external completion tick skips streaming until completions arrive", failures);
+    expect(callbackState.calls.empty(), "external completion tick does not invoke callback", failures);
+    expect(fixture.loop.manifestLoad().pendingLoadRequestCount() == 3, "external completion tick preserves load requests", failures);
+    expect(fixture.loop.manifestAssetLoadJobs().jobCount() == 3, "external completion tick leaves jobs scheduled", failures);
+    expect(assetHandles.meshHandleCount() == 0, "external completion tick leaves handles unchanged", failures);
+    expect(fixture.renderer.createCalls == 0, "external completion tick does not touch renderer", failures);
+}
+
+void testExternalCompletionModeReconcilesLaterCompletions(std::vector<std::string>& failures)
+{
+    Fixture fixture;
+    preparePendingLoadRequests(fixture);
+    full_engine::RendererAssetHandleCatalog assetHandles;
+    CallbackState callbackState;
+    const full_engine::WorldChunkDesc desc = worldDesc();
+    full_engine::TerrainStreamingSchedulerTickOptions options;
+    options.loadJobMode = full_engine::TerrainStreamingSchedulerLoadJobMode::ExternalCompletions;
+
+    const full_engine::TerrainStreamingSchedulerTickResult scheduled =
+        runTick(fixture, assetHandles, callbackState, desc, missingSnapshot(), options);
+    const std::vector<full_engine::TerrainManifestAssetLoadJobCompletion> completions =
+        readyCompletions();
+    options.externalCompletions = completions.data();
+    options.externalCompletionCount = completions.size();
+    const full_engine::TerrainStreamingSchedulerTickResult reconciled =
+        runTick(fixture, assetHandles, callbackState, desc, missingSnapshot(), options);
+
+    expect(scheduled.status == full_engine::TerrainStreamingSchedulerTickStatus::Success, "external completion first tick schedules", failures);
+    expect(reconciled.status == full_engine::TerrainStreamingSchedulerTickStatus::Success, "external completion reconcile tick succeeds", failures);
+    expect(reconciled.externalCompletionsReconciled, "external completion reconcile tick records reconcile phase", failures);
+    expect(!reconciled.streamingRan, "external completion reconcile-only tick does not stream without pressure", failures);
+    expect(reconciled.externalCompletionReconcile.status == full_engine::TerrainManifestAssetLoadJobCompletionReconcileStatus::Success, "external completion reconcile status succeeds", failures);
+    expect(reconciled.externalCompletionReconcile.publish.summary.publishedCount == 3, "external completion reconcile publishes completions", failures);
+    expect(fixture.loop.manifestLoad().pendingLoadRequestCount() == 0, "external completion reconcile clears load requests", failures);
+    expect(fixture.loop.manifestAssetLoadJobs().jobCount() == 0, "external completion reconcile removes jobs", failures);
+    expect(assetHandles.findMeshHandle(asset(1)) != nullptr, "external completion reconcile publishes mesh", failures);
+    expect(assetHandles.findMaterialHandle(asset(2)) != nullptr, "external completion reconcile publishes material", failures);
+    expect(assetHandles.findTextureHandle(asset(3)) != nullptr, "external completion reconcile publishes texture", failures);
+    expect(callbackState.calls.empty(), "external completion reconcile does not invoke callback", failures);
+}
+
+void testExternalCompletionModeReconcilesThenStreams(std::vector<std::string>& failures)
+{
+    Fixture fixture;
+    preparePendingLoadRequests(fixture);
+    appendPressureTick(fixture.loop);
+    full_engine::RendererAssetHandleCatalog assetHandles;
+    CallbackState callbackState;
+    const full_engine::WorldChunkDesc desc = worldDesc();
+    full_engine::TerrainStreamingSchedulerTickOptions options;
+    options.loadJobMode = full_engine::TerrainStreamingSchedulerLoadJobMode::ExternalCompletions;
+
+    (void)runTick(fixture, assetHandles, callbackState, desc, missingSnapshot(), options);
+    const std::vector<full_engine::TerrainManifestAssetLoadJobCompletion> completions =
+        readyCompletions();
+    options.externalCompletions = completions.data();
+    options.externalCompletionCount = completions.size();
+    const full_engine::TerrainStreamingSchedulerTickResult result =
+        runTick(fixture, assetHandles, callbackState, desc, missingSnapshot(), options);
+
+    expect(result.status == full_engine::TerrainStreamingSchedulerTickStatus::Success, "external completion combined tick succeeds", failures);
+    expect(result.externalCompletionsReconciled, "external completion combined tick reconciles", failures);
+    expect(result.streamingRan, "external completion combined tick streams after reconcile", failures);
+    expect(fixture.renderer.createCalls == 1, "external completion combined tick creates terrain", failures);
+    expect(fixture.terrainHandles.contains(chunk()), "external completion combined tick maps terrain", failures);
+    const full_engine::TerrainStreamingTickEvent* const tick = fixture.loop.latestTickEvent();
+    expect(tick != nullptr, "external completion combined tick records history", failures);
+    if (tick != nullptr)
+    {
+        expect(tick->scheduler.externalCompletionsReconciled, "external completion combined tick annotates completion phase", failures);
+        expect(tick->scheduler.streamingRan, "external completion combined tick annotates streaming", failures);
+    }
+}
+
+void testExternalCompletionModeBlocksInvalidCompletions(std::vector<std::string>& failures)
+{
+    Fixture fixture;
+    preparePendingLoadRequests(fixture);
+    appendPressureTick(fixture.loop);
+    full_engine::RendererAssetHandleCatalog assetHandles;
+    CallbackState callbackState;
+    const full_engine::WorldChunkDesc desc = worldDesc();
+    full_engine::TerrainStreamingSchedulerTickOptions options;
+    options.loadJobMode = full_engine::TerrainStreamingSchedulerLoadJobMode::ExternalCompletions;
+
+    (void)runTick(fixture, assetHandles, callbackState, desc, missingSnapshot(), options);
+    std::vector<full_engine::TerrainManifestAssetLoadJobCompletion> completions =
+        readyCompletions();
+    completions[1].output.status = full_engine::TerrainManifestAssetLoadCallbackStatus::Failed;
+    options.externalCompletions = completions.data();
+    options.externalCompletionCount = completions.size();
+    const full_engine::TerrainStreamingSchedulerTickResult result =
+        runTick(fixture, assetHandles, callbackState, desc, missingSnapshot(), options);
+
+    expect(result.status == full_engine::TerrainStreamingSchedulerTickStatus::LoadJobsBlocked, "external completion invalid completion blocks tick", failures);
+    expect(result.externalCompletionsReconciled, "external completion invalid completion attempts reconcile", failures);
+    expect(!result.streamingRan, "external completion invalid completion skips streaming", failures);
+    expect(result.externalCompletionReconcile.status == full_engine::TerrainManifestAssetLoadJobCompletionReconcileStatus::CompletionPublishFailed, "external completion invalid completion reports publish failure", failures);
+    expect(result.externalCompletionReconcile.publish.summary.missingHandleCount == 1, "external completion invalid completion counts missing handle", failures);
+    expect(fixture.loop.manifestLoad().pendingLoadRequestCount() == 3, "external completion invalid completion preserves load requests", failures);
+    expect(fixture.loop.manifestAssetLoadJobs().jobCount() == 3, "external completion invalid completion preserves jobs", failures);
+    expect(assetHandles.meshHandleCount() == 0, "external completion invalid completion leaves destination unchanged", failures);
+}
+
+void testExternalCompletionModePreservesUnrelatedJobs(std::vector<std::string>& failures)
+{
+    Fixture fixture;
+    preparePendingLoadRequests(fixture);
+    full_engine::RendererAssetHandleCatalog assetHandles;
+    CallbackState callbackState;
+    const full_engine::WorldChunkDesc desc = worldDesc();
+    full_engine::TerrainStreamingSchedulerTickOptions options;
+    options.loadJobMode = full_engine::TerrainStreamingSchedulerLoadJobMode::ExternalCompletions;
+
+    (void)runTick(fixture, assetHandles, callbackState, desc, missingSnapshot(), options);
+    (void)fixture.loop.manifestAssetLoadJobs().push({
+        full_engine::EngineJobId{99, 0},
+        full_engine::EngineJobKind::Custom,
+        full_engine::EngineJobPriority::Low,
+        0,
+        0,
+        0,
+        0});
+    const std::vector<full_engine::TerrainManifestAssetLoadJobCompletion> completions =
+        readyCompletions();
+    options.externalCompletions = completions.data();
+    options.externalCompletionCount = completions.size();
+    const full_engine::TerrainStreamingSchedulerTickResult result =
+        runTick(fixture, assetHandles, callbackState, desc, missingSnapshot(), options);
+
+    expect(result.status == full_engine::TerrainStreamingSchedulerTickStatus::Success, "external completion unrelated job reconcile succeeds", failures);
+    expect(fixture.loop.manifestAssetLoadJobs().jobCount() == 1, "external completion reconcile preserves unrelated job", failures);
+    expect(fixture.loop.manifestAssetLoadJobs().summary().customCount == 1, "external completion reconcile leaves custom job", failures);
+}
+
+void testRetainedServiceLoadsHandlesWithoutStreaming(std::vector<std::string>& failures)
+{
+    Fixture fixture;
+    preparePendingLoadRequests(fixture);
+    full_engine::RendererAssetHandleCatalog assetHandles;
+    CallbackState callbackState;
+    callbackState.handles = readyHandles();
+    const full_engine::WorldChunkDesc desc = worldDesc();
+    full_engine::TerrainStreamingSchedulerTickOptions options;
+    options.loadJobMode = full_engine::TerrainStreamingSchedulerLoadJobMode::RetainedService;
+    options.scheduler.normalMaxAssetLoadJobs = 8;
+
+    const full_engine::TerrainStreamingSchedulerTickResult result =
+        runTick(fixture, assetHandles, callbackState, desc, missingSnapshot(), options);
+
+    expect(result.status == full_engine::TerrainStreamingSchedulerTickStatus::Success, "retained service load-only tick succeeds", failures);
+    expect(!result.loadJobsRan, "retained service tick does not use direct load coordinator", failures);
+    expect(result.loadJobsScheduled, "retained service tick schedules jobs", failures);
+    expect(result.loadServiceRan, "retained service tick advances service", failures);
+    expect(!result.streamingRan, "retained service load-only tick does not run streaming", failures);
+    expect(result.loadService.workPackets.packetizedCount == 3, "retained service tick packetizes jobs", failures);
+    expect(result.loadService.enqueue.queuedCount == 3, "retained service tick enqueues service work", failures);
+    expect(result.loadService.tick.loadedCount == 3, "retained service tick loads handles", failures);
+    expect(result.loadService.completionReconcileStatus == full_engine::TerrainManifestAssetLoadJobCompletionReconcileStatus::Success, "retained service tick reconciles completions", failures);
+    expect(fixture.loop.manifestLoad().pendingLoadRequestCount() == 0, "retained service tick clears pending load requests", failures);
+    expect(fixture.loop.manifestAssetLoadJobs().jobCount() == 0, "retained service tick removes scheduled jobs", failures);
+    expect(fixture.loop.manifestAssetLoadService().completedCount() == 3, "retained service tick keeps completed service diagnostics", failures);
+    expect(assetHandles.findMeshHandle(asset(1)) != nullptr, "retained service tick writes mesh handle", failures);
+    expect(assetHandles.findMaterialHandle(asset(2)) != nullptr, "retained service tick writes material handle", failures);
+    expect(assetHandles.findTextureHandle(asset(3)) != nullptr, "retained service tick writes texture handle", failures);
+    expect(fixture.renderer.createCalls == 0, "retained service load-only tick does not touch renderer", failures);
+    expect(fixture.loop.latestDiagnostics().loadService.tick.loadedCount == 3, "retained service tick updates loop diagnostics", failures);
+}
+
+void testRetainedServiceRunsBeforeStreaming(std::vector<std::string>& failures)
+{
+    Fixture fixture;
+    preparePendingLoadRequests(fixture);
+    appendPressureTick(fixture.loop);
+    full_engine::RendererAssetHandleCatalog assetHandles;
+    CallbackState callbackState;
+    callbackState.handles = readyHandles();
+    const full_engine::WorldChunkDesc desc = worldDesc();
+    full_engine::TerrainStreamingSchedulerTickOptions options;
+    options.loadJobMode = full_engine::TerrainStreamingSchedulerLoadJobMode::RetainedService;
+    options.scheduler.normalMaxAssetLoadJobs = 8;
+
+    const full_engine::TerrainStreamingSchedulerTickResult result =
+        runTick(fixture, assetHandles, callbackState, desc, missingSnapshot(), options);
+
+    expect(result.status == full_engine::TerrainStreamingSchedulerTickStatus::Success, "retained service combined tick succeeds", failures);
+    expect(result.loadServiceRan, "retained service combined tick advances service", failures);
+    expect(result.streamingRan, "retained service combined tick runs streaming", failures);
+    expect(result.loadService.completionReconcileStatus == full_engine::TerrainManifestAssetLoadJobCompletionReconcileStatus::Success, "retained service combined tick reconciles before streaming", failures);
+    expect(assetHandles.findTextureHandle(asset(3)) != nullptr, "retained service combined tick loads handles", failures);
+    expect(fixture.renderer.createCalls == 1, "retained service combined tick creates terrain", failures);
+    expect(fixture.terrainHandles.contains(chunk()), "retained service combined tick maps terrain handle", failures);
+    const full_engine::TerrainStreamingTickEvent* const tick = fixture.loop.latestTickEvent();
+    expect(tick != nullptr, "retained service combined tick records history", failures);
+    if (tick != nullptr)
+    {
+        expect(tick->scheduler.loadServiceRan, "retained service combined tick annotates service phase", failures);
+        expect(!tick->scheduler.loadJobsRan, "retained service combined tick does not annotate direct load phase", failures);
+        expect(tick->scheduler.streamingRan, "retained service combined tick annotates streaming phase", failures);
+    }
+}
+
+void testRetainedServiceBlockedByMissingAndFailedCallbacks(std::vector<std::string>& failures)
+{
+    {
+        Fixture fixture;
+        preparePendingLoadRequests(fixture);
+        appendPressureTick(fixture.loop);
+        full_engine::RendererAssetHandleCatalog assetHandles;
+        CallbackState callbackState;
+        callbackState.handles = readyHandles();
+        (void)callbackState.handles.removeMaterialHandle(asset(2));
+        const full_engine::WorldChunkDesc desc = worldDesc();
+        full_engine::TerrainStreamingSchedulerTickOptions options;
+        options.loadJobMode = full_engine::TerrainStreamingSchedulerLoadJobMode::RetainedService;
+        options.scheduler.normalMaxAssetLoadJobs = 8;
+
+        const full_engine::TerrainStreamingSchedulerTickResult result =
+            runTick(fixture, assetHandles, callbackState, desc, missingSnapshot(), options);
+
+        expect(result.status == full_engine::TerrainStreamingSchedulerTickStatus::LoadJobsBlocked, "retained service missing callback blocks tick", failures);
+        expect(result.loadServiceRan, "retained service missing callback attempts service", failures);
+        expect(!result.streamingRan, "retained service missing callback skips streaming", failures);
+        expect(result.loadService.tick.missingCount == 1, "retained service missing callback records missing count", failures);
+        expect(result.loadService.completionReconcileStatus == full_engine::TerrainManifestAssetLoadJobCompletionReconcileStatus::CompletionPending, "retained service missing callback keeps completion pending", failures);
+        expect(fixture.loop.manifestLoad().pendingLoadRequestCount() == 3, "retained service missing callback preserves load requests", failures);
+        expect(fixture.loop.manifestAssetLoadJobs().jobCount() == 3, "retained service missing callback preserves jobs", failures);
+        expect(fixture.loop.manifestAssetLoadService().pendingCount() == 1, "retained service missing callback preserves pending service work", failures);
+        expect(assetHandles.meshHandleCount() == 0, "retained service missing callback leaves destination unchanged", failures);
+        expect(fixture.renderer.createCalls == 0, "retained service missing callback does not touch renderer", failures);
+    }
+
+    {
+        Fixture fixture;
+        preparePendingLoadRequests(fixture);
+        appendPressureTick(fixture.loop);
+        full_engine::RendererAssetHandleCatalog assetHandles;
+        CallbackState callbackState;
+        callbackState.handles = readyHandles();
+        callbackState.failedAsset = 2;
+        const full_engine::WorldChunkDesc desc = worldDesc();
+        full_engine::TerrainStreamingSchedulerTickOptions options;
+        options.loadJobMode = full_engine::TerrainStreamingSchedulerLoadJobMode::RetainedService;
+        options.scheduler.normalMaxAssetLoadJobs = 8;
+
+        const full_engine::TerrainStreamingSchedulerTickResult result =
+            runTick(fixture, assetHandles, callbackState, desc, missingSnapshot(), options);
+
+        expect(result.status == full_engine::TerrainStreamingSchedulerTickStatus::LoadJobsBlocked, "retained service failed callback blocks tick", failures);
+        expect(result.loadService.tick.failedCount == 1, "retained service failed callback records failed count", failures);
+        expect(result.loadService.completionReconcileStatus == full_engine::TerrainManifestAssetLoadJobCompletionReconcileStatus::CompletionPublishFailed, "retained service failed callback blocks publish", failures);
+        expect(fixture.loop.manifestAssetLoadService().failedCount() == 1, "retained service failed callback preserves failed service work", failures);
+        expect(fixture.loop.manifestLoad().pendingLoadRequestCount() == 3, "retained service failed callback preserves load requests", failures);
+        expect(!result.streamingRan, "retained service failed callback skips streaming", failures);
+    }
+}
+
+void testRetainedServiceMaxJobOverrideBlocksUntilLaterTick(std::vector<std::string>& failures)
+{
+    Fixture fixture;
+    preparePendingLoadRequests(fixture);
+    full_engine::RendererAssetHandleCatalog assetHandles;
+    CallbackState callbackState;
+    callbackState.handles = readyHandles();
+    const full_engine::WorldChunkDesc desc = worldDesc();
+    full_engine::TerrainStreamingSchedulerTickOptions options;
+    options.loadJobMode = full_engine::TerrainStreamingSchedulerLoadJobMode::RetainedService;
+    options.overrideMaxAssetLoadJobs = true;
+    options.maxAssetLoadJobs = 1;
+
+    const full_engine::TerrainStreamingSchedulerTickResult first =
+        runTick(fixture, assetHandles, callbackState, desc, missingSnapshot(), options);
+
+    expect(first.status == full_engine::TerrainStreamingSchedulerTickStatus::LoadJobsBlocked, "retained service partial tick blocks", failures);
+    expect(first.loadService.tick.loadedCount == 1, "retained service partial tick loads one request", failures);
+    expect(fixture.loop.manifestLoad().pendingLoadRequestCount() == 3, "retained service partial tick preserves load queue", failures);
+    expect(fixture.loop.manifestAssetLoadJobs().jobCount() == 3, "retained service partial tick preserves jobs", failures);
+    expect(fixture.loop.manifestAssetLoadService().completedCount() == 1, "retained service partial tick keeps completed work", failures);
+
+    options.maxAssetLoadJobs = 8;
+    const full_engine::TerrainStreamingSchedulerTickResult second =
+        runTick(fixture, assetHandles, callbackState, desc, missingSnapshot(), options);
+
+    expect(second.status == full_engine::TerrainStreamingSchedulerTickStatus::Success, "retained service retry tick succeeds", failures);
+    expect(second.loadService.tick.loadedCount == 2, "retained service retry tick loads remaining requests", failures);
+    expect(second.loadService.enqueue.alreadyQueuedCount == 3, "retained service retry tick deduplicates service work", failures);
+    expect(fixture.loop.manifestLoad().pendingLoadRequestCount() == 0, "retained service retry tick clears load queue", failures);
+    expect(fixture.loop.manifestAssetLoadJobs().jobCount() == 0, "retained service retry tick clears jobs", failures);
+    expect(assetHandles.findMaterialHandle(asset(2)) != nullptr, "retained service retry tick publishes remaining handle", failures);
+}
+
 void testBlockedLoadJobsStopBeforeStreaming(std::vector<std::string>& failures)
 {
     Fixture fixture;
@@ -669,9 +1018,12 @@ void testSchedulerTickDiagnosticsDefaultAndCopiesCounters(std::vector<std::strin
         expect(diagnostics.history.hasSchedulerDecision, "default diagnostics has history decision", failures);
         expect(!diagnostics.loadJobsRan, "default diagnostics load phase skipped", failures);
         expect(!diagnostics.loadJobsScheduled, "default diagnostics schedule phase skipped", failures);
+        expect(!diagnostics.loadServiceRan, "default diagnostics service phase skipped", failures);
+        expect(!diagnostics.externalCompletionsReconciled, "default diagnostics external completion phase skipped", failures);
         expect(!diagnostics.streamingRan, "default diagnostics streaming phase skipped", failures);
         expect(diagnostics.loadJobExecution.completedCount == 0, "default diagnostics load counters zero", failures);
         expect(diagnostics.scheduledLoadJobMirror.queuedCount == 0, "default diagnostics schedule counters zero", failures);
+        expect(diagnostics.loadService.tick.loadedCount == 0, "default diagnostics service counters zero", failures);
         expect(diagnostics.streamingSummary.streamingPlanOperationCount == 0, "default diagnostics streaming counters zero", failures);
     }
 
@@ -689,6 +1041,8 @@ void testSchedulerTickDiagnosticsDefaultAndCopiesCounters(std::vector<std::strin
     result.decision.maxAssetLoadJobs = 7;
     result.loadJobsRan = true;
     result.loadJobsScheduled = true;
+    result.loadServiceRan = true;
+    result.externalCompletionsReconciled = true;
     result.streamingRan = true;
     result.loadJobs.status = full_engine::TerrainManifestAssetLoadJobCoordinatorStatus::Success;
     result.loadJobs.mirror.summary.queuedCount = 8;
@@ -708,6 +1062,23 @@ void testSchedulerTickDiagnosticsDefaultAndCopiesCounters(std::vector<std::strin
     result.scheduledLoadJobs.initialPendingLoadRequestCount = 34;
     result.scheduledLoadJobs.finalPendingLoadRequestCount = 35;
     result.scheduledLoadJobs.pendingJobCount = 36;
+    result.loadService.workPackets.packetizedCount = 37;
+    result.loadService.enqueue.queuedCount = 38;
+    result.loadService.tick.loadedCount = 39;
+    result.loadService.completionReconcileStatus =
+        full_engine::TerrainManifestAssetLoadJobCompletionReconcileStatus::Success;
+    result.loadService.completionPublish.publishedCount = 40;
+    result.loadService.completionReconcile.finalReadyHandleCount = 41;
+    result.externalCompletionReconcile.status =
+        full_engine::TerrainManifestAssetLoadJobCompletionReconcileStatus::Success;
+    result.externalCompletionReconcile.publish.summary.publishedCount = 42;
+    result.externalCompletionReconcile.reconcile.load.summary.loadedCount = 43;
+    result.externalCompletionReconcile.reconcile.load.consumed = true;
+    result.externalCompletionReconcile.reconcile.summary.finalReadyHandleCount = 44;
+    result.externalCompletionReconcile.reconcile.readiness.summary.readyCount = 45;
+    result.externalCompletionReconcile.publish.records.push_back({});
+    result.externalCompletionReconcile.reconcile.load.records.push_back({});
+    result.externalCompletionReconcile.reconcile.readiness.records.push_back({});
     result.streaming.status = full_engine::TerrainStreamingLoopUpdateStatus::Success;
     result.streaming.streaming.status = full_engine::TerrainStreamingManifestUpdateStatus::Success;
     result.streaming.runtime.status = full_engine::TerrainRuntimeUpdateStatus::Success;
@@ -723,6 +1094,9 @@ void testSchedulerTickDiagnosticsDefaultAndCopiesCounters(std::vector<std::strin
     const std::size_t sourceJobRecordCount = result.loadJobs.jobs.records.size();
     const std::size_t sourceLoadRecordCount = result.loadJobs.load.consume.records.size();
     const std::size_t sourceReadinessRecordCount = result.loadJobs.readiness.records.size();
+    const std::size_t sourceExternalPublishRecordCount = result.externalCompletionReconcile.publish.records.size();
+    const std::size_t sourceExternalLoadRecordCount = result.externalCompletionReconcile.reconcile.load.records.size();
+    const std::size_t sourceExternalReadinessRecordCount = result.externalCompletionReconcile.reconcile.readiness.records.size();
     const full_engine::TerrainStreamingSchedulerTickDiagnostics diagnostics =
         full_engine::makeTerrainStreamingSchedulerTickDiagnostics(result);
 
@@ -745,6 +1119,8 @@ void testSchedulerTickDiagnosticsDefaultAndCopiesCounters(std::vector<std::strin
     expect(diagnostics.history.pressureCount == diagnostics.pressureCount, "diagnostics history copies pressure", failures);
     expect(diagnostics.loadJobsRan, "diagnostics copies load phase bool", failures);
     expect(diagnostics.loadJobsScheduled, "diagnostics copies schedule phase bool", failures);
+    expect(diagnostics.loadServiceRan, "diagnostics copies service phase bool", failures);
+    expect(diagnostics.externalCompletionsReconciled, "diagnostics copies external completion phase bool", failures);
     expect(diagnostics.streamingRan, "diagnostics copies streaming phase bool", failures);
     expect(diagnostics.loadJobStatus == full_engine::TerrainManifestAssetLoadJobCoordinatorStatus::Success, "diagnostics copies load status", failures);
     expect(diagnostics.loadJobMirror.queuedCount == 8, "diagnostics copies mirror counters", failures);
@@ -760,6 +1136,26 @@ void testSchedulerTickDiagnosticsDefaultAndCopiesCounters(std::vector<std::strin
     expect(diagnostics.scheduledInitialPendingLoadRequestCount == 34, "diagnostics copies schedule initial pending", failures);
     expect(diagnostics.scheduledFinalPendingLoadRequestCount == 35, "diagnostics copies schedule final pending", failures);
     expect(diagnostics.scheduledPendingJobCount == 36, "diagnostics copies schedule pending jobs", failures);
+    expect(diagnostics.loadService.workPackets.packetizedCount == 37, "diagnostics copies service packets", failures);
+    expect(diagnostics.loadService.enqueue.queuedCount == 38, "diagnostics copies service enqueue", failures);
+    expect(diagnostics.loadService.tick.loadedCount == 39, "diagnostics copies service tick", failures);
+    expect(
+        diagnostics.loadService.completionReconcileStatus ==
+            full_engine::TerrainManifestAssetLoadJobCompletionReconcileStatus::Success,
+        "diagnostics copies service reconcile status",
+        failures);
+    expect(diagnostics.loadService.completionPublish.publishedCount == 40, "diagnostics copies service publish", failures);
+    expect(diagnostics.loadService.completionReconcile.finalReadyHandleCount == 41, "diagnostics copies service nested reconcile", failures);
+    expect(
+        diagnostics.externalCompletionStatus ==
+            full_engine::TerrainManifestAssetLoadJobCompletionReconcileStatus::Success,
+        "diagnostics copies external completion status",
+        failures);
+    expect(diagnostics.externalCompletionPublish.publishedCount == 42, "diagnostics copies external completion publish", failures);
+    expect(diagnostics.externalCompletionLoadConsume.loadedCount == 43, "diagnostics copies external completion consume", failures);
+    expect(diagnostics.externalCompletionLoadConsumed, "diagnostics copies external completion consumed flag", failures);
+    expect(diagnostics.externalCompletionReconcile.finalReadyHandleCount == 44, "diagnostics copies external completion reconcile", failures);
+    expect(diagnostics.externalCompletionReadiness.readyCount == 45, "diagnostics copies external completion readiness", failures);
     expect(diagnostics.streamingStatus == full_engine::TerrainStreamingLoopUpdateStatus::Success, "diagnostics copies streaming status", failures);
     expect(diagnostics.manifestStreamingStatus == full_engine::TerrainStreamingManifestUpdateStatus::Success, "diagnostics copies manifest status", failures);
     expect(diagnostics.runtimeStatus == full_engine::TerrainRuntimeUpdateStatus::Success, "diagnostics copies runtime status", failures);
@@ -774,6 +1170,9 @@ void testSchedulerTickDiagnosticsDefaultAndCopiesCounters(std::vector<std::strin
     expect(result.loadJobs.jobs.records.size() == sourceJobRecordCount, "diagnostics does not mutate job records", failures);
     expect(result.loadJobs.load.consume.records.size() == sourceLoadRecordCount, "diagnostics does not mutate load records", failures);
     expect(result.loadJobs.readiness.records.size() == sourceReadinessRecordCount, "diagnostics does not mutate readiness records", failures);
+    expect(result.externalCompletionReconcile.publish.records.size() == sourceExternalPublishRecordCount, "diagnostics does not mutate external publish records", failures);
+    expect(result.externalCompletionReconcile.reconcile.load.records.size() == sourceExternalLoadRecordCount, "diagnostics does not mutate external load records", failures);
+    expect(result.externalCompletionReconcile.reconcile.readiness.records.size() == sourceExternalReadinessRecordCount, "diagnostics does not mutate external readiness records", failures);
 }
 } // namespace
 
@@ -787,6 +1186,15 @@ int main()
     testCombinedLoadAndStreamingRunsInOrder(failures);
     testScheduleOnlyMirrorsLoadJobsWithoutExecution(failures);
     testScheduleOnlyDeduplicatesAlreadyQueuedJobs(failures);
+    testExternalCompletionModeSchedulesWithoutCompletions(failures);
+    testExternalCompletionModeReconcilesLaterCompletions(failures);
+    testExternalCompletionModeReconcilesThenStreams(failures);
+    testExternalCompletionModeBlocksInvalidCompletions(failures);
+    testExternalCompletionModePreservesUnrelatedJobs(failures);
+    testRetainedServiceLoadsHandlesWithoutStreaming(failures);
+    testRetainedServiceRunsBeforeStreaming(failures);
+    testRetainedServiceBlockedByMissingAndFailedCallbacks(failures);
+    testRetainedServiceMaxJobOverrideBlocksUntilLaterTick(failures);
     testBlockedLoadJobsStopBeforeStreaming(failures);
     testStreamingBlockedMapsStatus(failures);
     testRuntimeSetupFailureMapsStatus(failures);

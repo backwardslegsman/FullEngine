@@ -59,6 +59,12 @@ struct TerrainStreamingSchedulerTickDiagnostics
     /** @brief True when the load-job phase only scheduled external work. */
     bool loadJobsScheduled = false;
 
+    /** @brief True when the retained load-service phase ran. */
+    bool loadServiceRan = false;
+
+    /** @brief True when caller-owned external completions were reconciled. */
+    bool externalCompletionsReconciled = false;
+
     /** @brief True when the streaming phase ran. */
     bool streamingRan = false;
 
@@ -99,6 +105,28 @@ struct TerrainStreamingSchedulerTickDiagnostics
 
     /** @brief Pending job count after schedule-only mirroring. */
     std::size_t scheduledPendingJobCount = 0;
+
+    /** @brief Compact retained load-service counters from the tick. */
+    TerrainManifestAssetLoadServiceDiagnostics loadService = {};
+
+    /** @brief High-level status from caller-owned external completion reconcile. */
+    TerrainManifestAssetLoadJobCompletionReconcileStatus externalCompletionStatus =
+        TerrainManifestAssetLoadJobCompletionReconcileStatus::NoPendingLoads;
+
+    /** @brief Counters from publishing caller-owned external completions. */
+    TerrainManifestAssetLoadJobCompletionSummary externalCompletionPublish = {};
+
+    /** @brief Counters from consuming load requests after external completion publish. */
+    TerrainManifestAssetLoadSummary externalCompletionLoadConsume = {};
+
+    /** @brief True when external completion reconcile consumed retained load requests. */
+    bool externalCompletionLoadConsumed = false;
+
+    /** @brief Compact nested reconcile counters for external completions. */
+    TerrainManifestAssetLoadJobReconcileSummary externalCompletionReconcile = {};
+
+    /** @brief Final readiness counters after external completion reconcile. */
+    TerrainManifestAssetReadinessSummary externalCompletionReadiness = {};
 
     /** @brief High-level streaming-loop update status from the tick. */
     TerrainStreamingLoopUpdateStatus streamingStatus =

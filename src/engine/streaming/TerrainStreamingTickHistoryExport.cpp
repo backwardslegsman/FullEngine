@@ -40,6 +40,8 @@ void writeTick(std::ostream& stream, const TerrainStreamingTickEvent& event)
     writeJsonField(stream, "schedulerMaxAssetLoadJobs", event.scheduler.maxAssetLoadJobs);
     writeJsonBoolField(stream, "schedulerLoadJobsRan", event.scheduler.loadJobsRan);
     writeJsonBoolField(stream, "schedulerLoadJobsScheduled", event.scheduler.loadJobsScheduled);
+    writeJsonBoolField(stream, "schedulerLoadServiceRan", event.scheduler.loadServiceRan);
+    writeJsonBoolField(stream, "schedulerExternalCompletionsReconciled", event.scheduler.externalCompletionsReconciled);
     writeJsonBoolField(stream, "schedulerStreamingRan", event.scheduler.streamingRan);
     writeJsonBoolField(stream, "runtimeUpdateRan", event.runtimeUpdateRan);
     writeJsonField(stream, "setupRequestsBeforeRuntime", event.setupRequestsBeforeRuntime);

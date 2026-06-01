@@ -680,10 +680,21 @@ move gameplay, streaming policy, or editor concepts into renderer internals.
   retained load service and can packetize scheduled jobs, tick caller-owned
   callbacks, reconcile emitted completions, and expose the resulting counters
   to the sample debug panel without sample-local temporary completion vectors.
-- Next slice: add compact retained diagnostics for the load service itself
-  (service request counts, latest enqueue/tick/reconcile status, and completion
-  counts) so future tools do not need to read through the full service/result
-  objects.
+- Thirty-third slice is implemented: retained load-service diagnostics are now
+  copied into `TerrainStreamingLoopDiagnostics`, and the sample displays
+  packet/enqueue/tick/reconcile progress from that compact snapshot instead of
+  reading through full service/result objects.
+- Thirty-fourth slice is implemented: the scheduler tick can now use a
+  retained-service load mode that schedules jobs, packetizes retained service
+  work, ticks caller-owned callbacks, reconciles emitted completions, and then
+  proceeds into streaming in the same tick when handles become ready.
+- Thirty-fifth slice is implemented: the scheduler tick now has an
+  external-completion load mode that schedules retained manifest asset-load jobs
+  without callbacks, then reconciles caller-owned completion records on a later
+  tick before streaming when handles are ready.
+- Next slice: wire a sample fake external worker panel around external
+  completions so the demo can show schedule -> worker output -> scheduler
+  reconcile -> streaming without using the retained-service callback shortcut.
 - Initial sample integration is in place: the debug UI can run the
   manifest-aware streaming coordinator once or continuously from camera
   position, display readiness/load/staging/streaming queue counters, and keep

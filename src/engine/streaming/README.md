@@ -38,9 +38,10 @@ threaded loader exists.
   manifest load state, streaming runtime state, manifest asset-load jobs, a
   retained manifest asset-load service, and latest coordination diagnostics. It
   can packetize scheduled load jobs, progress caller-owned load callbacks,
-  reconcile emitted completions back into retained manifest readiness, and keep
-  a compact fixed-capacity tick history ring for budget/deferred-work
-  visibility across recent frames.
+  reconcile emitted completions back into retained manifest readiness, expose
+  service progress through compact copied diagnostics, and keep a compact
+  fixed-capacity tick history ring for budget/deferred-work visibility across
+  recent frames.
 - `TerrainStreamingLoopUpdate.hpp/.cpp` - synchronous tick-shaped helper that
   runs retained manifest-aware streaming coordination and then applies queued
   terrain setup/residency work through `TerrainRuntimeState::updateWithSnapshot`
@@ -56,9 +57,10 @@ threaded loader exists.
   neither.
 - `TerrainStreamingSchedulerTick.hpp/.cpp` - policy-driven synchronous tick
   helper that summarizes history, chooses scheduler work, and either runs load
-  jobs synchronously before streaming or mirrors them into the retained job
-  queue for external execution. It returns one copied result without owning
-  renderer handles, resources, threads, or IO.
+  jobs synchronously before streaming, mirrors them into the retained job queue
+  for external execution, reconciles caller-owned external completion records,
+  or advances the retained load service before streaming. It returns one copied
+  result without owning renderer handles, resources, threads, or IO.
 - `TerrainStreamingSchedulerTickDiagnostics.hpp/.cpp` - compact value
   diagnostics for scheduler tick status, decision pressure, load-job counters,
   and streaming-loop counters suitable for sample/editor display.

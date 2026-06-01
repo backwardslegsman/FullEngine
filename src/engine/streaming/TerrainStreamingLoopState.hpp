@@ -35,6 +35,8 @@ struct TerrainStreamingTickSchedulerDiagnostics
     std::size_t maxAssetLoadJobs = 0;
     bool loadJobsRan = false;
     bool loadJobsScheduled = false;
+    bool loadServiceRan = false;
+    bool externalCompletionsReconciled = false;
     bool streamingRan = false;
 };
 
@@ -138,6 +140,9 @@ struct TerrainStreamingLoopDiagnostics
     /** @brief Latest external manifest asset-load job reconcile diagnostics. */
     TerrainManifestAssetLoadJobReconcileDiagnostics reconciledLoadJobs = {};
 
+    /** @brief Latest retained manifest asset-load service diagnostics. */
+    TerrainManifestAssetLoadServiceDiagnostics loadService = {};
+
     /** @brief Latest manifest-aware streaming update status. */
     TerrainStreamingManifestUpdateStatus latestStreamingStatus =
         TerrainStreamingManifestUpdateStatus::Success;
@@ -198,6 +203,9 @@ public:
 
     /** @brief Returns latest external load-job reconcile diagnostics. */
     const TerrainManifestAssetLoadJobReconcileResult& latestLoadJobReconcileResult() const noexcept;
+
+    /** @brief Returns latest caller-owned completion reconcile diagnostics. */
+    const TerrainManifestAssetLoadJobCompletionReconcileResult& latestLoadJobCompletionReconcileResult() const noexcept;
 
     /** @brief Returns latest scheduled-job work-packet conversion diagnostics. */
     const TerrainManifestAssetLoadJobWorkPacketResult& latestLoadServiceWorkPackets() const noexcept;
@@ -358,6 +366,21 @@ public:
         RendererAssetHandleCatalog& destinationHandles);
 
     /**
+     * @brief Reconciles caller-owned completed scheduled load-job records.
+     *
+     * The completion array is read only for the duration of the call and is
+     * never retained. Successful reconciliation consumes retained manifest
+     * load requests, removes matching scheduled jobs, and replans readiness.
+     * The call does not execute callbacks, touch the retained load service,
+     * perform IO, create renderer resources, start threads, or apply terrain
+     * runtime queues.
+     */
+    const TerrainManifestAssetLoadJobCompletionReconcileResult& reconcileScheduledAssetLoadCompletions(
+        const TerrainManifestAssetLoadJobCompletion* completions,
+        std::size_t completionCount,
+        RendererAssetHandleCatalog& destinationHandles);
+
+    /**
      * @brief Runs one manifest-aware terrain streaming update.
      *
      * The call delegates to `updateTerrainStreamingFromManifest`, storing the
@@ -428,6 +451,7 @@ private:
     TerrainManifestAssetLoadJobScheduleDiagnostics latestLoadJobScheduleDiagnostics_ = {};
     TerrainManifestAssetLoadJobReconcileResult latestLoadJobReconcileResult_ = {};
     TerrainManifestAssetLoadJobReconcileDiagnostics latestLoadJobReconcileDiagnostics_ = {};
+    TerrainManifestAssetLoadJobCompletionReconcileResult latestLoadJobCompletionReconcileResult_ = {};
     TerrainManifestAssetLoadJobWorkPacketResult latestLoadServiceWorkPackets_ = {};
     TerrainManifestAssetLoadServiceEnqueueResult latestLoadServiceEnqueueResult_ = {};
     TerrainManifestAssetLoadServiceTickResult latestLoadServiceTickResult_ = {};
