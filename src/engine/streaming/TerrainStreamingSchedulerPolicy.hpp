@@ -1,32 +1,13 @@
 #pragma once
 
 #include "engine/streaming/TerrainStreamingBudgetPolicy.hpp"
+#include "engine/streaming/TerrainStreamingSchedulerTypes.hpp"
 #include "engine/streaming/TerrainStreamingTickHistorySummary.hpp"
 
 #include <cstddef>
 
 namespace full_engine
 {
-/** @brief High-level scheduler action selected from streaming diagnostics. */
-enum class TerrainStreamingSchedulerStatus
-{
-    Idle,
-    RunStreaming,
-    RunAssetLoadJobs,
-    RunStreamingAndAssetLoadJobs,
-};
-
-/** @brief Primary pressure source that caused a scheduler decision. */
-enum class TerrainStreamingSchedulerReason
-{
-    NoWork,
-    PendingAssetLoads,
-    PendingJobs,
-    DeferredWorkPressure,
-    StreamingBacklog,
-    CatchUp,
-};
-
 /**
  * @brief Thresholds for deterministic single-threaded streaming scheduler decisions.
  *

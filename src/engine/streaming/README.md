@@ -56,12 +56,16 @@ threaded loader exists.
   helper that summarizes history, chooses scheduler work, runs load jobs before
   streaming when requested, and returns one copied result without owning
   renderer handles, resources, threads, or IO.
+- `TerrainStreamingSchedulerTickDiagnostics.hpp/.cpp` - compact value
+  diagnostics for scheduler tick status, decision pressure, load-job counters,
+  and streaming-loop counters suitable for sample/editor display.
 - `TerrainStreamingTickHistoryExport.hpp/.cpp` - standard-library JSON Lines
-  export for retained streaming tick history so deferred-work behavior can be
-  captured from longer manual sessions.
+  export for retained streaming tick history so deferred-work and scheduler
+  decision behavior can be captured from longer manual sessions.
 - `TerrainStreamingTickHistoryImport.hpp/.cpp` - matching JSON Lines import for
   exported streaming tick traces, preserving file order and stored sequence
-  values as value-only diagnostics.
+  values as value-only diagnostics, including scheduler decision fields when
+  present.
 - `TerrainStreamingTickHistorySummary.hpp/.cpp` - offline value summaries for
   retained or imported tick traces, including status counts, selected budget
   profile counts, request backlog peaks, and deferred-work totals/peaks.
@@ -111,5 +115,11 @@ profile diagnostics without needing retained loop state. The scheduler policy
 can now turn those summaries and current pending load/job counts into a
 deterministic single-threaded pacing decision, and the scheduler tick helper
 can execute that decision through the existing explicit load-job and streaming
-loop seams. Later slices can connect callbacks to real async IO after the
-CPU-side policy is proven.
+loop seams. A compact diagnostics snapshot lets the sample terrain panel show
+that scheduler tick without retaining or reaching through full per-phase result
+records. Scheduler-driven streaming ticks annotate retained history with copied
+decision/status/pressure fields, so exported traces show policy choices beside
+deferred work. The panel can run that tick once or use it as the continuous
+camera-streaming path while keeping lower-level manual controls available for
+individual phase diagnostics. Later slices can connect callbacks to real async
+IO after the CPU-side policy is proven.

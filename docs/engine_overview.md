@@ -211,6 +211,15 @@ Implemented pieces:
 - a policy-driven synchronous streaming scheduler tick helper that executes the
   selected load-job and streaming-loop phases through explicit caller-owned
   callbacks and state, leaving true async/threaded scheduling as future work
+- compact scheduler tick diagnostics that copy selected decision, pressure,
+  load-job, and streaming-loop counters for sample/editor display without
+  retaining full tick records
+- retained streaming tick history now carries scheduler decision/status and
+  pressure fields beside deferred work, and the JSONL trace round-trips those
+  fields for longer-session inspection
+- sample debug wiring that can run the scheduler tick once or use it for
+  continuous camera-driven streaming, while retaining lower-level manual
+  streaming and load-job controls for inspection
 - a simple terrain streaming budget policy that selects deterministic setup,
   residency, and lifecycle caps from named runtime profiles, plus an adaptive
   selector that chooses a profile from retained tick-history pressure before
@@ -287,8 +296,9 @@ update helper, can select adaptive automatic streaming budget profiles from
 recent deferred-work pressure or use manual debug budget overrides, can run the
 manifest asset load job coordinator from
 the debug panel using its sample-created renderer handles as the external load
-callback source, can export retained streaming tick history, and submits the
-mapped renderer terrain handles in its render packet.
+callback source, can optionally drive camera streaming through the
+policy-driven scheduler tick, can export retained streaming tick history, and
+submits the mapped renderer terrain handles in its render packet.
 
 Still future work:
 

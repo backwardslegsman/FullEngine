@@ -1,6 +1,8 @@
 #include "engine/streaming/TerrainStreamingTickHistoryExport.hpp"
 
 #include "engine/streaming/TerrainStreamingBudgetPolicy.hpp"
+#include "engine/streaming/TerrainStreamingSchedulerPolicy.hpp"
+#include "engine/streaming/TerrainStreamingSchedulerTick.hpp"
 
 #include <fstream>
 
@@ -24,6 +26,20 @@ void writeTick(std::ostream& stream, const TerrainStreamingTickEvent& event)
     stream << ",\"streamingStatus\":\"" << terrainStreamingManifestUpdateStatusName(event.streamingStatus) << "\"";
     stream << ",\"runtimeStatus\":\"" << terrainRuntimeUpdateStatusName(event.runtimeStatus) << "\"";
     stream << ",\"budgetProfile\":\"" << terrainStreamingBudgetProfileName(event.budgetProfile) << "\"";
+    writeJsonBoolField(stream, "schedulerHasDecision", event.scheduler.hasSchedulerDecision);
+    stream << ",\"schedulerStatus\":\"" << terrainStreamingSchedulerTickStatusName(event.scheduler.status) << "\"";
+    stream << ",\"schedulerDecisionStatus\":\"" << terrainStreamingSchedulerStatusName(event.scheduler.decisionStatus) << "\"";
+    stream << ",\"schedulerDecisionReason\":\"" << terrainStreamingSchedulerReasonName(event.scheduler.decisionReason) << "\"";
+    stream << ",\"schedulerBudgetProfile\":\"" << terrainStreamingBudgetProfileName(event.scheduler.budgetProfile) << "\"";
+    writeJsonField(stream, "schedulerPendingLoadRequestCount", event.scheduler.pendingLoadRequestCount);
+    writeJsonField(stream, "schedulerPendingJobCount", event.scheduler.pendingJobCount);
+    writeJsonField(stream, "schedulerDeferredWorkCount", event.scheduler.deferredWorkCount);
+    writeJsonField(stream, "schedulerPeakDeferredWorkCount", event.scheduler.peakDeferredWorkCount);
+    writeJsonField(stream, "schedulerRuntimeBacklogCount", event.scheduler.runtimeBacklogCount);
+    writeJsonField(stream, "schedulerPressureCount", event.scheduler.pressureCount);
+    writeJsonField(stream, "schedulerMaxAssetLoadJobs", event.scheduler.maxAssetLoadJobs);
+    writeJsonBoolField(stream, "schedulerLoadJobsRan", event.scheduler.loadJobsRan);
+    writeJsonBoolField(stream, "schedulerStreamingRan", event.scheduler.streamingRan);
     writeJsonBoolField(stream, "runtimeUpdateRan", event.runtimeUpdateRan);
     writeJsonField(stream, "setupRequestsBeforeRuntime", event.setupRequestsBeforeRuntime);
     writeJsonField(stream, "residencyRequestsBeforeRuntime", event.residencyRequestsBeforeRuntime);

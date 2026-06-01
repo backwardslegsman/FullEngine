@@ -1,4 +1,5 @@
 #include "engine/streaming/TerrainStreamingSchedulerTick.hpp"
+#include "engine/streaming/TerrainStreamingSchedulerTickDiagnostics.hpp"
 
 #include <cstdint>
 #include <cstdlib>
@@ -444,6 +445,16 @@ void testDeferredPressureRunsStreamingOnly(std::vector<std::string>& failures)
     expect(!result.loadJobsRan, "streaming-only tick does not run load jobs", failures);
     expect(result.streamingRan, "streaming-only tick runs streaming", failures);
     expect(result.streaming.runtimeUpdateRan, "streaming-only tick applies runtime update", failures);
+    const full_engine::TerrainStreamingTickEvent* const tick = fixture.loop.latestTickEvent();
+    expect(tick != nullptr, "streaming-only tick records history", failures);
+    if (tick != nullptr)
+    {
+        expect(tick->scheduler.hasSchedulerDecision, "streaming-only tick annotates scheduler decision", failures);
+        expect(tick->scheduler.decisionStatus == result.decision.status, "streaming-only history copies decision status", failures);
+        expect(tick->scheduler.decisionReason == result.decision.reason, "streaming-only history copies decision reason", failures);
+        expect(tick->scheduler.streamingRan, "streaming-only history records streaming phase", failures);
+        expect(tick->budgetProfile == result.decision.budgetProfile, "streaming-only history uses scheduler profile", failures);
+    }
     expect(fixture.renderer.createCalls == 1, "streaming-only tick creates terrain", failures);
     expect(fixture.terrainHandles.contains(chunk()), "streaming-only tick maps terrain handle", failures);
 }
@@ -591,6 +602,108 @@ void testExplicitMaxJobOverrideIsHonored(std::vector<std::string>& failures)
     expect(result.loadJobs.jobs.summary.completedCount == 1, "partial max job override completes one job", failures);
     expect(fixture.loop.manifestLoad().pendingLoadRequestCount() == 3, "partial max job override preserves load queue", failures);
 }
+
+void testSchedulerTickDiagnosticsDefaultAndCopiesCounters(std::vector<std::string>& failures)
+{
+    {
+        const full_engine::TerrainStreamingSchedulerTickResult result;
+        const full_engine::TerrainStreamingSchedulerTickDiagnostics diagnostics =
+            full_engine::makeTerrainStreamingSchedulerTickDiagnostics(result);
+
+        expect(diagnostics.status == full_engine::TerrainStreamingSchedulerTickStatus::Idle, "default diagnostics status", failures);
+        expect(diagnostics.decisionStatus == full_engine::TerrainStreamingSchedulerStatus::Idle, "default diagnostics decision status", failures);
+        expect(diagnostics.decisionReason == full_engine::TerrainStreamingSchedulerReason::NoWork, "default diagnostics reason", failures);
+        expect(diagnostics.history.hasSchedulerDecision, "default diagnostics has history decision", failures);
+        expect(!diagnostics.loadJobsRan, "default diagnostics load phase skipped", failures);
+        expect(!diagnostics.streamingRan, "default diagnostics streaming phase skipped", failures);
+        expect(diagnostics.loadJobExecution.completedCount == 0, "default diagnostics load counters zero", failures);
+        expect(diagnostics.streamingSummary.streamingPlanOperationCount == 0, "default diagnostics streaming counters zero", failures);
+    }
+
+    full_engine::TerrainStreamingSchedulerTickResult result;
+    result.status = full_engine::TerrainStreamingSchedulerTickStatus::Success;
+    result.decision.status = full_engine::TerrainStreamingSchedulerStatus::RunStreamingAndAssetLoadJobs;
+    result.decision.reason = full_engine::TerrainStreamingSchedulerReason::CatchUp;
+    result.decision.budgetProfile = full_engine::TerrainStreamingBudgetProfile::CatchUp;
+    result.decision.pendingLoadRequestCount = 1;
+    result.decision.pendingJobCount = 2;
+    result.decision.deferredWorkCount = 3;
+    result.decision.peakDeferredWorkCount = 4;
+    result.decision.runtimeBacklogCount = 5;
+    result.decision.pressureCount = 6;
+    result.decision.maxAssetLoadJobs = 7;
+    result.loadJobsRan = true;
+    result.streamingRan = true;
+    result.loadJobs.status = full_engine::TerrainManifestAssetLoadJobCoordinatorStatus::Success;
+    result.loadJobs.mirror.summary.queuedCount = 8;
+    result.loadJobs.jobs.summary.completedCount = 9;
+    result.loadJobs.load.consume.summary.loadedCount = 10;
+    result.loadJobs.load.consume.consumed = true;
+    result.loadJobs.summary.finalReadyHandleCount = 11;
+    result.loadJobs.readiness.summary.readyCount = 12;
+    result.loadJobs.mirror.records.push_back({});
+    result.loadJobs.jobs.records.push_back({});
+    result.loadJobs.load.consume.records.push_back({});
+    result.loadJobs.readiness.records.push_back({});
+    result.streaming.status = full_engine::TerrainStreamingLoopUpdateStatus::Success;
+    result.streaming.streaming.status = full_engine::TerrainStreamingManifestUpdateStatus::Success;
+    result.streaming.runtime.status = full_engine::TerrainRuntimeUpdateStatus::Success;
+    result.streaming.runtimeUpdateRan = true;
+    result.streaming.setupRequestsBeforeRuntime = 13;
+    result.streaming.residencyRequestsBeforeRuntime = 14;
+    result.streaming.setupRequestsAfterRuntime = 15;
+    result.streaming.residencyRequestsAfterRuntime = 16;
+    result.streaming.streaming.summary.streamingPlanOperationCount = 17;
+    result.streaming.streaming.streamingQueue.summary.queuedSetupAddCount = 18;
+
+    const std::size_t sourceMirrorRecordCount = result.loadJobs.mirror.records.size();
+    const std::size_t sourceJobRecordCount = result.loadJobs.jobs.records.size();
+    const std::size_t sourceLoadRecordCount = result.loadJobs.load.consume.records.size();
+    const std::size_t sourceReadinessRecordCount = result.loadJobs.readiness.records.size();
+    const full_engine::TerrainStreamingSchedulerTickDiagnostics diagnostics =
+        full_engine::makeTerrainStreamingSchedulerTickDiagnostics(result);
+
+    expect(diagnostics.status == full_engine::TerrainStreamingSchedulerTickStatus::Success, "diagnostics copies status", failures);
+    expect(diagnostics.decisionStatus == full_engine::TerrainStreamingSchedulerStatus::RunStreamingAndAssetLoadJobs, "diagnostics copies decision status", failures);
+    expect(diagnostics.decisionReason == full_engine::TerrainStreamingSchedulerReason::CatchUp, "diagnostics copies decision reason", failures);
+    expect(diagnostics.budgetProfile == full_engine::TerrainStreamingBudgetProfile::CatchUp, "diagnostics copies profile", failures);
+    expect(diagnostics.pendingLoadRequestCount == 1, "diagnostics copies pending load count", failures);
+    expect(diagnostics.pendingJobCount == 2, "diagnostics copies pending job count", failures);
+    expect(diagnostics.deferredWorkCount == 3, "diagnostics copies deferred count", failures);
+    expect(diagnostics.peakDeferredWorkCount == 4, "diagnostics copies peak deferred count", failures);
+    expect(diagnostics.runtimeBacklogCount == 5, "diagnostics copies runtime backlog", failures);
+    expect(diagnostics.pressureCount == 6, "diagnostics copies pressure", failures);
+    expect(diagnostics.maxAssetLoadJobs == 7, "diagnostics copies max jobs", failures);
+    expect(diagnostics.history.hasSchedulerDecision, "diagnostics history marks decision present", failures);
+    expect(diagnostics.history.status == diagnostics.status, "diagnostics history copies status", failures);
+    expect(diagnostics.history.decisionStatus == diagnostics.decisionStatus, "diagnostics history copies decision status", failures);
+    expect(diagnostics.history.decisionReason == diagnostics.decisionReason, "diagnostics history copies decision reason", failures);
+    expect(diagnostics.history.budgetProfile == diagnostics.budgetProfile, "diagnostics history copies profile", failures);
+    expect(diagnostics.history.pressureCount == diagnostics.pressureCount, "diagnostics history copies pressure", failures);
+    expect(diagnostics.loadJobsRan, "diagnostics copies load phase bool", failures);
+    expect(diagnostics.streamingRan, "diagnostics copies streaming phase bool", failures);
+    expect(diagnostics.loadJobStatus == full_engine::TerrainManifestAssetLoadJobCoordinatorStatus::Success, "diagnostics copies load status", failures);
+    expect(diagnostics.loadJobMirror.queuedCount == 8, "diagnostics copies mirror counters", failures);
+    expect(diagnostics.loadJobExecution.completedCount == 9, "diagnostics copies job execution", failures);
+    expect(diagnostics.loadConsume.loadedCount == 10, "diagnostics copies load consume", failures);
+    expect(diagnostics.loadConsumed, "diagnostics copies consumed flag", failures);
+    expect(diagnostics.loadJobCoordinator.finalReadyHandleCount == 11, "diagnostics copies coordinator summary", failures);
+    expect(diagnostics.loadReadiness.readyCount == 12, "diagnostics copies readiness summary", failures);
+    expect(diagnostics.streamingStatus == full_engine::TerrainStreamingLoopUpdateStatus::Success, "diagnostics copies streaming status", failures);
+    expect(diagnostics.manifestStreamingStatus == full_engine::TerrainStreamingManifestUpdateStatus::Success, "diagnostics copies manifest status", failures);
+    expect(diagnostics.runtimeStatus == full_engine::TerrainRuntimeUpdateStatus::Success, "diagnostics copies runtime status", failures);
+    expect(diagnostics.runtimeUpdateRan, "diagnostics copies runtime update bool", failures);
+    expect(diagnostics.setupRequestsBeforeRuntime == 13, "diagnostics copies setup before", failures);
+    expect(diagnostics.residencyRequestsBeforeRuntime == 14, "diagnostics copies residency before", failures);
+    expect(diagnostics.setupRequestsAfterRuntime == 15, "diagnostics copies setup after", failures);
+    expect(diagnostics.residencyRequestsAfterRuntime == 16, "diagnostics copies residency after", failures);
+    expect(diagnostics.streamingSummary.streamingPlanOperationCount == 17, "diagnostics copies streaming summary", failures);
+    expect(diagnostics.streamingQueue.queuedSetupAddCount == 18, "diagnostics copies queue summary", failures);
+    expect(result.loadJobs.mirror.records.size() == sourceMirrorRecordCount, "diagnostics does not mutate mirror records", failures);
+    expect(result.loadJobs.jobs.records.size() == sourceJobRecordCount, "diagnostics does not mutate job records", failures);
+    expect(result.loadJobs.load.consume.records.size() == sourceLoadRecordCount, "diagnostics does not mutate load records", failures);
+    expect(result.loadJobs.readiness.records.size() == sourceReadinessRecordCount, "diagnostics does not mutate readiness records", failures);
+}
 } // namespace
 
 int main()
@@ -607,6 +720,7 @@ int main()
     testRuntimeResidencyFailureMapsStatus(failures);
     testRuntimePipelineFailureMapsStatus(failures);
     testExplicitMaxJobOverrideIsHonored(failures);
+    testSchedulerTickDiagnosticsDefaultAndCopiesCounters(failures);
 
     if (!failures.empty())
     {

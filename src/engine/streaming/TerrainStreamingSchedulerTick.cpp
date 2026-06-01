@@ -1,5 +1,7 @@
 #include "engine/streaming/TerrainStreamingSchedulerTick.hpp"
 
+#include "engine/streaming/TerrainStreamingSchedulerTickDiagnostics.hpp"
+
 namespace full_engine
 {
 namespace
@@ -143,6 +145,8 @@ TerrainStreamingSchedulerTickResult runTerrainStreamingSchedulerTick(
             loopOptions);
         result.streamingRan = true;
         result.status = mapStreamingStatus(result.streaming.status);
+        loop.annotateLatestTickSchedulerDiagnostics(
+            makeTerrainStreamingSchedulerTickDiagnostics(result).history);
         return result;
     }
 

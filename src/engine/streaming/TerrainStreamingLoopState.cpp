@@ -47,6 +47,23 @@ const TerrainStreamingTickEvent* TerrainStreamingTickHistory::latestEvent() cons
     return &events_[latestIndex];
 }
 
+void TerrainStreamingTickHistory::annotateLatestSchedulerDiagnostics(
+    const TerrainStreamingTickSchedulerDiagnostics& diagnostics) noexcept
+{
+    if (count_ == 0)
+    {
+        return;
+    }
+
+    const std::size_t latestIndex =
+        nextIndex_ == 0 ? kTerrainStreamingTickHistoryCapacity - 1 : nextIndex_ - 1;
+    events_[latestIndex].scheduler = diagnostics;
+    if (diagnostics.hasSchedulerDecision)
+    {
+        events_[latestIndex].budgetProfile = diagnostics.budgetProfile;
+    }
+}
+
 void TerrainStreamingTickHistory::clear() noexcept
 {
     nextIndex_ = 0;
@@ -127,6 +144,13 @@ const TerrainStreamingTickEvent* TerrainStreamingLoopState::latestTickEvent() co
 void TerrainStreamingLoopState::appendTickEvent(const TerrainStreamingTickEvent& event)
 {
     tickHistory_.append(event);
+    refreshDiagnostics();
+}
+
+void TerrainStreamingLoopState::annotateLatestTickSchedulerDiagnostics(
+    const TerrainStreamingTickSchedulerDiagnostics& diagnostics) noexcept
+{
+    tickHistory_.annotateLatestSchedulerDiagnostics(diagnostics);
     refreshDiagnostics();
 }
 

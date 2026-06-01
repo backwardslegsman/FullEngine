@@ -30,6 +30,8 @@
 #include "engine/streaming/TerrainStreamingLoopState.hpp"
 #include "engine/streaming/TerrainStreamingTickHistoryExport.hpp"
 #include "engine/streaming/TerrainStreamingLoopUpdate.hpp"
+#include "engine/streaming/TerrainStreamingSchedulerTick.hpp"
+#include "engine/streaming/TerrainStreamingSchedulerTickDiagnostics.hpp"
 #include "engine/world/WorldChunkCatalog.hpp"
 #include "engine/world/WorldChunkRegistry.hpp"
 #include "engine/world/WorldOrigin.hpp"
@@ -751,6 +753,8 @@ struct SampleTerrainResidencyControls
     int batchRingRadius = 0;
     bool terrainStreamingEnabled = false;
     bool terrainStreamingRunOnce = false;
+    bool terrainStreamingUseSchedulerTick = false;
+    bool terrainStreamingSchedulerRunOnce = false;
     int streamingLoadRadius = 0;
     int streamingResidentRadius = 0;
     bool streamingUseAutomaticBudgets = true;
@@ -776,6 +780,7 @@ struct SampleTerrainResidencyControls
     full_engine::CookedAssetManifestValidationResult lastManifestImportValidationResult =
         full_engine::CookedAssetManifestValidationResult::Success;
     full_engine::TerrainStreamingLoopState streamingLoop = {};
+    full_engine::TerrainStreamingSchedulerTickDiagnostics lastSchedulerTickDiagnostics = {};
     std::size_t lastImportedManifestAssetCount = 0;
     std::size_t lastImportedManifestTerrainChunkCount = 0;
     std::size_t lastImportedAssetCatalogCount = 0;
@@ -1082,6 +1087,61 @@ full_engine::TerrainStreamingLoopUpdateResult runSampleTerrainStreamingLoopUpdat
         config,
         cameraWorld,
         currentSnapshot,
+        options);
+}
+
+full_engine::TerrainStreamingSchedulerTickResult runSampleTerrainStreamingSchedulerTick(
+    full_renderer::IRenderer& renderer,
+    full_engine::TerrainRuntimeState& terrainRuntime,
+    full_engine::WorldChunkRegistry& registry,
+    full_engine::WorldChunkCatalog& worldCatalog,
+    full_engine::RendererAssetHandleCatalog& handles,
+    full_engine::TerrainResourceCatalog& resources,
+    full_engine::ChunkTerrainHandleMap& terrainHandles,
+    std::vector<SampleTerrainChunkState>& chunks,
+    SampleTerrainResidencyControls& controls,
+    const float chunkSizeMeters,
+    const Vec3& cameraPosition,
+    const full_engine::TerrainRuntimeUpdateOptions& runtimeOptions)
+{
+    const std::vector<full_engine::WorldChunkDesc> worldDescs = sampleTerrainWorldDescs(chunks);
+    const std::vector<full_engine::ChunkId> trackedTerrainIds = sampleTerrainChunkIds(chunks);
+    const full_engine::TerrainRuntimeStateSnapshot currentSnapshot =
+        sampleTerrainRuntimeSnapshot(registry, worldCatalog, resources, terrainHandles, chunks);
+
+    full_engine::TerrainStreamingPlannerConfig config;
+    config.chunkSizeMeters = static_cast<double>(chunkSizeMeters);
+    config.loadRadiusChunks = std::max(0, controls.streamingLoadRadius);
+    config.residentRadiusChunks = std::max(
+        0,
+        std::min(controls.streamingResidentRadius, controls.streamingLoadRadius));
+
+    const full_engine::WorldPosition cameraWorld = {
+        static_cast<double>(cameraPosition.x),
+        static_cast<double>(cameraPosition.y),
+        static_cast<double>(cameraPosition.z)};
+
+    full_engine::TerrainStreamingSchedulerTickOptions options;
+    options.loopUpdate.runtime = runtimeOptions;
+
+    return full_engine::runTerrainStreamingSchedulerTick(
+        controls.streamingLoop,
+        terrainRuntime,
+        renderer,
+        registry,
+        worldCatalog,
+        resources,
+        terrainHandles,
+        handles,
+        worldDescs.data(),
+        worldDescs.size(),
+        trackedTerrainIds.data(),
+        trackedTerrainIds.size(),
+        config,
+        cameraWorld,
+        currentSnapshot,
+        sampleTerrainManifestAssetLoadCallback,
+        &handles,
         options);
 }
 
@@ -1664,6 +1724,7 @@ void drawTerrainDiagnosticsPanel(
             terrainResidencyControls.lastImportedTerrainAssetCatalogCount = 0;
             streamingLoop.clearManifest();
             terrainResidencyControls.lastManifestStageApplyBlocked = false;
+            terrainResidencyControls.lastSchedulerTickDiagnostics = {};
 
             const full_engine::TerrainManifestFileReloadPlanResult manifestReload =
                 streamingLoop.reloadManifestAndQueueMissingAssetLoads(
@@ -1825,6 +1886,13 @@ void drawTerrainDiagnosticsPanel(
         {
             terrainResidencyControls.terrainStreamingRunOnce = true;
         }
+        ImGui::SameLine();
+        ImGui::Checkbox("Scheduler Tick", &terrainResidencyControls.terrainStreamingUseSchedulerTick);
+        ImGui::SameLine();
+        if (ImGui::Button("Run Scheduler Tick Once"))
+        {
+            terrainResidencyControls.terrainStreamingSchedulerRunOnce = true;
+        }
         ImGui::InputInt("Streaming Load Radius", &terrainResidencyControls.streamingLoadRadius);
         ImGui::InputInt("Streaming Resident Radius", &terrainResidencyControls.streamingResidentRadius);
         ImGui::Checkbox("Automatic streaming budgets", &terrainResidencyControls.streamingUseAutomaticBudgets);
@@ -1917,6 +1985,29 @@ void drawTerrainDiagnosticsPanel(
             static_cast<unsigned long long>(streamingUpdate.summary.deferredSetupRemoveCount),
             static_cast<unsigned long long>(streamingUpdate.summary.deferredMakeResidentCount),
             static_cast<unsigned long long>(streamingUpdate.summary.deferredMakeUnloadedCount));
+        const full_engine::TerrainStreamingSchedulerTickDiagnostics& schedulerTick =
+            terrainResidencyControls.lastSchedulerTickDiagnostics;
+        ImGui::Text(
+            "Scheduler tick: %s, decision %s/%s, profile %s",
+            full_engine::terrainStreamingSchedulerTickStatusName(schedulerTick.status),
+            full_engine::terrainStreamingSchedulerStatusName(schedulerTick.decisionStatus),
+            full_engine::terrainStreamingSchedulerReasonName(schedulerTick.decisionReason),
+            full_engine::terrainStreamingBudgetProfileName(schedulerTick.budgetProfile));
+        ImGui::Text(
+            "Scheduler pressure: pending load/job %llu/%llu, deferred %llu, backlog %llu, max jobs %llu",
+            static_cast<unsigned long long>(schedulerTick.pendingLoadRequestCount),
+            static_cast<unsigned long long>(schedulerTick.pendingJobCount),
+            static_cast<unsigned long long>(schedulerTick.deferredWorkCount),
+            static_cast<unsigned long long>(schedulerTick.runtimeBacklogCount),
+            static_cast<unsigned long long>(schedulerTick.maxAssetLoadJobs));
+        ImGui::Text(
+            "Scheduler phases: load %s (%s), streaming %s (%s)",
+            schedulerTick.loadJobsRan ? "ran" : "skipped",
+            full_engine::terrainManifestAssetLoadJobCoordinatorStatusName(
+                schedulerTick.loadJobStatus),
+            schedulerTick.streamingRan ? "ran" : "skipped",
+            full_engine::terrainStreamingLoopUpdateStatusName(
+                schedulerTick.streamingStatus));
         const std::vector<full_engine::TerrainStreamingTickEvent> streamingTicks =
             streamingLoop.tickEvents();
         const std::size_t firstStreamingTick =
@@ -1925,8 +2016,14 @@ void drawTerrainDiagnosticsPanel(
         {
             const full_engine::TerrainStreamingTickEvent& tick = streamingTicks[tickIndex];
             ImGui::Text(
-                "#%llu stream %s | runtime %s%s | queued s/r %llu/%llu | deferred setup %llu/%llu resident %llu/%llu | lifecycle defer c/u/r %llu/%llu/%llu",
+                "#%llu sched %s/%s | stream %s | runtime %s%s | queued s/r %llu/%llu | deferred setup %llu/%llu resident %llu/%llu | lifecycle defer c/u/r %llu/%llu/%llu",
                 static_cast<unsigned long long>(tick.sequence),
+                tick.scheduler.hasSchedulerDecision ?
+                    full_engine::terrainStreamingSchedulerStatusName(tick.scheduler.decisionStatus) :
+                    "None",
+                tick.scheduler.hasSchedulerDecision ?
+                    full_engine::terrainStreamingSchedulerReasonName(tick.scheduler.decisionReason) :
+                    "NoWork",
                 full_engine::terrainStreamingManifestUpdateStatusName(tick.streamingStatus),
                 full_engine::terrainRuntimeUpdateStatusName(tick.runtimeStatus),
                 tick.runtimeUpdateRan ? "" : " skipped",
@@ -4818,8 +4915,65 @@ int main(int argc, char** argv)
             break;
         }
 
-        if (terrainResidencyControls.terrainStreamingEnabled ||
-            terrainResidencyControls.terrainStreamingRunOnce)
+        const bool runSchedulerTick =
+            terrainResidencyControls.terrainStreamingSchedulerRunOnce ||
+            (terrainResidencyControls.terrainStreamingEnabled &&
+             terrainResidencyControls.terrainStreamingUseSchedulerTick &&
+             !terrainResidencyControls.terrainStreamingRunOnce);
+        const bool runDirectStreaming =
+            terrainResidencyControls.terrainStreamingRunOnce ||
+            (terrainResidencyControls.terrainStreamingEnabled &&
+             !terrainResidencyControls.terrainStreamingUseSchedulerTick);
+
+        if (runSchedulerTick)
+        {
+            const full_engine::TerrainStreamingSchedulerTickResult schedulerTick =
+                runSampleTerrainStreamingSchedulerTick(
+                    *renderer,
+                    terrainRuntime,
+                    engineTerrainRegistry,
+                    engineTerrainCatalog,
+                    engineTerrainAssetHandles,
+                    engineTerrainResources,
+                    engineTerrainHandles,
+                    sampleTerrainChunks,
+                    terrainResidencyControls,
+                    kChunkSize,
+                    cameraPosition,
+                    engineTerrainRuntimeOptions);
+            terrainResidencyControls.lastSchedulerTickDiagnostics =
+                full_engine::makeTerrainStreamingSchedulerTickDiagnostics(schedulerTick);
+            terrainResidencyControls.terrainStreamingSchedulerRunOnce = false;
+
+            if (schedulerTick.status == full_engine::TerrainStreamingSchedulerTickStatus::RuntimeSetupFailed)
+            {
+                std::cerr << "Sample terrain setup request failed.\n";
+                break;
+            }
+            if (schedulerTick.status == full_engine::TerrainStreamingSchedulerTickStatus::RuntimeResidencyFailed)
+            {
+                std::cerr << "Sample terrain residency request failed with an invalid transition.\n";
+                break;
+            }
+            if (schedulerTick.status == full_engine::TerrainStreamingSchedulerTickStatus::RuntimePipelineFailed)
+            {
+                std::cerr << "Failed to update sample terrain residency through engine integration.\n";
+                break;
+            }
+
+            if (schedulerTick.streamingRan && schedulerTick.streaming.runtimeUpdateRan)
+            {
+                refreshSampleTerrainMirrorsAfterRuntimeUpdate(
+                    terrainRuntime,
+                    engineTerrainRegistry,
+                    engineTerrainCatalog,
+                    engineTerrainResources,
+                    engineTerrainHandles,
+                    sampleTerrainChunks,
+                    terrainResidencyControls);
+            }
+        }
+        else if (runDirectStreaming)
         {
             const full_engine::TerrainStreamingLoopUpdateResult streamingLoopUpdate =
                 runSampleTerrainStreamingLoopUpdate(
@@ -4835,7 +4989,6 @@ int main(int argc, char** argv)
                     kChunkSize,
                     cameraPosition,
                     engineTerrainRuntimeOptions);
-            terrainResidencyControls.terrainStreamingRunOnce = false;
 
             if (streamingLoopUpdate.status == full_engine::TerrainStreamingLoopUpdateStatus::RuntimeSetupFailed)
             {
@@ -4865,6 +5018,7 @@ int main(int argc, char** argv)
                     terrainResidencyControls);
             }
         }
+        terrainResidencyControls.terrainStreamingRunOnce = false;
 
         if (terrainRuntime.hasPendingRequests())
         {

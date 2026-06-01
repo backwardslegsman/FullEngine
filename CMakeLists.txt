@@ -193,6 +193,9 @@ add_library(full_engine STATIC
     src/engine/streaming/TerrainStreamingSchedulerPolicy.hpp
     src/engine/streaming/TerrainStreamingSchedulerTick.cpp
     src/engine/streaming/TerrainStreamingSchedulerTick.hpp
+    src/engine/streaming/TerrainStreamingSchedulerTickDiagnostics.cpp
+    src/engine/streaming/TerrainStreamingSchedulerTickDiagnostics.hpp
+    src/engine/streaming/TerrainStreamingSchedulerTypes.hpp
     src/engine/streaming/TerrainStreamingLoopState.cpp
     src/engine/streaming/TerrainStreamingLoopState.hpp
     src/engine/streaming/TerrainStreamingTickHistoryExport.cpp

@@ -627,8 +627,19 @@ move gameplay, streaming policy, or editor concepts into renderer internals.
   when requested, and returns one copied synchronous tick result while keeping
   callbacks, renderer handles, terrain runtime state, and renderer resources
   caller-owned.
-- Next slice: wire the scheduler tick into the sample's camera-streaming debug
-  path or start designing the async/threaded scheduler boundary over the same
+- Twenty-first slice is implemented: the sample debug panel can run the
+  policy-driven scheduler tick once or use it for continuous camera streaming,
+  while the lower-level streaming loop and load-job controls remain available
+  for diagnostics.
+- Twenty-second slice is implemented: `TerrainStreamingSchedulerTickDiagnostics`
+  provides a compact value snapshot for sample/editor display so UI code no
+  longer reaches through the full scheduler tick result.
+- Twenty-third slice is implemented: scheduler decision/status/pressure
+  diagnostics are folded into retained streaming tick history, exported/imported
+  with the JSONL trace, and shown beside recent deferred-work ticks in the
+  sample panel.
+- Next slice: either summarize scheduler decisions from imported tick history
+  or start designing the async/threaded scheduler boundary over the same
   explicit phase/result contract.
 - Initial sample integration is in place: the debug UI can run the
   manifest-aware streaming coordinator once or continuously from camera

@@ -5,18 +5,6 @@
 
 namespace full_engine
 {
-/** @brief High-level result for one policy-driven synchronous streaming scheduler tick. */
-enum class TerrainStreamingSchedulerTickStatus
-{
-    Idle,
-    Success,
-    LoadJobsBlocked,
-    StreamingBlocked,
-    RuntimeSetupFailed,
-    RuntimeResidencyFailed,
-    RuntimePipelineFailed,
-};
-
 /**
  * @brief Options for one policy-driven synchronous streaming scheduler tick.
  *

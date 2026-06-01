@@ -102,6 +102,115 @@ bool parseBudgetProfile(
     return false;
 }
 
+bool parseSchedulerStatus(
+    const std::string& value,
+    TerrainStreamingSchedulerStatus& status) noexcept
+{
+    if (value == "Idle")
+    {
+        status = TerrainStreamingSchedulerStatus::Idle;
+        return true;
+    }
+    if (value == "RunStreaming")
+    {
+        status = TerrainStreamingSchedulerStatus::RunStreaming;
+        return true;
+    }
+    if (value == "RunAssetLoadJobs")
+    {
+        status = TerrainStreamingSchedulerStatus::RunAssetLoadJobs;
+        return true;
+    }
+    if (value == "RunStreamingAndAssetLoadJobs")
+    {
+        status = TerrainStreamingSchedulerStatus::RunStreamingAndAssetLoadJobs;
+        return true;
+    }
+
+    return false;
+}
+
+bool parseSchedulerReason(
+    const std::string& value,
+    TerrainStreamingSchedulerReason& reason) noexcept
+{
+    if (value == "NoWork")
+    {
+        reason = TerrainStreamingSchedulerReason::NoWork;
+        return true;
+    }
+    if (value == "PendingAssetLoads")
+    {
+        reason = TerrainStreamingSchedulerReason::PendingAssetLoads;
+        return true;
+    }
+    if (value == "PendingJobs")
+    {
+        reason = TerrainStreamingSchedulerReason::PendingJobs;
+        return true;
+    }
+    if (value == "DeferredWorkPressure")
+    {
+        reason = TerrainStreamingSchedulerReason::DeferredWorkPressure;
+        return true;
+    }
+    if (value == "StreamingBacklog")
+    {
+        reason = TerrainStreamingSchedulerReason::StreamingBacklog;
+        return true;
+    }
+    if (value == "CatchUp")
+    {
+        reason = TerrainStreamingSchedulerReason::CatchUp;
+        return true;
+    }
+
+    return false;
+}
+
+bool parseSchedulerTickStatus(
+    const std::string& value,
+    TerrainStreamingSchedulerTickStatus& status) noexcept
+{
+    if (value == "Idle")
+    {
+        status = TerrainStreamingSchedulerTickStatus::Idle;
+        return true;
+    }
+    if (value == "Success")
+    {
+        status = TerrainStreamingSchedulerTickStatus::Success;
+        return true;
+    }
+    if (value == "LoadJobsBlocked")
+    {
+        status = TerrainStreamingSchedulerTickStatus::LoadJobsBlocked;
+        return true;
+    }
+    if (value == "StreamingBlocked")
+    {
+        status = TerrainStreamingSchedulerTickStatus::StreamingBlocked;
+        return true;
+    }
+    if (value == "RuntimeSetupFailed")
+    {
+        status = TerrainStreamingSchedulerTickStatus::RuntimeSetupFailed;
+        return true;
+    }
+    if (value == "RuntimeResidencyFailed")
+    {
+        status = TerrainStreamingSchedulerTickStatus::RuntimeResidencyFailed;
+        return true;
+    }
+    if (value == "RuntimePipelineFailed")
+    {
+        status = TerrainStreamingSchedulerTickStatus::RuntimePipelineFailed;
+        return true;
+    }
+
+    return false;
+}
+
 bool parseStringField(const std::string& line, const char* const name, std::string& value)
 {
     const std::string prefix = std::string("\"") + name + "\":\"";
@@ -203,6 +312,22 @@ bool parseSizeField(const std::string& line, const char* const name, std::size_t
     return true;
 }
 
+bool hasField(const std::string& line, const char* const name)
+{
+    const std::string prefix = std::string("\"") + name + "\":";
+    return line.find(prefix) != std::string::npos;
+}
+
+bool parseOptionalBoolField(const std::string& line, const char* const name, bool& value)
+{
+    return !hasField(line, name) || parseBoolField(line, name, value);
+}
+
+bool parseOptionalSizeField(const std::string& line, const char* const name, std::size_t& value)
+{
+    return !hasField(line, name) || parseSizeField(line, name, value);
+}
+
 bool parseTick(const std::string& line, TerrainStreamingTickEvent& event)
 {
     if (line.size() < 2 || line.front() != '{' || line.back() != '}')
@@ -225,6 +350,52 @@ bool parseTick(const std::string& line, TerrainStreamingTickEvent& event)
     std::string budgetProfile;
     if (parseStringField(line, "budgetProfile", budgetProfile) &&
         !parseBudgetProfile(budgetProfile, event.budgetProfile))
+    {
+        return false;
+    }
+
+    if (!parseOptionalBoolField(line, "schedulerHasDecision", event.scheduler.hasSchedulerDecision))
+    {
+        return false;
+    }
+
+    std::string schedulerStatus;
+    if (parseStringField(line, "schedulerStatus", schedulerStatus) &&
+        !parseSchedulerTickStatus(schedulerStatus, event.scheduler.status))
+    {
+        return false;
+    }
+
+    std::string schedulerDecisionStatus;
+    if (parseStringField(line, "schedulerDecisionStatus", schedulerDecisionStatus) &&
+        !parseSchedulerStatus(schedulerDecisionStatus, event.scheduler.decisionStatus))
+    {
+        return false;
+    }
+
+    std::string schedulerDecisionReason;
+    if (parseStringField(line, "schedulerDecisionReason", schedulerDecisionReason) &&
+        !parseSchedulerReason(schedulerDecisionReason, event.scheduler.decisionReason))
+    {
+        return false;
+    }
+
+    std::string schedulerBudgetProfile;
+    if (parseStringField(line, "schedulerBudgetProfile", schedulerBudgetProfile) &&
+        !parseBudgetProfile(schedulerBudgetProfile, event.scheduler.budgetProfile))
+    {
+        return false;
+    }
+
+    if (!parseOptionalSizeField(line, "schedulerPendingLoadRequestCount", event.scheduler.pendingLoadRequestCount) ||
+        !parseOptionalSizeField(line, "schedulerPendingJobCount", event.scheduler.pendingJobCount) ||
+        !parseOptionalSizeField(line, "schedulerDeferredWorkCount", event.scheduler.deferredWorkCount) ||
+        !parseOptionalSizeField(line, "schedulerPeakDeferredWorkCount", event.scheduler.peakDeferredWorkCount) ||
+        !parseOptionalSizeField(line, "schedulerRuntimeBacklogCount", event.scheduler.runtimeBacklogCount) ||
+        !parseOptionalSizeField(line, "schedulerPressureCount", event.scheduler.pressureCount) ||
+        !parseOptionalSizeField(line, "schedulerMaxAssetLoadJobs", event.scheduler.maxAssetLoadJobs) ||
+        !parseOptionalBoolField(line, "schedulerLoadJobsRan", event.scheduler.loadJobsRan) ||
+        !parseOptionalBoolField(line, "schedulerStreamingRan", event.scheduler.streamingRan))
     {
         return false;
     }

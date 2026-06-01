@@ -33,6 +33,20 @@ full_engine::TerrainStreamingTickEvent makeTick(
     event.streamingStatus = full_engine::TerrainStreamingManifestUpdateStatus::AssetLoadsPending;
     event.runtimeStatus = full_engine::TerrainRuntimeUpdateStatus::ResidencyFailed;
     event.budgetProfile = full_engine::TerrainStreamingBudgetProfile::CatchUp;
+    event.scheduler.hasSchedulerDecision = true;
+    event.scheduler.status = full_engine::TerrainStreamingSchedulerTickStatus::Success;
+    event.scheduler.decisionStatus = full_engine::TerrainStreamingSchedulerStatus::RunStreamingAndAssetLoadJobs;
+    event.scheduler.decisionReason = full_engine::TerrainStreamingSchedulerReason::CatchUp;
+    event.scheduler.budgetProfile = full_engine::TerrainStreamingBudgetProfile::CatchUp;
+    event.scheduler.pendingLoadRequestCount = base + 42;
+    event.scheduler.pendingJobCount = base + 43;
+    event.scheduler.deferredWorkCount = base + 44;
+    event.scheduler.peakDeferredWorkCount = base + 45;
+    event.scheduler.runtimeBacklogCount = base + 46;
+    event.scheduler.pressureCount = base + 47;
+    event.scheduler.maxAssetLoadJobs = base + 48;
+    event.scheduler.loadJobsRan = true;
+    event.scheduler.streamingRan = true;
     event.runtimeUpdateRan = true;
     event.setupRequestsBeforeRuntime = base + 1;
     event.residencyRequestsBeforeRuntime = base + 2;
@@ -116,6 +130,14 @@ void testExportImportRoundTrip(std::vector<std::string>& failures)
         expect(imported.events[0].streamingStatus == full_engine::TerrainStreamingManifestUpdateStatus::AssetLoadsPending, "round trip preserves streaming status", failures);
         expect(imported.events[0].runtimeStatus == full_engine::TerrainRuntimeUpdateStatus::ResidencyFailed, "round trip preserves runtime status", failures);
         expect(imported.events[0].budgetProfile == full_engine::TerrainStreamingBudgetProfile::CatchUp, "round trip preserves budget profile", failures);
+        expect(imported.events[0].scheduler.hasSchedulerDecision, "round trip preserves scheduler presence", failures);
+        expect(imported.events[0].scheduler.status == full_engine::TerrainStreamingSchedulerTickStatus::Success, "round trip preserves scheduler status", failures);
+        expect(imported.events[0].scheduler.decisionStatus == full_engine::TerrainStreamingSchedulerStatus::RunStreamingAndAssetLoadJobs, "round trip preserves scheduler decision", failures);
+        expect(imported.events[0].scheduler.decisionReason == full_engine::TerrainStreamingSchedulerReason::CatchUp, "round trip preserves scheduler reason", failures);
+        expect(imported.events[1].scheduler.pendingLoadRequestCount == 142, "round trip preserves scheduler pressure", failures);
+        expect(imported.events[0].scheduler.maxAssetLoadJobs == 48, "round trip preserves scheduler max jobs", failures);
+        expect(imported.events[0].scheduler.loadJobsRan, "round trip preserves scheduler load phase", failures);
+        expect(imported.events[0].scheduler.streamingRan, "round trip preserves scheduler streaming phase", failures);
         expect(imported.events[0].runtimeUpdateRan, "round trip preserves runtime bool", failures);
         expect(imported.events[1].streaming.deferredMakeUnloadedCount == 118, "round trip preserves deferred streaming counter", failures);
         expect(imported.events[0].streamingQueue.missingSetupDescCount == 27, "round trip preserves queue counter", failures);
@@ -204,6 +226,23 @@ void testUnknownStatusAndInvalidBoolReturnParseError(std::vector<std::string>& f
         full_engine::importTerrainStreamingTickHistoryJsonLines(path).result ==
             full_engine::TerrainStreamingTickHistoryImportResult::ParseError,
         "invalid bool is parse error",
+        failures);
+
+    std::string badSchedulerStatus = content;
+    const char* const originalSchedulerStatus = "\"schedulerDecisionStatus\":\"RunStreamingAndAssetLoadJobs\"";
+    const std::size_t schedulerStatusStart = badSchedulerStatus.find(originalSchedulerStatus);
+    if (schedulerStatusStart != std::string::npos)
+    {
+        badSchedulerStatus.replace(
+            schedulerStatusStart,
+            std::string(originalSchedulerStatus).size(),
+            "\"schedulerDecisionStatus\":\"Teleport\"");
+    }
+    writeText(path, (badSchedulerStatus + "\n").c_str());
+    expect(
+        full_engine::importTerrainStreamingTickHistoryJsonLines(path).result ==
+            full_engine::TerrainStreamingTickHistoryImportResult::ParseError,
+        "unknown scheduler status is parse error",
         failures);
 
     std::remove(path);

@@ -6,6 +6,7 @@
 #include "engine/renderer_integration/TerrainManifestFileLoad.hpp"
 #include "engine/streaming/TerrainStreamingBudgetTypes.hpp"
 #include "engine/streaming/TerrainStreamingManifestCoordinator.hpp"
+#include "engine/streaming/TerrainStreamingSchedulerTypes.hpp"
 
 #include <array>
 #include <cstdint>
@@ -14,6 +15,25 @@
 namespace full_engine
 {
 inline constexpr std::size_t kTerrainStreamingTickHistoryCapacity = 32;
+
+/** @brief Scheduler decision and pressure copied into a retained streaming tick. */
+struct TerrainStreamingTickSchedulerDiagnostics
+{
+    bool hasSchedulerDecision = false;
+    TerrainStreamingSchedulerTickStatus status = TerrainStreamingSchedulerTickStatus::Idle;
+    TerrainStreamingSchedulerStatus decisionStatus = TerrainStreamingSchedulerStatus::Idle;
+    TerrainStreamingSchedulerReason decisionReason = TerrainStreamingSchedulerReason::NoWork;
+    TerrainStreamingBudgetProfile budgetProfile = TerrainStreamingBudgetProfile::Conservative;
+    std::size_t pendingLoadRequestCount = 0;
+    std::size_t pendingJobCount = 0;
+    std::size_t deferredWorkCount = 0;
+    std::size_t peakDeferredWorkCount = 0;
+    std::size_t runtimeBacklogCount = 0;
+    std::size_t pressureCount = 0;
+    std::size_t maxAssetLoadJobs = 0;
+    bool loadJobsRan = false;
+    bool streamingRan = false;
+};
 
 /** @brief Compact value event retained after one synchronous terrain streaming tick. */
 struct TerrainStreamingTickEvent
@@ -30,6 +50,7 @@ struct TerrainStreamingTickEvent
     std::size_t residencyRequestsAfterRuntime = 0;
     TerrainStreamingManifestUpdateSummary streaming = {};
     TerrainStreamingQueueSummary streamingQueue = {};
+    TerrainStreamingTickSchedulerDiagnostics scheduler = {};
     TerrainLifecyclePlanSummary runtimeLifecycle = {};
     TerrainSubmissionSummary runtimeSubmission = {};
 };
@@ -47,6 +68,10 @@ class TerrainStreamingTickHistory
 public:
     /** @brief Appends one copied tick event, assigning a monotonic sequence. */
     void append(const TerrainStreamingTickEvent& event);
+
+    /** @brief Annotates the newest retained event with copied scheduler diagnostics. */
+    void annotateLatestSchedulerDiagnostics(
+        const TerrainStreamingTickSchedulerDiagnostics& diagnostics) noexcept;
 
     /** @brief Returns retained events in chronological order. */
     std::vector<TerrainStreamingTickEvent> events() const;
@@ -180,6 +205,16 @@ public:
      * objects.
      */
     void appendTickEvent(const TerrainStreamingTickEvent& event);
+
+    /**
+     * @brief Annotates the newest retained tick with scheduler diagnostics.
+     *
+     * This is used by the policy-driven scheduler tick after the lower-level
+     * streaming loop has appended its event. The diagnostics are copied by
+     * value and no caller-owned scheduler result is retained.
+     */
+    void annotateLatestTickSchedulerDiagnostics(
+        const TerrainStreamingTickSchedulerDiagnostics& diagnostics) noexcept;
 
     /** @brief Clears retained synchronous streaming tick history only. */
     void clearTickHistory() noexcept;
