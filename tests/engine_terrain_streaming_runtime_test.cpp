@@ -150,6 +150,26 @@ void testMissingSetupDescBlocksQueueing(std::vector<std::string>& failures)
     expect(runtime.residencyRequestCount() == 0, "missing setup descriptor queues no residency requests", failures);
 }
 
+void testMissingSetupDescIgnoresDeferredAdds(std::vector<std::string>& failures)
+{
+    full_engine::TerrainStreamingRuntimeState streaming;
+    full_engine::TerrainRuntimeState runtime;
+    const full_engine::ChunkId ids[] = {{0, 0, 0}, {1, 0, 0}};
+    const full_engine::TerrainSetupStageDesc onlyFirst = setupDesc(ids[0]);
+    full_engine::TerrainStreamingQueueOptions options;
+    options.maxSetupAdds = 1;
+
+    (void)streaming.plan(config(10.0, 1, 0), {0.0, 0.0, 0.0}, ids, 2, snapshot({}));
+    const full_engine::TerrainStreamingQueueResult& result =
+        streaming.queueLatestPlan(runtime, &onlyFirst, 1, options);
+
+    expect(result.status == full_engine::TerrainStreamingQueueStatus::Success, "deferred add does not require setup desc", failures);
+    expect(result.summary.queuedSetupAddCount == 1, "budgeted setup add queues one request", failures);
+    expect(result.summary.deferredSetupAddCount == 1, "budgeted setup add defers one request", failures);
+    expect(result.summary.missingSetupDescCount == 0, "deferred missing setup desc is not counted", failures);
+    expect(runtime.setupRequestCount() == 1, "budgeted add queues one setup request", failures);
+}
+
 void testAddAndMakeResidentQueueing(std::vector<std::string>& failures)
 {
     full_engine::TerrainStreamingRuntimeState streaming;
@@ -166,6 +186,49 @@ void testAddAndMakeResidentQueueing(std::vector<std::string>& failures)
     expect(result.summary.queuedMakeResidentCount == 1, "make resident request is counted", failures);
     expect(runtime.setupRequestCount() == 1, "runtime receives setup add request", failures);
     expect(runtime.residencyRequestCount() == 1, "runtime receives make resident request", failures);
+}
+
+void testBudgetedAddAndResidentQueueing(std::vector<std::string>& failures)
+{
+    full_engine::TerrainStreamingRuntimeState streaming;
+    full_engine::TerrainRuntimeState runtime;
+    const full_engine::ChunkId ids[] = {{0, 0, 0}, {1, 0, 0}};
+    const full_engine::TerrainSetupStageDesc setup[] = {setupDesc(ids[0]), setupDesc(ids[1])};
+    full_engine::TerrainStreamingQueueOptions options;
+    options.maxSetupAdds = 1;
+    options.maxMakeResident = 1;
+
+    (void)streaming.plan(config(10.0, 1, 1), {0.0, 0.0, 0.0}, ids, 2, snapshot({}));
+    const full_engine::TerrainStreamingQueueResult& result =
+        streaming.queueLatestPlan(runtime, setup, 2, options);
+
+    expect(result.status == full_engine::TerrainStreamingQueueStatus::Success, "budgeted add/resident plan succeeds", failures);
+    expect(result.summary.queuedSetupAddCount == 1, "setup add budget queues one", failures);
+    expect(result.summary.deferredSetupAddCount == 1, "setup add budget defers one", failures);
+    expect(result.summary.queuedMakeResidentCount == 1, "resident budget queues one", failures);
+    expect(result.summary.deferredMakeResidentCount == 1, "resident budget defers one", failures);
+    expect(runtime.setupRequestCount() == 1, "budgeted add sends one setup request", failures);
+    expect(runtime.residencyRequestCount() == 1, "budgeted resident sends one residency request", failures);
+}
+
+void testZeroBudgetsDeferWithoutFailure(std::vector<std::string>& failures)
+{
+    full_engine::TerrainStreamingRuntimeState streaming;
+    full_engine::TerrainRuntimeState runtime;
+    const full_engine::ChunkId id{0, 0, 0};
+    full_engine::TerrainStreamingQueueOptions options;
+    options.maxSetupAdds = 0;
+    options.maxMakeResident = 0;
+
+    (void)streaming.plan(config(), {0.0, 0.0, 0.0}, &id, 1, snapshot({}));
+    const full_engine::TerrainStreamingQueueResult& result =
+        streaming.queueLatestPlan(runtime, nullptr, 0, options);
+
+    expect(result.status == full_engine::TerrainStreamingQueueStatus::Success, "zero budget defers without failure", failures);
+    expect(result.summary.deferredSetupAddCount == 1, "zero setup add budget defers add", failures);
+    expect(result.summary.deferredMakeResidentCount == 1, "zero resident budget defers resident", failures);
+    expect(runtime.setupRequestCount() == 0, "zero setup budget queues no setup", failures);
+    expect(runtime.residencyRequestCount() == 0, "zero resident budget queues no residency", failures);
 }
 
 void testRemoveAndMakeUnloadedQueueing(std::vector<std::string>& failures)
@@ -189,6 +252,36 @@ void testRemoveAndMakeUnloadedQueueing(std::vector<std::string>& failures)
     expect(result.summary.queuedSetupRemoveCount == 1, "setup remove request is counted", failures);
     expect(runtime.setupRequestCount() == 1, "runtime receives setup remove request", failures);
     expect(runtime.residencyRequestCount() == 1, "runtime receives make unloaded request", failures);
+}
+
+void testBudgetedRemoveAndUnloadQueueing(std::vector<std::string>& failures)
+{
+    full_engine::TerrainStreamingRuntimeState streaming;
+    full_engine::TerrainRuntimeState runtime;
+    const full_engine::ChunkId ids[] = {{5, 0, 0}, {6, 0, 0}};
+    const full_engine::ChunkId dummy{0, 0, 0};
+    full_engine::TerrainStreamingQueueOptions options;
+    options.maxSetupRemoves = 1;
+    options.maxMakeUnloaded = 1;
+
+    (void)streaming.plan(
+        config(),
+        {0.0, 0.0, 0.0},
+        &dummy,
+        0,
+        snapshot({
+            chunkState(ids[0], true, full_engine::ChunkResidencyState::Resident),
+            chunkState(ids[1], true, full_engine::ChunkResidencyState::Resident)}));
+    const full_engine::TerrainStreamingQueueResult& result =
+        streaming.queueLatestPlan(runtime, nullptr, 0, options);
+
+    expect(result.status == full_engine::TerrainStreamingQueueStatus::Success, "budgeted cleanup plan succeeds", failures);
+    expect(result.summary.queuedMakeUnloadedCount == 1, "unload budget queues one", failures);
+    expect(result.summary.deferredMakeUnloadedCount == 1, "unload budget defers one", failures);
+    expect(result.summary.queuedSetupRemoveCount == 1, "remove budget queues one", failures);
+    expect(result.summary.deferredSetupRemoveCount == 1, "remove budget defers one", failures);
+    expect(runtime.setupRequestCount() == 1, "budgeted remove sends one setup request", failures);
+    expect(runtime.residencyRequestCount() == 1, "budgeted unload sends one residency request", failures);
 }
 
 void testKeepOperationsAreSkipped(std::vector<std::string>& failures)
@@ -244,8 +337,12 @@ int main()
     testPlanStoresDiagnostics(failures);
     testInvalidPlanBlocksQueueing(failures);
     testMissingSetupDescBlocksQueueing(failures);
+    testMissingSetupDescIgnoresDeferredAdds(failures);
     testAddAndMakeResidentQueueing(failures);
+    testBudgetedAddAndResidentQueueing(failures);
+    testZeroBudgetsDeferWithoutFailure(failures);
     testRemoveAndMakeUnloadedQueueing(failures);
+    testBudgetedRemoveAndUnloadQueueing(failures);
     testKeepOperationsAreSkipped(failures);
     testClear(failures);
     testStatusNames(failures);

@@ -3,10 +3,11 @@
 #include "engine/jobs/JobQueue.hpp"
 #include "engine/renderer_integration/TerrainManifestAssetLoadExecutor.hpp"
 #include "engine/renderer_integration/TerrainManifestAssetLoadJobs.hpp"
-#include "engine/renderer_integration/TerrainManifestLoadState.hpp"
 
 namespace full_engine
 {
+class TerrainManifestLoadState;
+
 /** @brief High-level result for one manifest asset load job coordination pass. */
 enum class TerrainManifestAssetLoadJobCoordinatorStatus
 {

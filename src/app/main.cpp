@@ -26,6 +26,10 @@
 #include "engine/renderer_integration/TerrainSubmissionAdapter.hpp"
 #include "engine/renderer_integration/WorldRenderSnapshot.hpp"
 #include "engine/streaming/TerrainStreamingManifestCoordinator.hpp"
+#include "engine/streaming/TerrainStreamingBudgetPolicy.hpp"
+#include "engine/streaming/TerrainStreamingLoopState.hpp"
+#include "engine/streaming/TerrainStreamingTickHistoryExport.hpp"
+#include "engine/streaming/TerrainStreamingLoopUpdate.hpp"
 #include "engine/world/WorldChunkCatalog.hpp"
 #include "engine/world/WorldChunkRegistry.hpp"
 #include "engine/world/WorldOrigin.hpp"
@@ -749,6 +753,14 @@ struct SampleTerrainResidencyControls
     bool terrainStreamingRunOnce = false;
     int streamingLoadRadius = 0;
     int streamingResidentRadius = 0;
+    bool streamingUseAutomaticBudgets = true;
+    int streamingBudgetSetupAdds = -1;
+    int streamingBudgetSetupRemoves = -1;
+    int streamingBudgetMakeResident = -1;
+    int streamingBudgetMakeUnloaded = -1;
+    int streamingBudgetPipelineCreates = -1;
+    int streamingBudgetPipelineUpdates = -1;
+    int streamingBudgetPipelineReleases = -1;
     bool reloadCenterAfterUnload = false;
     bool terrainAssetResolutionFailed = false;
     full_engine::TerrainRuntimeEventExportResult lastEventExportResult =
@@ -757,21 +769,19 @@ struct SampleTerrainResidencyControls
         full_engine::TerrainRuntimeStateDiffExportResult::Success;
     full_engine::CookedAssetManifestExportResult lastManifestExportResult =
         full_engine::CookedAssetManifestExportResult::Success;
+    full_engine::TerrainStreamingTickHistoryExportResult lastStreamingTickExportResult =
+        full_engine::TerrainStreamingTickHistoryExportResult::Success;
     full_engine::CookedAssetManifestImportResult lastManifestImportResult =
         full_engine::CookedAssetManifestImportResult::Success;
     full_engine::CookedAssetManifestValidationResult lastManifestImportValidationResult =
         full_engine::CookedAssetManifestValidationResult::Success;
-    full_engine::TerrainManifestLoadState manifestLoad = {};
-    full_engine::EngineJobQueue manifestAssetLoadJobs = {};
-    full_engine::TerrainManifestAssetLoadJobCoordinatorResult lastManifestLoadJobResult = {};
+    full_engine::TerrainStreamingLoopState streamingLoop = {};
     std::size_t lastImportedManifestAssetCount = 0;
     std::size_t lastImportedManifestTerrainChunkCount = 0;
     std::size_t lastImportedAssetCatalogCount = 0;
     std::size_t lastImportedTerrainAssetCatalogCount = 0;
     bool lastManifestStageApplyBlocked = false;
     full_engine::TerrainAssetBatchResolveDiagnostics lastAssetBatchResolve = {};
-    full_engine::TerrainStreamingRuntimeState terrainStreaming = {};
-    full_engine::TerrainStreamingManifestUpdateResult lastStreamingUpdate = {};
 };
 
 full_engine::WorldBounds toEngineWorldBounds(const full_renderer::Aabb& bounds) noexcept
@@ -867,6 +877,9 @@ const char* cookedAssetManifestValidationResultName(
 }
 
 std::vector<full_engine::WorldChunkDesc> sampleTerrainWorldDescs(
+    const std::vector<SampleTerrainChunkState>& chunks);
+
+std::vector<full_engine::ChunkId> sampleTerrainChunkIds(
     const std::vector<SampleTerrainChunkState>& chunks);
 
 full_engine::TerrainRuntimeStateSnapshot sampleTerrainRuntimeSnapshot(
@@ -975,19 +988,66 @@ bool queueSampleTerrainSetupAdds(
     return true;
 }
 
-void runSampleTerrainStreamingCoordinator(
+std::size_t sampleStreamingBudgetLimit(const int value) noexcept
+{
+    return value < 0 ?
+        full_engine::kUnlimitedTerrainStreamingQueueBudget :
+        static_cast<std::size_t>(value);
+}
+
+std::size_t samplePipelineBudgetLimit(const int value) noexcept
+{
+    return value < 0 ?
+        full_engine::kUnlimitedTerrainLifecycleBudget :
+        static_cast<std::size_t>(value);
+}
+
+full_engine::TerrainStreamingLoopUpdateOptions makeSampleTerrainStreamingLoopOptions(
+    const SampleTerrainResidencyControls& controls,
+    const full_engine::TerrainRuntimeUpdateOptions& runtimeOptions)
+{
+    full_engine::TerrainStreamingLoopUpdateOptions options;
+    options.runtime = runtimeOptions;
+    if (controls.streamingUseAutomaticBudgets)
+    {
+        options.budgets = full_engine::selectAdaptiveTerrainStreamingLoopBudgets(
+            controls.streamingLoop.tickHistory());
+        return options;
+    }
+
+    options.budgets.queue.maxSetupAdds =
+        sampleStreamingBudgetLimit(controls.streamingBudgetSetupAdds);
+    options.budgets.queue.maxSetupRemoves =
+        sampleStreamingBudgetLimit(controls.streamingBudgetSetupRemoves);
+    options.budgets.queue.maxMakeResident =
+        sampleStreamingBudgetLimit(controls.streamingBudgetMakeResident);
+    options.budgets.queue.maxMakeUnloaded =
+        sampleStreamingBudgetLimit(controls.streamingBudgetMakeUnloaded);
+    options.budgets.maxPipelineCreates =
+        samplePipelineBudgetLimit(controls.streamingBudgetPipelineCreates);
+    options.budgets.maxPipelineUpdates =
+        samplePipelineBudgetLimit(controls.streamingBudgetPipelineUpdates);
+    options.budgets.maxPipelineReleases =
+        samplePipelineBudgetLimit(controls.streamingBudgetPipelineReleases);
+    return options;
+}
+
+full_engine::TerrainStreamingLoopUpdateResult runSampleTerrainStreamingLoopUpdate(
+    full_renderer::IRenderer& renderer,
     full_engine::TerrainRuntimeState& terrainRuntime,
-    const full_engine::WorldChunkRegistry& registry,
-    const full_engine::WorldChunkCatalog& worldCatalog,
+    full_engine::WorldChunkRegistry& registry,
+    full_engine::WorldChunkCatalog& worldCatalog,
     const full_engine::RendererAssetHandleCatalog& handles,
-    const full_engine::TerrainResourceCatalog& resources,
-    const full_engine::ChunkTerrainHandleMap& terrainHandles,
+    full_engine::TerrainResourceCatalog& resources,
+    full_engine::ChunkTerrainHandleMap& terrainHandles,
     std::vector<SampleTerrainChunkState>& chunks,
     SampleTerrainResidencyControls& controls,
     const float chunkSizeMeters,
-    const Vec3& cameraPosition)
+    const Vec3& cameraPosition,
+    const full_engine::TerrainRuntimeUpdateOptions& runtimeOptions)
 {
     const std::vector<full_engine::WorldChunkDesc> worldDescs = sampleTerrainWorldDescs(chunks);
+    const std::vector<full_engine::ChunkId> trackedTerrainIds = sampleTerrainChunkIds(chunks);
     const full_engine::TerrainRuntimeStateSnapshot currentSnapshot =
         sampleTerrainRuntimeSnapshot(registry, worldCatalog, resources, terrainHandles, chunks);
 
@@ -1003,20 +1063,26 @@ void runSampleTerrainStreamingCoordinator(
         static_cast<double>(cameraPosition.y),
         static_cast<double>(cameraPosition.z)};
 
-    controls.lastStreamingUpdate =
-        full_engine::updateTerrainStreamingFromManifest(
-            controls.manifestLoad,
-            handles,
-            registry,
-            worldCatalog,
-            resources,
-            worldDescs.data(),
-            worldDescs.size(),
-            controls.terrainStreaming,
-            terrainRuntime,
-            config,
-            cameraWorld,
-            currentSnapshot);
+    const full_engine::TerrainStreamingLoopUpdateOptions options =
+        makeSampleTerrainStreamingLoopOptions(controls, runtimeOptions);
+
+    return full_engine::updateTerrainStreamingLoop(
+        controls.streamingLoop,
+        terrainRuntime,
+        renderer,
+        registry,
+        worldCatalog,
+        resources,
+        terrainHandles,
+        handles,
+        worldDescs.data(),
+        worldDescs.size(),
+        trackedTerrainIds.data(),
+        trackedTerrainIds.size(),
+        config,
+        cameraWorld,
+        currentSnapshot,
+        options);
 }
 
 void refreshTerrainSubmitHandles(
@@ -1201,6 +1267,31 @@ void mirrorSampleTerrainState(
         chunks[index].setupRegistered = state.hasRegistry && state.hasWorldDesc && state.hasResources;
         chunks[index].resident = chunks[index].setupRegistered &&
             state.residency == full_engine::ChunkResidencyState::Resident;
+    }
+}
+
+void refreshSampleTerrainMirrorsAfterRuntimeUpdate(
+    full_engine::TerrainRuntimeState& terrainRuntime,
+    const full_engine::WorldChunkRegistry& registry,
+    const full_engine::WorldChunkCatalog& worldCatalog,
+    const full_engine::TerrainResourceCatalog& resources,
+    const full_engine::ChunkTerrainHandleMap& handles,
+    std::vector<SampleTerrainChunkState>& chunks,
+    SampleTerrainResidencyControls& controls)
+{
+    mirrorSampleTerrainState(registry, worldCatalog, resources, handles, chunks);
+    if (controls.reloadCenterAfterUnload)
+    {
+        const full_engine::ChunkId centerChunkId = {};
+        if (SampleTerrainChunkState* centerChunk = findSampleTerrainChunk(chunks, centerChunkId))
+        {
+            if (centerChunk->setupRegistered)
+            {
+                centerChunk->resident = true;
+                terrainRuntime.queueMakeResident(centerChunkId);
+            }
+        }
+        controls.reloadCenterAfterUnload = false;
     }
 }
 
@@ -1517,6 +1608,10 @@ void drawTerrainDiagnosticsPanel(
         const full_engine::TerrainRuntimeEvent* latestEvent = terrainRuntime.latestEvent();
         const full_engine::CookedAssetManifestDependencySummary manifestSummary =
             full_engine::summarizeCookedAssetManifestDependencies(sampleTerrainManifest);
+        full_engine::TerrainStreamingLoopState& streamingLoop = terrainResidencyControls.streamingLoop;
+        full_engine::TerrainManifestLoadState& manifestLoad = streamingLoop.manifestLoad();
+        const full_engine::TerrainStreamingLoopDiagnostics& loopDiagnostics =
+            streamingLoop.latestDiagnostics();
 
         ImGui::Text("Runtime events: %llu", static_cast<unsigned long long>(terrainRuntime.eventCount()));
         ImGui::Text(
@@ -1567,15 +1662,12 @@ void drawTerrainDiagnosticsPanel(
             terrainResidencyControls.lastImportedManifestTerrainChunkCount = 0;
             terrainResidencyControls.lastImportedAssetCatalogCount = 0;
             terrainResidencyControls.lastImportedTerrainAssetCatalogCount = 0;
-            terrainResidencyControls.manifestLoad.clearManifest();
-            terrainResidencyControls.manifestAssetLoadJobs.clear();
-            terrainResidencyControls.lastManifestLoadJobResult = {};
+            streamingLoop.clearManifest();
             terrainResidencyControls.lastManifestStageApplyBlocked = false;
 
             const full_engine::TerrainManifestFileReloadPlanResult manifestReload =
-                full_engine::reloadTerrainManifestFileAndQueueMissingAssetLoads(
+                streamingLoop.reloadManifestAndQueueMissingAssetLoads(
                     "sample_cooked_asset_manifest.jsonl",
-                    terrainResidencyControls.manifestLoad,
                     engineTerrainAssetHandles);
             terrainResidencyControls.lastManifestImportResult = manifestReload.load.imported.result;
             terrainResidencyControls.lastManifestImportValidationResult = manifestReload.load.imported.validation.result;
@@ -1587,7 +1679,7 @@ void drawTerrainDiagnosticsPanel(
                 const std::vector<full_engine::WorldChunkDesc> sampleWorldDescs =
                     sampleTerrainWorldDescs(sampleTerrainChunks);
                 const full_engine::TerrainManifestLoadStageResult loadStage =
-                    terrainResidencyControls.manifestLoad.stage(
+                    manifestLoad.stage(
                         engineTerrainAssetHandles,
                         engineTerrainRegistry,
                         engineTerrainCatalog,
@@ -1618,118 +1710,111 @@ void drawTerrainDiagnosticsPanel(
             static_cast<unsigned long long>(terrainResidencyControls.lastImportedTerrainAssetCatalogCount));
         ImGui::Text(
             "Manifest handles: mesh %llu/%llu, material %llu/%llu, texture %llu/%llu ready",
-            static_cast<unsigned long long>(terrainResidencyControls.manifestLoad.latestReadiness().summary.meshReadyCount),
-            static_cast<unsigned long long>(terrainResidencyControls.manifestLoad.latestReadiness().summary.meshRequestedCount),
+            static_cast<unsigned long long>(manifestLoad.latestReadiness().summary.meshReadyCount),
+            static_cast<unsigned long long>(manifestLoad.latestReadiness().summary.meshRequestedCount),
             static_cast<unsigned long long>(
-                terrainResidencyControls.manifestLoad.latestReadiness().summary.materialReadyCount),
+                manifestLoad.latestReadiness().summary.materialReadyCount),
             static_cast<unsigned long long>(
-                terrainResidencyControls.manifestLoad.latestReadiness().summary.materialRequestedCount),
+                manifestLoad.latestReadiness().summary.materialRequestedCount),
             static_cast<unsigned long long>(
-                terrainResidencyControls.manifestLoad.latestReadiness().summary.textureReadyCount),
+                manifestLoad.latestReadiness().summary.textureReadyCount),
             static_cast<unsigned long long>(
-                terrainResidencyControls.manifestLoad.latestReadiness().summary.textureRequestedCount));
+                manifestLoad.latestReadiness().summary.textureRequestedCount));
         ImGui::Text(
             "Manifest load intents: %llu total, mesh/material/texture %llu/%llu/%llu",
             static_cast<unsigned long long>(
-                terrainResidencyControls.manifestLoad.latestLoadRequests().summary.requestCount),
+                manifestLoad.latestLoadRequests().summary.requestCount),
             static_cast<unsigned long long>(
-                terrainResidencyControls.manifestLoad.latestLoadRequests().summary.meshRequestCount),
+                manifestLoad.latestLoadRequests().summary.meshRequestCount),
             static_cast<unsigned long long>(
-                terrainResidencyControls.manifestLoad.latestLoadRequests().summary.materialRequestCount),
+                manifestLoad.latestLoadRequests().summary.materialRequestCount),
             static_cast<unsigned long long>(
-                terrainResidencyControls.manifestLoad.latestLoadRequests().summary.textureRequestCount));
+                manifestLoad.latestLoadRequests().summary.textureRequestCount));
         ImGui::Text(
             "Manifest load queue: pending %llu, queued/already/invalid %llu/%llu/%llu",
-            static_cast<unsigned long long>(terrainResidencyControls.manifestLoad.pendingLoadRequestCount()),
+            static_cast<unsigned long long>(manifestLoad.pendingLoadRequestCount()),
             static_cast<unsigned long long>(
-                terrainResidencyControls.manifestLoad.latestLoadRequestQueueResult().summary.queuedCount),
+                manifestLoad.latestLoadRequestQueueResult().summary.queuedCount),
             static_cast<unsigned long long>(
-                terrainResidencyControls.manifestLoad.latestLoadRequestQueueResult().summary.alreadyQueuedCount),
+                manifestLoad.latestLoadRequestQueueResult().summary.alreadyQueuedCount),
             static_cast<unsigned long long>(
-                terrainResidencyControls.manifestLoad.latestLoadRequestQueueResult().summary.invalidArgumentCount));
+                manifestLoad.latestLoadRequestQueueResult().summary.invalidArgumentCount));
         if (ImGui::Button("Run Load Jobs"))
         {
             const std::size_t maxLoadJobs =
-                std::max<std::size_t>(1, terrainResidencyControls.manifestLoad.pendingLoadRequestCount());
-            terrainResidencyControls.lastManifestLoadJobResult =
-                full_engine::runTerrainManifestAssetLoadJobs(
-                    terrainResidencyControls.manifestLoad,
-                    terrainResidencyControls.manifestAssetLoadJobs,
+                std::max<std::size_t>(1, manifestLoad.pendingLoadRequestCount());
+            (void)streamingLoop.runAssetLoadJobs(
                     engineTerrainAssetHandles,
                     sampleTerrainManifestAssetLoadCallback,
                     &engineTerrainAssetHandles,
                     maxLoadJobs);
-            if (terrainResidencyControls.lastManifestLoadJobResult.status ==
-                full_engine::TerrainManifestAssetLoadJobCoordinatorStatus::Success)
-            {
-                (void)terrainResidencyControls.manifestLoad.planAssetLoadRequests();
-            }
         }
         ImGui::SameLine();
         ImGui::Text(
             "Load jobs: %s, pending jobs %llu, mirror %llu/%llu/%llu, exec done/fail/block %llu/%llu/%llu",
             full_engine::terrainManifestAssetLoadJobCoordinatorStatusName(
-                terrainResidencyControls.lastManifestLoadJobResult.status),
-            static_cast<unsigned long long>(terrainResidencyControls.manifestAssetLoadJobs.jobCount()),
+                loopDiagnostics.loadJobs.status),
             static_cast<unsigned long long>(
-                terrainResidencyControls.lastManifestLoadJobResult.mirror.summary.queuedCount),
+                loopDiagnostics.loadJobs.jobQueue.pendingJobCount),
             static_cast<unsigned long long>(
-                terrainResidencyControls.lastManifestLoadJobResult.mirror.summary.alreadyQueuedCount),
+                loopDiagnostics.loadJobs.mirror.queuedCount),
             static_cast<unsigned long long>(
-                terrainResidencyControls.lastManifestLoadJobResult.mirror.summary.invalidArgumentCount),
+                loopDiagnostics.loadJobs.mirror.alreadyQueuedCount),
             static_cast<unsigned long long>(
-                terrainResidencyControls.lastManifestLoadJobResult.jobs.summary.completedCount),
+                loopDiagnostics.loadJobs.mirror.invalidArgumentCount),
             static_cast<unsigned long long>(
-                terrainResidencyControls.lastManifestLoadJobResult.jobs.summary.failedCount),
+                loopDiagnostics.loadJobs.execution.completedCount),
             static_cast<unsigned long long>(
-                terrainResidencyControls.lastManifestLoadJobResult.jobs.summary.blockedCount));
+                loopDiagnostics.loadJobs.execution.failedCount),
+            static_cast<unsigned long long>(
+                loopDiagnostics.loadJobs.execution.blockedCount));
         ImGui::Text(
             "Load job readiness: final ready/missing %llu/%llu, pending load requests %llu",
             static_cast<unsigned long long>(
-                terrainResidencyControls.lastManifestLoadJobResult.summary.finalReadyHandleCount),
+                loopDiagnostics.loadJobs.coordinator.finalReadyHandleCount),
             static_cast<unsigned long long>(
-                terrainResidencyControls.lastManifestLoadJobResult.summary.finalMissingHandleCount),
+                loopDiagnostics.loadJobs.coordinator.finalMissingHandleCount),
             static_cast<unsigned long long>(
-                terrainResidencyControls.lastManifestLoadJobResult.summary.finalPendingLoadRequestCount));
+                loopDiagnostics.loadJobs.coordinator.finalPendingLoadRequestCount));
         if (ImGui::Button("Consume Load Requests"))
         {
             const full_engine::TerrainManifestAssetLoadResult& consume =
-                terrainResidencyControls.manifestLoad.consumePendingAssetLoadRequests(
+                manifestLoad.consumePendingAssetLoadRequests(
                 engineTerrainAssetHandles,
                 engineTerrainAssetHandles);
             if (consume.consumed)
             {
-                terrainResidencyControls.manifestAssetLoadJobs.clear();
+                streamingLoop.clearJobs();
             }
-            (void)terrainResidencyControls.manifestLoad.planAssetReadiness(engineTerrainAssetHandles);
-            (void)terrainResidencyControls.manifestLoad.planAssetLoadRequests();
+            (void)manifestLoad.planAssetReadiness(engineTerrainAssetHandles);
+            (void)manifestLoad.planAssetLoadRequests();
         }
         ImGui::SameLine();
         ImGui::Text(
             "Load consume: loaded/already/missing/rejected %llu/%llu/%llu/%llu%s",
             static_cast<unsigned long long>(
-                terrainResidencyControls.manifestLoad.latestLoadConsumeResult().summary.loadedCount),
+                manifestLoad.latestLoadConsumeResult().summary.loadedCount),
             static_cast<unsigned long long>(
-                terrainResidencyControls.manifestLoad.latestLoadConsumeResult().summary.alreadyLoadedCount),
+                manifestLoad.latestLoadConsumeResult().summary.alreadyLoadedCount),
             static_cast<unsigned long long>(
-                terrainResidencyControls.manifestLoad.latestLoadConsumeResult().summary.missingHandleCount),
+                manifestLoad.latestLoadConsumeResult().summary.missingHandleCount),
             static_cast<unsigned long long>(
-                terrainResidencyControls.manifestLoad.latestLoadConsumeResult().summary.catalogRejectedCount),
-            terrainResidencyControls.manifestLoad.latestLoadConsumeResult().consumed ? ", consumed" : "");
+                manifestLoad.latestLoadConsumeResult().summary.catalogRejectedCount),
+            manifestLoad.latestLoadConsumeResult().consumed ? ", consumed" : "");
         ImGui::Text(
             "Manifest stage: %s, add %llu, keep %llu, remove %llu, changed %llu",
             full_engine::terrainManifestRuntimeStageStatusName(
-                terrainResidencyControls.manifestLoad.latestDiagnostics().status),
-            static_cast<unsigned long long>(terrainResidencyControls.manifestLoad.latestDiagnostics().stage.addCount),
-            static_cast<unsigned long long>(terrainResidencyControls.manifestLoad.latestDiagnostics().stage.keepCount),
-            static_cast<unsigned long long>(terrainResidencyControls.manifestLoad.latestDiagnostics().stage.removeCount),
+                manifestLoad.latestDiagnostics().status),
+            static_cast<unsigned long long>(manifestLoad.latestDiagnostics().stage.addCount),
+            static_cast<unsigned long long>(manifestLoad.latestDiagnostics().stage.keepCount),
+            static_cast<unsigned long long>(manifestLoad.latestDiagnostics().stage.removeCount),
             static_cast<unsigned long long>(
-                terrainResidencyControls.manifestLoad.latestDiagnostics().stage.changedUnsupportedCount));
+                manifestLoad.latestDiagnostics().stage.changedUnsupportedCount));
         ImGui::Text(
             "Manifest staging inputs: resolved %llu, missing world %llu, desired setup %llu",
-            static_cast<unsigned long long>(terrainResidencyControls.manifestLoad.latestDiagnostics().resolvedResourceCount),
-            static_cast<unsigned long long>(terrainResidencyControls.manifestLoad.latestDiagnostics().missingWorldDescCount),
-            static_cast<unsigned long long>(terrainResidencyControls.manifestLoad.latestDiagnostics().desiredSetupCount));
+            static_cast<unsigned long long>(manifestLoad.latestDiagnostics().resolvedResourceCount),
+            static_cast<unsigned long long>(manifestLoad.latestDiagnostics().missingWorldDescCount),
+            static_cast<unsigned long long>(manifestLoad.latestDiagnostics().desiredSetupCount));
         terrainResidencyControls.streamingLoadRadius =
             std::max(0, std::min(terrainGridRadius, terrainResidencyControls.streamingLoadRadius));
         terrainResidencyControls.streamingResidentRadius =
@@ -1742,12 +1827,51 @@ void drawTerrainDiagnosticsPanel(
         }
         ImGui::InputInt("Streaming Load Radius", &terrainResidencyControls.streamingLoadRadius);
         ImGui::InputInt("Streaming Resident Radius", &terrainResidencyControls.streamingResidentRadius);
+        ImGui::Checkbox("Automatic streaming budgets", &terrainResidencyControls.streamingUseAutomaticBudgets);
+        if (terrainResidencyControls.streamingUseAutomaticBudgets)
+        {
+            const full_engine::TerrainStreamingAdaptiveBudgetResult& adaptiveBudget =
+                loopDiagnostics.adaptiveBudget;
+            const full_engine::TerrainStreamingLoopBudgetOptions automaticBudgets =
+                full_engine::selectTerrainStreamingLoopBudgets(adaptiveBudget.profile);
+            ImGui::Text(
+                "Adaptive profile: %s, pressure %llu across %llu ticks",
+                full_engine::terrainStreamingBudgetProfileName(adaptiveBudget.profile),
+                static_cast<unsigned long long>(adaptiveBudget.deferredWorkCount),
+                static_cast<unsigned long long>(adaptiveBudget.inspectedTickCount));
+            ImGui::Text(
+                "Selected caps: setup %llu/%llu, resident %llu/%llu, lifecycle %llu/%llu/%llu",
+                static_cast<unsigned long long>(automaticBudgets.queue.maxSetupAdds),
+                static_cast<unsigned long long>(automaticBudgets.queue.maxSetupRemoves),
+                static_cast<unsigned long long>(automaticBudgets.queue.maxMakeResident),
+                static_cast<unsigned long long>(automaticBudgets.queue.maxMakeUnloaded),
+                static_cast<unsigned long long>(automaticBudgets.maxPipelineCreates),
+                static_cast<unsigned long long>(automaticBudgets.maxPipelineUpdates),
+                static_cast<unsigned long long>(automaticBudgets.maxPipelineReleases));
+        }
+        else
+        {
+            ImGui::InputInt("Budget setup adds", &terrainResidencyControls.streamingBudgetSetupAdds);
+            ImGui::InputInt("Budget setup removes", &terrainResidencyControls.streamingBudgetSetupRemoves);
+            ImGui::InputInt("Budget make resident", &terrainResidencyControls.streamingBudgetMakeResident);
+            ImGui::InputInt("Budget make unloaded", &terrainResidencyControls.streamingBudgetMakeUnloaded);
+            ImGui::InputInt("Budget pipeline creates", &terrainResidencyControls.streamingBudgetPipelineCreates);
+            ImGui::InputInt("Budget pipeline updates", &terrainResidencyControls.streamingBudgetPipelineUpdates);
+            ImGui::InputInt("Budget pipeline releases", &terrainResidencyControls.streamingBudgetPipelineReleases);
+        }
         terrainResidencyControls.streamingLoadRadius =
             std::max(0, std::min(terrainGridRadius, terrainResidencyControls.streamingLoadRadius));
         terrainResidencyControls.streamingResidentRadius =
             std::max(0, std::min(terrainResidencyControls.streamingLoadRadius, terrainResidencyControls.streamingResidentRadius));
+        terrainResidencyControls.streamingBudgetSetupAdds = std::max(-1, terrainResidencyControls.streamingBudgetSetupAdds);
+        terrainResidencyControls.streamingBudgetSetupRemoves = std::max(-1, terrainResidencyControls.streamingBudgetSetupRemoves);
+        terrainResidencyControls.streamingBudgetMakeResident = std::max(-1, terrainResidencyControls.streamingBudgetMakeResident);
+        terrainResidencyControls.streamingBudgetMakeUnloaded = std::max(-1, terrainResidencyControls.streamingBudgetMakeUnloaded);
+        terrainResidencyControls.streamingBudgetPipelineCreates = std::max(-1, terrainResidencyControls.streamingBudgetPipelineCreates);
+        terrainResidencyControls.streamingBudgetPipelineUpdates = std::max(-1, terrainResidencyControls.streamingBudgetPipelineUpdates);
+        terrainResidencyControls.streamingBudgetPipelineReleases = std::max(-1, terrainResidencyControls.streamingBudgetPipelineReleases);
         const full_engine::TerrainStreamingManifestUpdateResult& streamingUpdate =
-            terrainResidencyControls.lastStreamingUpdate;
+            streamingLoop.latestStreamingUpdate();
         ImGui::Text(
             "Streaming manifest: %s, chunks %llu, missing handles %llu, load requests %llu/%llu",
             full_engine::terrainStreamingManifestUpdateStatusName(streamingUpdate.status),
@@ -1755,6 +1879,22 @@ void drawTerrainDiagnosticsPanel(
             static_cast<unsigned long long>(streamingUpdate.summary.readinessMissingHandleCount),
             static_cast<unsigned long long>(streamingUpdate.summary.loadRequestCount),
             static_cast<unsigned long long>(streamingUpdate.summary.queuedLoadRequestCount));
+        ImGui::Text(
+            "Streaming tick history: %llu",
+            static_cast<unsigned long long>(streamingLoop.tickHistoryCount()));
+        ImGui::SameLine();
+        if (ImGui::Button("Export Streaming Ticks"))
+        {
+            terrainResidencyControls.lastStreamingTickExportResult =
+                full_engine::exportTerrainStreamingTickHistoryJsonLines(
+                    streamingLoop.tickHistory(),
+                    "terrain_streaming_ticks.jsonl");
+        }
+        ImGui::SameLine();
+        ImGui::Text(
+            "Ticks: %s",
+            full_engine::terrainStreamingTickHistoryExportResultName(
+                terrainResidencyControls.lastStreamingTickExportResult));
         ImGui::Text(
             "Streaming plan: ops %llu, add/keep/remove setup %llu/%llu/%llu, resident make/keep/unload %llu/%llu/%llu",
             static_cast<unsigned long long>(streamingUpdate.summary.streamingPlanOperationCount),
@@ -1771,16 +1911,45 @@ void drawTerrainDiagnosticsPanel(
             static_cast<unsigned long long>(streamingUpdate.summary.queuedMakeResidentCount),
             static_cast<unsigned long long>(streamingUpdate.summary.queuedMakeUnloadedCount),
             full_engine::terrainStreamingQueueStatusName(streamingUpdate.streamingQueue.status));
+        ImGui::Text(
+            "Streaming deferred: setup add/remove %llu/%llu, resident make/unload %llu/%llu",
+            static_cast<unsigned long long>(streamingUpdate.summary.deferredSetupAddCount),
+            static_cast<unsigned long long>(streamingUpdate.summary.deferredSetupRemoveCount),
+            static_cast<unsigned long long>(streamingUpdate.summary.deferredMakeResidentCount),
+            static_cast<unsigned long long>(streamingUpdate.summary.deferredMakeUnloadedCount));
+        const std::vector<full_engine::TerrainStreamingTickEvent> streamingTicks =
+            streamingLoop.tickEvents();
+        const std::size_t firstStreamingTick =
+            streamingTicks.size() > 5 ? streamingTicks.size() - 5 : 0;
+        for (std::size_t tickIndex = firstStreamingTick; tickIndex < streamingTicks.size(); ++tickIndex)
+        {
+            const full_engine::TerrainStreamingTickEvent& tick = streamingTicks[tickIndex];
+            ImGui::Text(
+                "#%llu stream %s | runtime %s%s | queued s/r %llu/%llu | deferred setup %llu/%llu resident %llu/%llu | lifecycle defer c/u/r %llu/%llu/%llu",
+                static_cast<unsigned long long>(tick.sequence),
+                full_engine::terrainStreamingManifestUpdateStatusName(tick.streamingStatus),
+                full_engine::terrainRuntimeUpdateStatusName(tick.runtimeStatus),
+                tick.runtimeUpdateRan ? "" : " skipped",
+                static_cast<unsigned long long>(tick.setupRequestsBeforeRuntime),
+                static_cast<unsigned long long>(tick.residencyRequestsBeforeRuntime),
+                static_cast<unsigned long long>(tick.streaming.deferredSetupAddCount),
+                static_cast<unsigned long long>(tick.streaming.deferredSetupRemoveCount),
+                static_cast<unsigned long long>(tick.streaming.deferredMakeResidentCount),
+                static_cast<unsigned long long>(tick.streaming.deferredMakeUnloadedCount),
+                static_cast<unsigned long long>(tick.runtimeLifecycle.deferredCreateCount),
+                static_cast<unsigned long long>(tick.runtimeLifecycle.deferredUpdateCount),
+                static_cast<unsigned long long>(tick.runtimeLifecycle.deferredReleaseCount));
+        }
         if (ImGui::Button("Apply Manifest Stage"))
         {
             terrainResidencyControls.lastManifestStageApplyBlocked =
-                !terrainResidencyControls.manifestLoad.hasManifest();
-            if (terrainResidencyControls.manifestLoad.hasManifest())
+                !manifestLoad.hasManifest();
+            if (manifestLoad.hasManifest())
             {
                 const std::vector<full_engine::WorldChunkDesc> sampleWorldDescs =
                     sampleTerrainWorldDescs(sampleTerrainChunks);
                 const full_engine::TerrainManifestLoadStageResult loadStage =
-                    terrainResidencyControls.manifestLoad.queueStage(
+                    manifestLoad.queueStage(
                         terrainRuntime,
                         engineTerrainAssetHandles,
                         engineTerrainRegistry,
@@ -1793,7 +1962,7 @@ void drawTerrainDiagnosticsPanel(
                 if (!terrainResidencyControls.lastManifestStageApplyBlocked)
                 {
                     for (const full_engine::TerrainSetupStageOp& op :
-                         terrainResidencyControls.manifestLoad.latestStage().stagePlan.operations)
+                         manifestLoad.latestStage().stagePlan.operations)
                     {
                         if (op.action == full_engine::TerrainSetupStageAction::Add)
                         {
@@ -1811,8 +1980,8 @@ void drawTerrainDiagnosticsPanel(
         ImGui::Text(
             "Stage apply: queued %llu%s",
             static_cast<unsigned long long>(
-                terrainResidencyControls.manifestLoad.latestDiagnostics().queue.queuedSetupCount +
-                terrainResidencyControls.manifestLoad.latestDiagnostics().queue.queuedMakeResidentCount),
+                manifestLoad.latestDiagnostics().queue.queuedSetupCount +
+                manifestLoad.latestDiagnostics().queue.queuedMakeResidentCount),
             terrainResidencyControls.lastManifestStageApplyBlocked ? ", blocked" : "");
         ImGui::Text(
             "Manifest assets: %llu records, terrain chunks %llu, mesh/material/texture %llu/%llu/%llu",
@@ -1885,6 +2054,11 @@ void drawTerrainDiagnosticsPanel(
             static_cast<unsigned long long>(pipeline.lifecycle.keepCount),
             static_cast<unsigned long long>(pipeline.lifecycle.updateCount),
             static_cast<unsigned long long>(pipeline.lifecycle.releaseCount));
+        ImGui::Text(
+            "Lifecycle deferred: create %llu, update %llu, release %llu",
+            static_cast<unsigned long long>(pipeline.lifecycle.deferredCreateCount),
+            static_cast<unsigned long long>(pipeline.lifecycle.deferredUpdateCount),
+            static_cast<unsigned long long>(pipeline.lifecycle.deferredReleaseCount));
         ImGui::Text(
             "Commands: create %llu, keep %llu, update %llu, destroy %llu",
             static_cast<unsigned long long>(pipeline.commands.createCount),
@@ -4647,18 +4821,49 @@ int main(int argc, char** argv)
         if (terrainResidencyControls.terrainStreamingEnabled ||
             terrainResidencyControls.terrainStreamingRunOnce)
         {
-            runSampleTerrainStreamingCoordinator(
-                terrainRuntime,
-                engineTerrainRegistry,
-                engineTerrainCatalog,
-                engineTerrainAssetHandles,
-                engineTerrainResources,
-                engineTerrainHandles,
-                sampleTerrainChunks,
-                terrainResidencyControls,
-                kChunkSize,
-                cameraPosition);
+            const full_engine::TerrainStreamingLoopUpdateResult streamingLoopUpdate =
+                runSampleTerrainStreamingLoopUpdate(
+                    *renderer,
+                    terrainRuntime,
+                    engineTerrainRegistry,
+                    engineTerrainCatalog,
+                    engineTerrainAssetHandles,
+                    engineTerrainResources,
+                    engineTerrainHandles,
+                    sampleTerrainChunks,
+                    terrainResidencyControls,
+                    kChunkSize,
+                    cameraPosition,
+                    engineTerrainRuntimeOptions);
             terrainResidencyControls.terrainStreamingRunOnce = false;
+
+            if (streamingLoopUpdate.status == full_engine::TerrainStreamingLoopUpdateStatus::RuntimeSetupFailed)
+            {
+                std::cerr << "Sample terrain setup request failed.\n";
+                break;
+            }
+            if (streamingLoopUpdate.status == full_engine::TerrainStreamingLoopUpdateStatus::RuntimeResidencyFailed)
+            {
+                std::cerr << "Sample terrain residency request failed with an invalid transition.\n";
+                break;
+            }
+            if (streamingLoopUpdate.status == full_engine::TerrainStreamingLoopUpdateStatus::RuntimePipelineFailed)
+            {
+                std::cerr << "Failed to update sample terrain residency through engine integration.\n";
+                break;
+            }
+
+            if (streamingLoopUpdate.runtimeUpdateRan)
+            {
+                refreshSampleTerrainMirrorsAfterRuntimeUpdate(
+                    terrainRuntime,
+                    engineTerrainRegistry,
+                    engineTerrainCatalog,
+                    engineTerrainResources,
+                    engineTerrainHandles,
+                    sampleTerrainChunks,
+                    terrainResidencyControls);
+            }
         }
 
         if (terrainRuntime.hasPendingRequests())
@@ -4691,25 +4896,14 @@ int main(int argc, char** argv)
                 break;
             }
 
-            mirrorSampleTerrainState(
+            refreshSampleTerrainMirrorsAfterRuntimeUpdate(
+                terrainRuntime,
                 engineTerrainRegistry,
                 engineTerrainCatalog,
                 engineTerrainResources,
                 engineTerrainHandles,
-                sampleTerrainChunks);
-            if (terrainResidencyControls.reloadCenterAfterUnload)
-            {
-                const full_engine::ChunkId centerChunkId = {};
-                if (SampleTerrainChunkState* centerChunk = findSampleTerrainChunk(sampleTerrainChunks, centerChunkId))
-                {
-                    if (centerChunk->setupRegistered)
-                    {
-                        centerChunk->resident = true;
-                        terrainRuntime.queueMakeResident(centerChunkId);
-                    }
-                }
-                terrainResidencyControls.reloadCenterAfterUnload = false;
-            }
+                sampleTerrainChunks,
+                terrainResidencyControls);
         }
 
         result = renderer->beginFrame(frameDesc);

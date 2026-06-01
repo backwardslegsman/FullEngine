@@ -2,6 +2,30 @@
 
 namespace full_engine
 {
+EngineJobQueueDiagnostics makeEngineJobQueueDiagnostics(const EngineJobQueue& queue)
+{
+    EngineJobQueueDiagnostics diagnostics;
+    diagnostics.pendingJobCount = queue.jobCount();
+    diagnostics.summary = queue.summary();
+    return diagnostics;
+}
+
+TerrainManifestAssetLoadJobDiagnostics makeTerrainManifestAssetLoadJobDiagnostics(
+    const TerrainManifestAssetLoadJobCoordinatorResult& result,
+    const EngineJobQueue& jobs)
+{
+    TerrainManifestAssetLoadJobDiagnostics diagnostics;
+    diagnostics.status = result.status;
+    diagnostics.jobQueue = makeEngineJobQueueDiagnostics(jobs);
+    diagnostics.mirror = result.mirror.summary;
+    diagnostics.execution = result.jobs.summary;
+    diagnostics.loadConsume = result.load.consume.summary;
+    diagnostics.loadConsumed = result.load.consume.consumed;
+    diagnostics.coordinator = result.summary;
+    diagnostics.readiness = result.readiness.summary;
+    return diagnostics;
+}
+
 TerrainAssetBatchResolveDiagnostics makeTerrainAssetBatchResolveDiagnostics(
     const TerrainAssetBatchResolveResult& result)
 {

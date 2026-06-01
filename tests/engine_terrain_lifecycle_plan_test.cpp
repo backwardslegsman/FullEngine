@@ -167,6 +167,90 @@ void testMixedOperationsAndOrdering(std::vector<std::string>& failures)
     expect(plan.summary.releaseCount == 2, "mixed release count is correct", failures);
 }
 
+void testCreateBudgetDefersOverLimit(std::vector<std::string>& failures)
+{
+    full_engine::TerrainRenderPrep prep;
+    addPrepChunk(prep, {1, 0, 0}, 0.0f);
+    addPrepChunk(prep, {2, 0, 0}, 20.0f);
+    full_engine::TerrainLifecyclePlanOptions options;
+    options.maxCreateCount = 1;
+
+    const full_engine::ChunkTerrainHandleMap handles;
+    const full_engine::TerrainLifecyclePlan plan = full_engine::planTerrainLifecycle(prep, handles, options);
+
+    expect(plan.operations.size() == 1, "create budget emits one operation", failures);
+    expect(plan.summary.createCount == 1, "create budget queues one create", failures);
+    expect(plan.summary.deferredCreateCount == 1, "create budget defers one create", failures);
+    expect(sameId(plan.operations[0].id, full_engine::ChunkId{1, 0, 0}), "create budget preserves prep order", failures);
+}
+
+void testUpdateBudgetDefersOverLimit(std::vector<std::string>& failures)
+{
+    full_engine::TerrainRenderPrep prep;
+    const full_engine::ChunkId first{1, 0, 0};
+    const full_engine::ChunkId second{2, 0, 0};
+    addPrepChunk(prep, first, 0.0f);
+    addPrepChunk(prep, second, 20.0f);
+
+    full_engine::ChunkTerrainHandleMap handles;
+    handles.mapChunk(first, handle(1, 1));
+    handles.mapChunk(second, handle(2, 1));
+
+    full_engine::TerrainLifecyclePlanOptions options;
+    options.updateMappedReadyChunks = true;
+    options.maxUpdateCount = 1;
+    const full_engine::TerrainLifecyclePlan plan = full_engine::planTerrainLifecycle(prep, handles, options);
+
+    expect(plan.operations.size() == 1, "update budget emits one operation", failures);
+    expect(plan.summary.updateCount == 1, "update budget queues one update", failures);
+    expect(plan.summary.deferredUpdateCount == 1, "update budget defers one update", failures);
+    expect(sameId(plan.operations[0].id, first), "update budget preserves prep order", failures);
+}
+
+void testReleaseBudgetDefersOverLimit(std::vector<std::string>& failures)
+{
+    const full_engine::TerrainRenderPrep prep;
+    const full_engine::ChunkId first{1, 0, 0};
+    const full_engine::ChunkId second{2, 0, 0};
+    full_engine::ChunkTerrainHandleMap handles;
+    handles.mapChunk(second, handle(2, 1));
+    handles.mapChunk(first, handle(1, 1));
+
+    full_engine::TerrainLifecyclePlanOptions options;
+    options.maxReleaseCount = 1;
+    const full_engine::TerrainLifecyclePlan plan = full_engine::planTerrainLifecycle(prep, handles, options);
+
+    expect(plan.operations.size() == 1, "release budget emits one operation", failures);
+    expect(plan.summary.releaseCount == 1, "release budget queues one release", failures);
+    expect(plan.summary.deferredReleaseCount == 1, "release budget defers one release", failures);
+    expect(sameId(plan.operations[0].id, first), "release budget preserves deterministic map order", failures);
+}
+
+void testKeepOperationsIgnoreBudgets(std::vector<std::string>& failures)
+{
+    full_engine::TerrainRenderPrep prep;
+    const full_engine::ChunkId first{1, 0, 0};
+    const full_engine::ChunkId second{2, 0, 0};
+    addPrepChunk(prep, first, 0.0f);
+    addPrepChunk(prep, second, 20.0f);
+
+    full_engine::ChunkTerrainHandleMap handles;
+    handles.mapChunk(first, handle(1, 1));
+    handles.mapChunk(second, handle(2, 1));
+
+    full_engine::TerrainLifecyclePlanOptions options;
+    options.maxCreateCount = 0;
+    options.maxUpdateCount = 0;
+    options.maxReleaseCount = 0;
+    const full_engine::TerrainLifecyclePlan plan = full_engine::planTerrainLifecycle(prep, handles, options);
+
+    expect(plan.operations.size() == 2, "keep operations ignore lifecycle budgets", failures);
+    expect(plan.summary.keepCount == 2, "keep operations are still counted", failures);
+    expect(plan.summary.deferredCreateCount == 0, "keep operations do not defer creates", failures);
+    expect(plan.summary.deferredUpdateCount == 0, "keep operations do not defer updates", failures);
+    expect(plan.summary.deferredReleaseCount == 0, "keep operations do not defer releases", failures);
+}
+
 void testEmptyInputs(std::vector<std::string>& failures)
 {
     const full_engine::TerrainRenderPrep prep;
@@ -188,6 +272,10 @@ int main()
     testMappedReadyChunkUpdatesWhenRequested(failures);
     testAbsentMappedHandleReleases(failures);
     testMixedOperationsAndOrdering(failures);
+    testCreateBudgetDefersOverLimit(failures);
+    testUpdateBudgetDefersOverLimit(failures);
+    testReleaseBudgetDefersOverLimit(failures);
+    testKeepOperationsIgnoreBudgets(failures);
     testEmptyInputs(failures);
 
     if (!failures.empty())

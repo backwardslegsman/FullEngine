@@ -56,6 +56,10 @@ void copySummary(TerrainStreamingManifestUpdateResult& result)
     result.summary.queuedSetupRemoveCount = result.streamingQueue.summary.queuedSetupRemoveCount;
     result.summary.queuedMakeResidentCount = result.streamingQueue.summary.queuedMakeResidentCount;
     result.summary.queuedMakeUnloadedCount = result.streamingQueue.summary.queuedMakeUnloadedCount;
+    result.summary.deferredSetupAddCount = result.streamingQueue.summary.deferredSetupAddCount;
+    result.summary.deferredSetupRemoveCount = result.streamingQueue.summary.deferredSetupRemoveCount;
+    result.summary.deferredMakeResidentCount = result.streamingQueue.summary.deferredMakeResidentCount;
+    result.summary.deferredMakeUnloadedCount = result.streamingQueue.summary.deferredMakeUnloadedCount;
 }
 } // namespace
 
@@ -158,7 +162,8 @@ TerrainStreamingManifestUpdateResult updateTerrainStreamingFromManifest(
         result.streamingQueue = streaming.queueLatestPlan(
             runtime,
             setupDescs.empty() ? nullptr : setupDescs.data(),
-            setupDescs.size());
+            setupDescs.size(),
+            options.queueOptions);
         if (result.streamingQueue.status != TerrainStreamingQueueStatus::Success)
         {
             result.status = TerrainStreamingManifestUpdateStatus::StreamingQueueBlocked;

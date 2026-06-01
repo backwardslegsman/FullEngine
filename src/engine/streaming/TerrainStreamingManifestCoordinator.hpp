@@ -21,6 +21,9 @@ struct TerrainStreamingManifestUpdateOptions
 
     /** @brief Queue safe setup/residency intent into the terrain runtime state. */
     bool queueRuntimeRequests = true;
+
+    /** @brief Per-tick queue limits for safe setup/residency runtime intent. */
+    TerrainStreamingQueueOptions queueOptions = {};
 };
 
 /** @brief High-level status for manifest-aware terrain streaming coordination. */
@@ -50,6 +53,10 @@ struct TerrainStreamingManifestUpdateSummary
     std::size_t queuedSetupRemoveCount = 0;
     std::size_t queuedMakeResidentCount = 0;
     std::size_t queuedMakeUnloadedCount = 0;
+    std::size_t deferredSetupAddCount = 0;
+    std::size_t deferredSetupRemoveCount = 0;
+    std::size_t deferredMakeResidentCount = 0;
+    std::size_t deferredMakeUnloadedCount = 0;
 };
 
 /**

@@ -1,5 +1,7 @@
 #include "engine/renderer_integration/TerrainManifestAssetLoadJobCoordinator.hpp"
 
+#include "engine/renderer_integration/TerrainManifestLoadState.hpp"
+
 #include <algorithm>
 #include <vector>
 

@@ -174,6 +174,9 @@ Implemented pieces:
 - a production-facing single-threaded manifest asset load job coordinator that
   owns the repeated mirror, execute, consume, and readiness-replan sequence
   while keeping loader callbacks and renderer resource creation external
+- reusable manifest asset-load job diagnostics that copy coordinator status,
+  pending job counts, mirror/execution/consume counters, and final readiness
+  counters for debug UI or tooling without retaining job or load records
 - a CPU-only terrain streaming planner that converts camera/world position,
   chunk size, known chunk IDs, and a terrain runtime snapshot into deterministic
   dry-run setup and residency intent without mutating runtime state
@@ -183,6 +186,29 @@ Implemented pieces:
 - a manifest-aware terrain streaming coordinator that plans handle readiness,
   queues missing asset-load intent, stages manifest setup descriptors, and then
   feeds safe camera-window setup/residency intent into the streaming runtime
+- a retained synchronous terrain streaming loop state that groups manifest load
+  state, streaming runtime state, manifest asset-load jobs, and latest
+  coordination diagnostics while keeping renderer handles and resources
+  externally owned
+- a synchronous terrain streaming loop update helper that runs retained
+  manifest-aware streaming coordination and applies queued terrain runtime
+  setup/residency work only after streaming succeeds
+- per-tick terrain streaming budgets that defer excess setup add/remove,
+  residency transition, and terrain renderer lifecycle work with deterministic
+  counters instead of treating budget exhaustion as failure
+- a retained streaming tick history ring that stores recent streaming, queue,
+  runtime, lifecycle, and submission counters so deferred work can be inspected
+  across several frames
+- deterministic JSON Lines export/import for retained streaming tick history,
+  matching the existing terrain runtime diagnostics tooling for longer manual
+  sessions and offline trace tests
+- a simple terrain streaming budget policy that selects deterministic setup,
+  residency, and lifecycle caps from named runtime profiles, plus an adaptive
+  selector that chooses a profile from retained tick-history pressure before
+  threaded streaming policy exists
+- retained terrain streaming loop diagnostics that expose the latest adaptive
+  budget profile and deferred-work pressure without requiring tools to rescan
+  tick history
 - manifest runtime staging diagnostics that expose coordinator status, asset
   resolution counters, staging counters, and queued-request counters as
   reusable value snapshots
@@ -239,7 +265,7 @@ submission, mirrors display state from engine registries, displays the retained
 runtime snapshot/diff in its debug panel, exports event/diff diagnostics on
 demand, displays and exports its generated cooked manifest for schema/tooling
 inspection, validates that exported manifest back through the engine importer
-and catalog builder, stores the imported value in `TerrainManifestLoadState`,
+and catalog builder, stores the imported value in `TerrainStreamingLoopState`,
 reports renderer-handle readiness for declared mesh/material/texture
 references, converts missing handle readiness into renderer-free load intent
 counts, retains pending load intent in a deduplicated queue, can consume that
@@ -247,18 +273,19 @@ intent once externally supplied handles are available, exposes the latest load
 consume counters in the debug panel, dry-runs a terrain setup staging plan
 through the reusable manifest staging coordinator, can queue safe add/remove
 staging operations through the terrain runtime controller, can drive
-setup/residency intent from the camera through the manifest-aware streaming
-coordinator debug toggle, can run the manifest asset load job coordinator from
+setup/residency intent from the camera through the retained streaming loop
+update helper, can select adaptive automatic streaming budget profiles from
+recent deferred-work pressure or use manual debug budget overrides, can run the
+manifest asset load job coordinator from
 the debug panel using its sample-created renderer handles as the external load
-callback source, and submits the mapped renderer terrain handles in its render
-packet.
+callback source, can export retained streaming tick history, and submits the
+mapped renderer terrain handles in its render packet.
 
 Still future work:
 
 - async loading, streaming jobs, and IO
-- a streaming runtime loop that sequences manifest load state, asset load
-  requests, terrain setup staging, residency requests, and terrain runtime
-  updates without sample-owned orchestration
+- a scheduler that consumes selected budget profiles or offline summary tooling
+  for imported streaming tick traces
 - production cooked manifest formats, importers, and renderer-resource
   creation policy
 - production terrain streaming policy and editor-owned residency controls

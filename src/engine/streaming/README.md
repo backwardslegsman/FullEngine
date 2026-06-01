@@ -28,11 +28,32 @@ threaded loader exists.
   residency intent without mutating runtime owners.
 - `TerrainStreamingRuntime.hpp/.cpp` - retained streaming state that stores
   the latest dry-run plan, compact queue diagnostics, and can queue safe setup
-  and residency intent into `TerrainRuntimeState` without applying it.
+  and residency intent into `TerrainRuntimeState` without applying it. Per-tick
+  queue budgets can defer excess setup and residency operations deterministically.
 - `TerrainStreamingManifestCoordinator.hpp/.cpp` - manifest-aware bridge that
   plans asset handle readiness, queues missing asset load intent, stages
   manifest terrain setup descriptors, runs streaming policy, and queues safe
   runtime intent without applying it.
+- `TerrainStreamingLoopState.hpp/.cpp` - retained synchronous holder for
+  manifest load state, streaming runtime state, manifest asset-load jobs, and
+  latest coordination diagnostics. It also keeps a compact fixed-capacity tick
+  history ring for budget/deferred-work visibility across recent frames and
+  exposes the latest adaptive budget selection in loop diagnostics.
+- `TerrainStreamingLoopUpdate.hpp/.cpp` - synchronous tick-shaped helper that
+  runs retained manifest-aware streaming coordination and then applies queued
+  terrain setup/residency work through `TerrainRuntimeState::updateWithSnapshot`
+  only after streaming succeeds. It can also pass per-tick queue and terrain
+  lifecycle budgets into the retained streaming/runtime path.
+- `TerrainStreamingBudgetPolicy.hpp/.cpp` - deterministic named budget
+  profiles that select setup, residency, and lifecycle caps for the synchronous
+  loop. The policy can also choose a profile from retained tick-history
+  deferred-work pressure before threaded streaming policy exists.
+- `TerrainStreamingTickHistoryExport.hpp/.cpp` - standard-library JSON Lines
+  export for retained streaming tick history so deferred-work behavior can be
+  captured from longer manual sessions.
+- `TerrainStreamingTickHistoryImport.hpp/.cpp` - matching JSON Lines import for
+  exported streaming tick traces, preserving file order and stored sequence
+  values as value-only diagnostics.
 
 ## Planned files
 
@@ -60,5 +81,19 @@ The retained runtime state can queue safe plan intent through
 `TerrainRuntimeState`. The manifest coordinator connects retained manifest
 values and asset-load intent to that streaming plan. Pending manifest asset-load
 requests can now be mirrored into generic jobs for deterministic callback
-execution; later slices can connect those callbacks to real async IO after the
-single-threaded CPU-side policy is proven.
+execution. The retained loop state groups those pieces into one synchronous
+state holder while keeping renderer handles, renderer resources, file paths,
+and explicit runtime application caller-owned. The synchronous loop update
+helper composes that retained state with terrain runtime queue application for
+sample/runtime ticks without owning sample UI mirrors. Per-tick budgets now cap
+setup adds/removes, residency transitions, and terrain renderer lifecycle work
+without treating deferred work as failure. Recent tick history makes those
+deferred counters visible across multiple frames. Named budget profiles now
+provide a small engine-owned policy for choosing those caps automatically while
+manual debug overrides remain possible, and an adaptive selector can switch
+between conservative, balanced, and catch-up profiles from retained
+deferred-work pressure. The retained loop diagnostics now expose that selected
+profile and pressure directly for sample/editor tooling. Streaming tick history
+can be exported and imported as deterministic JSON Lines for offline inspection
+and round-trip tests. Later slices can connect callbacks to real async IO after
+the single-threaded CPU-side policy is proven.

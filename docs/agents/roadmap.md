@@ -576,9 +576,48 @@ move gameplay, streaming policy, or editor concepts into renderer internals.
 - Seventh slice is implemented: the sample debug panel exposes an optional
   "Run Load Jobs" action and coordinator diagnostics, using sample-created
   renderer handles as the external callback source.
-- Next slice: add a retained streaming/job state holder once more than manifest
-  asset loading needs scheduled work, or promote load-job diagnostics into the
-  reusable terrain integration diagnostics snapshot.
+- Eighth slice is implemented: manifest asset-load job diagnostics are exposed
+  as reusable terrain integration value snapshots, and the sample reads its
+  load-job panel counters from that snapshot instead of manually unpacking the
+  coordinator result.
+- Ninth slice is implemented: `TerrainStreamingLoopState` groups retained
+  manifest load state, streaming runtime state, manifest asset-load jobs, and
+  latest coordination diagnostics so the sample no longer owns that
+  orchestration directly.
+- Tenth slice is implemented: `TerrainStreamingLoopUpdate` provides a
+  synchronous tick-shaped helper that calls the retained loop state, blocks on
+  manifest/load/staging/streaming failures, and applies queued
+  `TerrainRuntimeState::updateWithSnapshot` work only after streaming
+  coordination succeeds.
+- Eleventh slice is implemented: per-tick budgets now cap streaming setup
+  adds/removes, residency make-resident/make-unloaded requests, and terrain
+  renderer lifecycle create/update/release work. Deferred work is counted in
+  diagnostics and retried by future ticks instead of becoming a failure.
+- Twelfth slice is implemented: `TerrainStreamingLoopState` retains a compact
+  fixed-capacity streaming tick history with copied streaming, queue, runtime,
+  lifecycle, and submission counters so budgeted/deferred work is visible across
+  recent frames.
+- Thirteenth slice is implemented: `TerrainStreamingBudgetPolicy` selects
+  deterministic setup, residency, and lifecycle caps from named budget profiles
+  (`Unlimited`, `Conservative`, `Balanced`, and `CatchUp`), and the sample can
+  use those automatic profiles while retaining manual budget overrides.
+- Fourteenth slice is implemented: the budget policy can now read retained
+  `TerrainStreamingTickHistory` pressure and choose `Conservative`, `Balanced`,
+  or `CatchUp` automatically; the sample's automatic budget mode uses that
+  adaptive selector while manual budget overrides remain available.
+- Fifteenth slice is implemented: retained `TerrainStreamingLoopDiagnostics`
+  now includes the latest adaptive budget selection result, so tools can inspect
+  chosen profile and deferred-work pressure without recomputing it from tick
+  history.
+- Sixteenth slice is implemented: retained streaming tick history can be
+  exported as deterministic JSON Lines for longer manual-session diagnostics,
+  and the sample terrain panel exposes a compact export button.
+- Seventeenth slice is implemented: streaming tick-history JSON Lines import
+  round-trips exported long-session diagnostics as value snapshots for tests
+  and later offline tooling.
+- Next slice: start feeding the selected profile into a future threaded/async
+  streaming scheduler, or add small offline summary tooling over imported
+  streaming tick traces.
 - Initial sample integration is in place: the debug UI can run the
   manifest-aware streaming coordinator once or continuously from camera
   position, display readiness/load/staging/streaming queue counters, and keep

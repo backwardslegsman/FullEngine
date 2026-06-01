@@ -9,6 +9,139 @@ int main()
         assert(empty.setupRequests.requestCount == 0);
         assert(empty.residencyRequests.requestCount == 0);
         assert(empty.pipeline.handleCount == 0);
+
+        const full_engine::TerrainManifestAssetLoadJobDiagnostics loadJobs;
+        assert(loadJobs.status == full_engine::TerrainManifestAssetLoadJobCoordinatorStatus::NoPendingLoads);
+        assert(loadJobs.jobQueue.pendingJobCount == 0);
+        assert(loadJobs.mirror.queuedCount == 0);
+        assert(loadJobs.execution.completedCount == 0);
+        assert(loadJobs.loadConsume.loadedCount == 0);
+        assert(!loadJobs.loadConsumed);
+        assert(loadJobs.coordinator.finalPendingLoadRequestCount == 0);
+        assert(loadJobs.readiness.readyCount == 0);
+    }
+
+    {
+        full_engine::EngineJobQueue jobs;
+        assert(jobs.push({
+            full_engine::EngineJobId{1, 0},
+            full_engine::EngineJobKind::ManifestAssetLoad,
+            full_engine::EngineJobPriority::High,
+            10,
+            20,
+            0,
+            0}) == full_engine::EngineJobQueueResult::Queued);
+        assert(jobs.push({
+            full_engine::EngineJobId{2, 0},
+            full_engine::EngineJobKind::Custom,
+            full_engine::EngineJobPriority::Low,
+            0,
+            0,
+            0,
+            0}) == full_engine::EngineJobQueueResult::Queued);
+
+        const std::size_t sourceJobCount = jobs.jobCount();
+        const full_engine::EngineJobQueueDiagnostics diagnostics =
+            full_engine::makeEngineJobQueueDiagnostics(jobs);
+
+        assert(diagnostics.pendingJobCount == 2);
+        assert(diagnostics.summary.pendingCount == 2);
+        assert(diagnostics.summary.manifestAssetLoadCount == 1);
+        assert(diagnostics.summary.customCount == 1);
+        assert(diagnostics.summary.highPriorityCount == 1);
+        assert(diagnostics.summary.lowPriorityCount == 1);
+        assert(jobs.jobCount() == sourceJobCount);
+    }
+
+    {
+        full_engine::EngineJobQueue jobs;
+        assert(jobs.push({
+            full_engine::EngineJobId{3, 0},
+            full_engine::EngineJobKind::ManifestAssetLoad,
+            full_engine::EngineJobPriority::Normal,
+            30,
+            40,
+            0,
+            0}) == full_engine::EngineJobQueueResult::Queued);
+
+        full_engine::TerrainManifestAssetLoadJobCoordinatorResult result;
+        result.status = full_engine::TerrainManifestAssetLoadJobCoordinatorStatus::Success;
+        result.mirror.summary.queuedCount = 1;
+        result.mirror.summary.alreadyQueuedCount = 2;
+        result.mirror.summary.invalidArgumentCount = 3;
+        result.mirror.records.push_back({});
+        result.jobs.summary.attemptedCount = 4;
+        result.jobs.summary.completedCount = 5;
+        result.jobs.summary.failedCount = 6;
+        result.jobs.summary.blockedCount = 7;
+        result.jobs.records.push_back({});
+        result.load.consume.summary.loadedCount = 8;
+        result.load.consume.summary.alreadyLoadedCount = 9;
+        result.load.consume.summary.missingHandleCount = 10;
+        result.load.consume.summary.catalogRejectedCount = 11;
+        result.load.consume.consumed = true;
+        result.load.consume.records.push_back({});
+        result.summary.initialPendingLoadRequestCount = 12;
+        result.summary.finalPendingLoadRequestCount = 13;
+        result.summary.finalReadyHandleCount = 14;
+        result.summary.finalMissingHandleCount = 15;
+        result.readiness.summary.requestedCount = 16;
+        result.readiness.summary.readyCount = 17;
+        result.readiness.summary.missingHandleCount = 18;
+        result.readiness.records.push_back({});
+
+        const std::size_t sourceJobCount = jobs.jobCount();
+        const std::size_t sourceMirrorRecordCount = result.mirror.records.size();
+        const std::size_t sourceJobRecordCount = result.jobs.records.size();
+        const std::size_t sourceLoadRecordCount = result.load.consume.records.size();
+        const std::size_t sourceReadinessRecordCount = result.readiness.records.size();
+        const full_engine::TerrainManifestAssetLoadJobDiagnostics diagnostics =
+            full_engine::makeTerrainManifestAssetLoadJobDiagnostics(result, jobs);
+
+        assert(diagnostics.status == full_engine::TerrainManifestAssetLoadJobCoordinatorStatus::Success);
+        assert(diagnostics.jobQueue.pendingJobCount == 1);
+        assert(diagnostics.jobQueue.summary.manifestAssetLoadCount == 1);
+        assert(diagnostics.mirror.queuedCount == 1);
+        assert(diagnostics.mirror.alreadyQueuedCount == 2);
+        assert(diagnostics.mirror.invalidArgumentCount == 3);
+        assert(diagnostics.execution.attemptedCount == 4);
+        assert(diagnostics.execution.completedCount == 5);
+        assert(diagnostics.execution.failedCount == 6);
+        assert(diagnostics.execution.blockedCount == 7);
+        assert(diagnostics.loadConsume.loadedCount == 8);
+        assert(diagnostics.loadConsume.alreadyLoadedCount == 9);
+        assert(diagnostics.loadConsume.missingHandleCount == 10);
+        assert(diagnostics.loadConsume.catalogRejectedCount == 11);
+        assert(diagnostics.loadConsumed);
+        assert(diagnostics.coordinator.initialPendingLoadRequestCount == 12);
+        assert(diagnostics.coordinator.finalPendingLoadRequestCount == 13);
+        assert(diagnostics.coordinator.finalReadyHandleCount == 14);
+        assert(diagnostics.coordinator.finalMissingHandleCount == 15);
+        assert(diagnostics.readiness.requestedCount == 16);
+        assert(diagnostics.readiness.readyCount == 17);
+        assert(diagnostics.readiness.missingHandleCount == 18);
+        assert(jobs.jobCount() == sourceJobCount);
+        assert(result.mirror.records.size() == sourceMirrorRecordCount);
+        assert(result.jobs.records.size() == sourceJobRecordCount);
+        assert(result.load.consume.records.size() == sourceLoadRecordCount);
+        assert(result.readiness.records.size() == sourceReadinessRecordCount);
+    }
+
+    {
+        const full_engine::EngineJobQueue jobs;
+        full_engine::TerrainManifestAssetLoadJobCoordinatorResult result;
+        result.status = full_engine::TerrainManifestAssetLoadJobCoordinatorStatus::JobsBlocked;
+        result.jobs.summary.failedCount = 1;
+        result.jobs.summary.blockedCount = 2;
+        result.summary.finalPendingLoadRequestCount = 3;
+
+        const full_engine::TerrainManifestAssetLoadJobDiagnostics diagnostics =
+            full_engine::makeTerrainManifestAssetLoadJobDiagnostics(result, jobs);
+
+        assert(diagnostics.status == full_engine::TerrainManifestAssetLoadJobCoordinatorStatus::JobsBlocked);
+        assert(diagnostics.execution.failedCount == 1);
+        assert(diagnostics.execution.blockedCount == 2);
+        assert(diagnostics.coordinator.finalPendingLoadRequestCount == 3);
     }
 
     {

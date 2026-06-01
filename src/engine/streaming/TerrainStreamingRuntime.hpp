@@ -5,9 +5,30 @@
 #include "engine/streaming/TerrainStreamingPlanner.hpp"
 
 #include <cstddef>
+#include <limits>
 
 namespace full_engine
 {
+/** @brief Sentinel value for unlimited per-tick streaming queue budgets. */
+inline constexpr std::size_t kUnlimitedTerrainStreamingQueueBudget =
+    (std::numeric_limits<std::size_t>::max)();
+
+/** @brief Per-tick limits for queueing streaming plan intent into runtime requests. */
+struct TerrainStreamingQueueOptions
+{
+    /** @brief Maximum setup add requests to queue this tick. */
+    std::size_t maxSetupAdds = kUnlimitedTerrainStreamingQueueBudget;
+
+    /** @brief Maximum setup remove requests to queue this tick. */
+    std::size_t maxSetupRemoves = kUnlimitedTerrainStreamingQueueBudget;
+
+    /** @brief Maximum make-resident requests to queue this tick. */
+    std::size_t maxMakeResident = kUnlimitedTerrainStreamingQueueBudget;
+
+    /** @brief Maximum make-unloaded requests to queue this tick. */
+    std::size_t maxMakeUnloaded = kUnlimitedTerrainStreamingQueueBudget;
+};
+
 /** @brief Result status for queueing a retained terrain streaming plan. */
 enum class TerrainStreamingQueueStatus
 {
@@ -27,6 +48,10 @@ struct TerrainStreamingQueueSummary
     std::size_t queuedSetupRemoveCount = 0;
     std::size_t queuedMakeResidentCount = 0;
     std::size_t queuedMakeUnloadedCount = 0;
+    std::size_t deferredSetupAddCount = 0;
+    std::size_t deferredSetupRemoveCount = 0;
+    std::size_t deferredMakeResidentCount = 0;
+    std::size_t deferredMakeUnloadedCount = 0;
     std::size_t skippedKeepSetupCount = 0;
     std::size_t skippedKeepResidentCount = 0;
     std::size_t skippedKeepUnloadedCount = 0;
@@ -91,21 +116,26 @@ public:
      *
      * This method queues intent only; it never applies runtime updates. Add
      * setup operations require a matching caller-owned `TerrainSetupStageDesc`
-     * by chunk ID. Queueing is all-or-nothing for invalid plans or missing
+     * by chunk ID when the add operation is within the supplied per-tick
+     * budget. Queueing is all-or-nothing for invalid plans or missing required
      * setup descriptors, so failed queue attempts leave `runtime` unchanged.
+     * Budget exhaustion is not a failure; over-budget operations are counted
+     * as deferred and can be retried by planning again on a later tick.
      *
      * @param runtime Caller-owned terrain runtime state that receives queued
      * setup/residency intent when the retained plan is safe.
      * @param desiredSetup Caller-owned setup descriptors used by `AddSetup`
      * operations. May be null only when `desiredSetupCount` is zero.
      * @param desiredSetupCount Number of entries in `desiredSetup`.
+     * @param options Per-action queue limits for this tick.
      * @return Reference to the retained queue result, valid until the next
      * queue, `plan`, or `clear` call on this object.
      */
     const TerrainStreamingQueueResult& queueLatestPlan(
         TerrainRuntimeState& runtime,
         const TerrainSetupStageDesc* desiredSetup,
-        std::size_t desiredSetupCount);
+        std::size_t desiredSetupCount,
+        const TerrainStreamingQueueOptions& options = {});
 
     /** @brief Returns whether a streaming plan has been retained. */
     bool hasLatestPlan() const noexcept;

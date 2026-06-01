@@ -189,6 +189,17 @@ add_library(full_engine STATIC
     src/engine/renderer_integration/WorldRenderSnapshot.hpp
     src/engine/streaming/TerrainStreamingManifestCoordinator.cpp
     src/engine/streaming/TerrainStreamingManifestCoordinator.hpp
+    src/engine/streaming/TerrainStreamingLoopState.cpp
+    src/engine/streaming/TerrainStreamingLoopState.hpp
+    src/engine/streaming/TerrainStreamingTickHistoryExport.cpp
+    src/engine/streaming/TerrainStreamingTickHistoryExport.hpp
+    src/engine/streaming/TerrainStreamingTickHistoryImport.cpp
+    src/engine/streaming/TerrainStreamingTickHistoryImport.hpp
+    src/engine/streaming/TerrainStreamingLoopUpdate.cpp
+    src/engine/streaming/TerrainStreamingLoopUpdate.hpp
+    src/engine/streaming/TerrainStreamingBudgetPolicy.cpp
+    src/engine/streaming/TerrainStreamingBudgetPolicy.hpp
+    src/engine/streaming/TerrainStreamingBudgetTypes.hpp
     src/engine/streaming/TerrainStreamingPlanner.cpp
     src/engine/streaming/TerrainStreamingPlanner.hpp
     src/engine/streaming/TerrainStreamingRuntime.cpp

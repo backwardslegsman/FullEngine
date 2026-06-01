@@ -24,6 +24,41 @@ void countOperation(TerrainLifecyclePlanSummary& summary, const TerrainLifecycle
         break;
     }
 }
+
+bool withinBudget(const TerrainLifecyclePlanSummary& summary, const TerrainLifecycleAction action, const TerrainLifecyclePlanOptions& options)
+{
+    switch (action)
+    {
+    case TerrainLifecycleAction::Create:
+        return summary.createCount < options.maxCreateCount;
+    case TerrainLifecycleAction::Update:
+        return summary.updateCount < options.maxUpdateCount;
+    case TerrainLifecycleAction::Release:
+        return summary.releaseCount < options.maxReleaseCount;
+    case TerrainLifecycleAction::Keep:
+        return true;
+    }
+
+    return true;
+}
+
+void countDeferred(TerrainLifecyclePlanSummary& summary, const TerrainLifecycleAction action)
+{
+    switch (action)
+    {
+    case TerrainLifecycleAction::Create:
+        ++summary.deferredCreateCount;
+        break;
+    case TerrainLifecycleAction::Update:
+        ++summary.deferredUpdateCount;
+        break;
+    case TerrainLifecycleAction::Release:
+        ++summary.deferredReleaseCount;
+        break;
+    case TerrainLifecycleAction::Keep:
+        break;
+    }
+}
 } // namespace
 
 TerrainLifecyclePlan planTerrainLifecycle(
@@ -57,8 +92,15 @@ TerrainLifecyclePlan planTerrainLifecycle(
             operation.handle = *mappedHandle;
         }
 
-        countOperation(plan.summary, operation.action);
-        plan.operations.push_back(operation);
+        if (withinBudget(plan.summary, operation.action, options))
+        {
+            countOperation(plan.summary, operation.action);
+            plan.operations.push_back(operation);
+        }
+        else
+        {
+            countDeferred(plan.summary, operation.action);
+        }
     }
 
     for (const ChunkTerrainHandleRecord& record : handles.records())
@@ -73,8 +115,15 @@ TerrainLifecyclePlan planTerrainLifecycle(
         operation.action = TerrainLifecycleAction::Release;
         operation.handle = record.handle;
 
-        countOperation(plan.summary, operation.action);
-        plan.operations.push_back(operation);
+        if (withinBudget(plan.summary, operation.action, options))
+        {
+            countOperation(plan.summary, operation.action);
+            plan.operations.push_back(operation);
+        }
+        else
+        {
+            countDeferred(plan.summary, operation.action);
+        }
     }
 
     return plan;

@@ -1,8 +1,10 @@
 #pragma once
 
+#include "engine/jobs/JobQueue.hpp"
 #include "engine/renderer_integration/TerrainAssetResolver.hpp"
 #include "engine/renderer_integration/TerrainChunkRequests.hpp"
 #include "engine/renderer_integration/TerrainDescriptorBuilder.hpp"
+#include "engine/renderer_integration/TerrainManifestAssetLoadJobCoordinator.hpp"
 #include "engine/renderer_integration/TerrainManifestRuntimeStaging.hpp"
 #include "engine/renderer_integration/TerrainRenderPrep.hpp"
 #include "engine/renderer_integration/TerrainRendererCommands.hpp"
@@ -14,6 +16,45 @@
 
 namespace full_engine
 {
+/** @brief Value snapshot of a generic engine job queue. */
+struct EngineJobQueueDiagnostics
+{
+    /** @brief Number of pending jobs retained by the queue. */
+    std::size_t pendingJobCount = 0;
+
+    /** @brief Pending queue summary counters copied from the queue. */
+    EngineJobQueueSummary summary = {};
+};
+
+/** @brief Value snapshot of manifest asset-load job coordination. */
+struct TerrainManifestAssetLoadJobDiagnostics
+{
+    /** @brief High-level coordinator status from the latest run. */
+    TerrainManifestAssetLoadJobCoordinatorStatus status =
+        TerrainManifestAssetLoadJobCoordinatorStatus::NoPendingLoads;
+
+    /** @brief Current generic job queue counters after the latest run. */
+    EngineJobQueueDiagnostics jobQueue = {};
+
+    /** @brief Counters from mirroring pending load requests into jobs. */
+    TerrainManifestAssetLoadJobMirrorSummary mirror = {};
+
+    /** @brief Counters from executing relevant manifest asset load jobs. */
+    EngineJobExecutionSummary execution = {};
+
+    /** @brief Counters from consuming retained manifest asset load requests. */
+    TerrainManifestAssetLoadSummary loadConsume = {};
+
+    /** @brief True when retained load requests were fully consumed. */
+    bool loadConsumed = false;
+
+    /** @brief Compact coordinator counters such as final pending and readiness totals. */
+    TerrainManifestAssetLoadJobCoordinatorSummary coordinator = {};
+
+    /** @brief Final manifest asset handle readiness counters after successful replanning. */
+    TerrainManifestAssetReadinessSummary readiness = {};
+};
+
 /** @brief Value snapshot of the most recent terrain asset batch resolution. */
 struct TerrainAssetBatchResolveDiagnostics
 {
@@ -77,6 +118,26 @@ struct TerrainIntegrationDiagnostics
     TerrainResidencyRequestDiagnostics residencyRequests = {};
     TerrainPipelineDiagnostics pipeline = {};
 };
+
+/**
+ * @brief Builds reusable diagnostics from a generic engine job queue.
+ *
+ * The returned value copies counters only. It does not retain references to job
+ * records and does not mutate the queue.
+ */
+EngineJobQueueDiagnostics makeEngineJobQueueDiagnostics(const EngineJobQueue& queue);
+
+/**
+ * @brief Builds reusable diagnostics from manifest asset-load job coordination.
+ *
+ * The returned value copies counters only. It does not retain references to job
+ * records, load records, readiness records, renderer handles, manifests, or
+ * resource descriptors. The job queue is inspected for current pending counts
+ * and is not mutated.
+ */
+TerrainManifestAssetLoadJobDiagnostics makeTerrainManifestAssetLoadJobDiagnostics(
+    const TerrainManifestAssetLoadJobCoordinatorResult& result,
+    const EngineJobQueue& jobs);
 
 /**
  * @brief Builds reusable diagnostics from a terrain asset batch resolve result.
