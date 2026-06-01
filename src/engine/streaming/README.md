@@ -48,12 +48,23 @@ threaded loader exists.
   profiles that select setup, residency, and lifecycle caps for the synchronous
   loop. The policy can also choose a profile from retained tick-history
   deferred-work pressure before threaded streaming policy exists.
+- `TerrainStreamingSchedulerPolicy.hpp/.cpp` - deterministic single-threaded
+  pacing decisions over tick-history summaries and retained loop diagnostics,
+  selecting whether the caller should run streaming, asset-load jobs, both, or
+  neither.
+- `TerrainStreamingSchedulerTick.hpp/.cpp` - policy-driven synchronous tick
+  helper that summarizes history, chooses scheduler work, runs load jobs before
+  streaming when requested, and returns one copied result without owning
+  renderer handles, resources, threads, or IO.
 - `TerrainStreamingTickHistoryExport.hpp/.cpp` - standard-library JSON Lines
   export for retained streaming tick history so deferred-work behavior can be
   captured from longer manual sessions.
 - `TerrainStreamingTickHistoryImport.hpp/.cpp` - matching JSON Lines import for
   exported streaming tick traces, preserving file order and stored sequence
   values as value-only diagnostics.
+- `TerrainStreamingTickHistorySummary.hpp/.cpp` - offline value summaries for
+  retained or imported tick traces, including status counts, selected budget
+  profile counts, request backlog peaks, and deferred-work totals/peaks.
 
 ## Planned files
 
@@ -95,5 +106,10 @@ between conservative, balanced, and catch-up profiles from retained
 deferred-work pressure. The retained loop diagnostics now expose that selected
 profile and pressure directly for sample/editor tooling. Streaming tick history
 can be exported and imported as deterministic JSON Lines for offline inspection
-and round-trip tests. Later slices can connect callbacks to real async IO after
-the single-threaded CPU-side policy is proven.
+and round-trip tests, then summarized into compact deferred-work and budget
+profile diagnostics without needing retained loop state. The scheduler policy
+can now turn those summaries and current pending load/job counts into a
+deterministic single-threaded pacing decision, and the scheduler tick helper
+can execute that decision through the existing explicit load-job and streaming
+loop seams. Later slices can connect callbacks to real async IO after the
+CPU-side policy is proven.

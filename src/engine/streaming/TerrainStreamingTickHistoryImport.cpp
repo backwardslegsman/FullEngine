@@ -74,6 +74,34 @@ bool parseStreamingStatus(
     return false;
 }
 
+bool parseBudgetProfile(
+    const std::string& value,
+    TerrainStreamingBudgetProfile& profile) noexcept
+{
+    if (value == "Unlimited")
+    {
+        profile = TerrainStreamingBudgetProfile::Unlimited;
+        return true;
+    }
+    if (value == "Conservative")
+    {
+        profile = TerrainStreamingBudgetProfile::Conservative;
+        return true;
+    }
+    if (value == "Balanced")
+    {
+        profile = TerrainStreamingBudgetProfile::Balanced;
+        return true;
+    }
+    if (value == "CatchUp")
+    {
+        profile = TerrainStreamingBudgetProfile::CatchUp;
+        return true;
+    }
+
+    return false;
+}
+
 bool parseStringField(const std::string& line, const char* const name, std::string& value)
 {
     const std::string prefix = std::string("\"") + name + "\":\"";
@@ -190,6 +218,13 @@ bool parseTick(const std::string& line, TerrainStreamingTickEvent& event)
         !parseStringField(line, "runtimeStatus", runtimeStatus) ||
         !parseRuntimeStatus(runtimeStatus, event.runtimeStatus) ||
         !parseBoolField(line, "runtimeUpdateRan", event.runtimeUpdateRan))
+    {
+        return false;
+    }
+
+    std::string budgetProfile;
+    if (parseStringField(line, "budgetProfile", budgetProfile) &&
+        !parseBudgetProfile(budgetProfile, event.budgetProfile))
     {
         return false;
     }

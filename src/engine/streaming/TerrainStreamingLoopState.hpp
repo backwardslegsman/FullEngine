@@ -22,6 +22,7 @@ struct TerrainStreamingTickEvent
     TerrainStreamingManifestUpdateStatus streamingStatus =
         TerrainStreamingManifestUpdateStatus::Success;
     TerrainRuntimeUpdateStatus runtimeStatus = TerrainRuntimeUpdateStatus::Success;
+    TerrainStreamingBudgetProfile budgetProfile = TerrainStreamingBudgetProfile::Balanced;
     bool runtimeUpdateRan = false;
     std::size_t setupRequestsBeforeRuntime = 0;
     std::size_t residencyRequestsBeforeRuntime = 0;

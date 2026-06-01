@@ -32,6 +32,7 @@ full_engine::TerrainStreamingTickEvent makeTick(
     event.sequence = sequence;
     event.streamingStatus = full_engine::TerrainStreamingManifestUpdateStatus::AssetLoadsPending;
     event.runtimeStatus = full_engine::TerrainRuntimeUpdateStatus::ResidencyFailed;
+    event.budgetProfile = full_engine::TerrainStreamingBudgetProfile::CatchUp;
     event.runtimeUpdateRan = true;
     event.setupRequestsBeforeRuntime = base + 1;
     event.residencyRequestsBeforeRuntime = base + 2;
@@ -114,6 +115,7 @@ void testExportImportRoundTrip(std::vector<std::string>& failures)
         expect(imported.events[1].sequence == 13, "round trip preserves second sequence", failures);
         expect(imported.events[0].streamingStatus == full_engine::TerrainStreamingManifestUpdateStatus::AssetLoadsPending, "round trip preserves streaming status", failures);
         expect(imported.events[0].runtimeStatus == full_engine::TerrainRuntimeUpdateStatus::ResidencyFailed, "round trip preserves runtime status", failures);
+        expect(imported.events[0].budgetProfile == full_engine::TerrainStreamingBudgetProfile::CatchUp, "round trip preserves budget profile", failures);
         expect(imported.events[0].runtimeUpdateRan, "round trip preserves runtime bool", failures);
         expect(imported.events[1].streaming.deferredMakeUnloadedCount == 118, "round trip preserves deferred streaming counter", failures);
         expect(imported.events[0].streamingQueue.missingSetupDescCount == 27, "round trip preserves queue counter", failures);

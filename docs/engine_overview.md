@@ -202,6 +202,15 @@ Implemented pieces:
 - deterministic JSON Lines export/import for retained streaming tick history,
   matching the existing terrain runtime diagnostics tooling for longer manual
   sessions and offline trace tests
+- offline streaming tick-history summaries that report status counts, selected
+  budget profile counts, request backlog peaks, and deferred-work totals/peaks
+  from retained or imported traces without mutating runtime state
+- a deterministic streaming scheduler policy that reads tick-history summaries
+  and retained loop diagnostics, then selects whether to run streaming,
+  manifest asset-load jobs, both, or neither for a future single-threaded tick
+- a policy-driven synchronous streaming scheduler tick helper that executes the
+  selected load-job and streaming-loop phases through explicit caller-owned
+  callbacks and state, leaving true async/threaded scheduling as future work
 - a simple terrain streaming budget policy that selects deterministic setup,
   residency, and lifecycle caps from named runtime profiles, plus an adaptive
   selector that chooses a profile from retained tick-history pressure before

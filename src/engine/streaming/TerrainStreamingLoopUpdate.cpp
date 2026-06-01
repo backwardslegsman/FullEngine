@@ -47,7 +47,9 @@ TerrainStreamingLoopUpdateResult finishLoopUpdate(
     TerrainStreamingLoopState& loop,
     TerrainStreamingLoopUpdateResult result)
 {
-    loop.appendTickEvent(makeTickEvent(result));
+    TerrainStreamingTickEvent event = makeTickEvent(result);
+    event.budgetProfile = loop.latestDiagnostics().adaptiveBudget.profile;
+    loop.appendTickEvent(event);
     return result;
 }
 } // namespace

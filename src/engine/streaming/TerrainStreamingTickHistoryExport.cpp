@@ -1,5 +1,7 @@
 #include "engine/streaming/TerrainStreamingTickHistoryExport.hpp"
 
+#include "engine/streaming/TerrainStreamingBudgetPolicy.hpp"
+
 #include <fstream>
 
 namespace full_engine
@@ -21,6 +23,7 @@ void writeTick(std::ostream& stream, const TerrainStreamingTickEvent& event)
     stream << "{\"sequence\":" << event.sequence;
     stream << ",\"streamingStatus\":\"" << terrainStreamingManifestUpdateStatusName(event.streamingStatus) << "\"";
     stream << ",\"runtimeStatus\":\"" << terrainRuntimeUpdateStatusName(event.runtimeStatus) << "\"";
+    stream << ",\"budgetProfile\":\"" << terrainStreamingBudgetProfileName(event.budgetProfile) << "\"";
     writeJsonBoolField(stream, "runtimeUpdateRan", event.runtimeUpdateRan);
     writeJsonField(stream, "setupRequestsBeforeRuntime", event.setupRequestsBeforeRuntime);
     writeJsonField(stream, "residencyRequestsBeforeRuntime", event.residencyRequestsBeforeRuntime);

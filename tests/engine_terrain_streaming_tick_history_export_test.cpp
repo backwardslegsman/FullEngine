@@ -30,6 +30,7 @@ full_engine::TerrainStreamingTickEvent makeTick(const std::uint64_t sequence)
 {
     full_engine::TerrainStreamingTickEvent event;
     event.sequence = sequence;
+    event.budgetProfile = full_engine::TerrainStreamingBudgetProfile::CatchUp;
     event.streamingStatus = full_engine::TerrainStreamingManifestUpdateStatus::Success;
     event.runtimeStatus = full_engine::TerrainRuntimeUpdateStatus::PipelineFailed;
     event.runtimeUpdateRan = true;
@@ -98,6 +99,7 @@ void testSingleTickExportsCounters(std::vector<std::string>& failures)
     expect(content.find("\"sequence\":42") != std::string::npos, "single tick exports sequence", failures);
     expect(content.find("\"streamingStatus\":\"Success\"") != std::string::npos, "single tick exports streaming status", failures);
     expect(content.find("\"runtimeStatus\":\"PipelineFailed\"") != std::string::npos, "single tick exports runtime status", failures);
+    expect(content.find("\"budgetProfile\":\"CatchUp\"") != std::string::npos, "single tick exports budget profile", failures);
     expect(content.find("\"runtimeUpdateRan\":true") != std::string::npos, "single tick exports runtime bool", failures);
     expect(content.find("\"setupRequestsBeforeRuntime\":1") != std::string::npos, "single tick exports setup before count", failures);
     expect(content.find("\"streamingManifestTerrainChunkCount\":5") != std::string::npos, "single tick exports streaming counter", failures);
