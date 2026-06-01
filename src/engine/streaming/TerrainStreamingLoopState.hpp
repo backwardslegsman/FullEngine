@@ -3,6 +3,8 @@
 #include "engine/jobs/JobQueue.hpp"
 #include "engine/renderer_integration/TerrainIntegrationDiagnostics.hpp"
 #include "engine/renderer_integration/TerrainManifestAssetLoadExecutor.hpp"
+#include "engine/renderer_integration/TerrainManifestAssetLoadJobCompletions.hpp"
+#include "engine/renderer_integration/TerrainManifestAssetLoadService.hpp"
 #include "engine/renderer_integration/TerrainManifestFileLoad.hpp"
 #include "engine/streaming/TerrainStreamingBudgetTypes.hpp"
 #include "engine/streaming/TerrainStreamingManifestCoordinator.hpp"
@@ -179,6 +181,12 @@ public:
     /** @brief Returns the retained manifest asset-load job queue. */
     const EngineJobQueue& manifestAssetLoadJobs() const noexcept;
 
+    /** @brief Returns the retained manifest asset-load service. */
+    TerrainManifestAssetLoadService& manifestAssetLoadService() noexcept;
+
+    /** @brief Returns the retained manifest asset-load service. */
+    const TerrainManifestAssetLoadService& manifestAssetLoadService() const noexcept;
+
     /** @brief Returns latest file reload diagnostics. */
     const TerrainManifestFileReloadPlanResult& latestManifestReload() const noexcept;
 
@@ -190,6 +198,18 @@ public:
 
     /** @brief Returns latest external load-job reconcile diagnostics. */
     const TerrainManifestAssetLoadJobReconcileResult& latestLoadJobReconcileResult() const noexcept;
+
+    /** @brief Returns latest scheduled-job work-packet conversion diagnostics. */
+    const TerrainManifestAssetLoadJobWorkPacketResult& latestLoadServiceWorkPackets() const noexcept;
+
+    /** @brief Returns latest retained service enqueue diagnostics. */
+    const TerrainManifestAssetLoadServiceEnqueueResult& latestLoadServiceEnqueueResult() const noexcept;
+
+    /** @brief Returns latest retained service tick diagnostics. */
+    const TerrainManifestAssetLoadServiceTickResult& latestLoadServiceTickResult() const noexcept;
+
+    /** @brief Returns latest retained service completion reconcile diagnostics. */
+    const TerrainManifestAssetLoadJobCompletionReconcileResult& latestLoadServiceCompletionReconcileResult() const noexcept;
 
     /** @brief Returns latest manifest-aware streaming update diagnostics. */
     const TerrainStreamingManifestUpdateResult& latestStreamingUpdate() const noexcept;
@@ -289,6 +309,41 @@ public:
         EngineJobPriority priority = EngineJobPriority::Normal);
 
     /**
+     * @brief Enqueues currently scheduled manifest asset-load jobs into the retained service.
+     *
+     * The method decodes valid `ManifestAssetLoad` jobs into work packets and
+     * retains them in `manifestAssetLoadService`. It does not execute
+     * callbacks, consume load requests, mutate renderer handle catalogs, create
+     * renderer resources, or apply terrain runtime queues.
+     */
+    const TerrainManifestAssetLoadServiceEnqueueResult& enqueueScheduledAssetLoadWork();
+
+    /**
+     * @brief Advances retained service work through a caller-owned callback.
+     *
+     * The callback may provide externally created renderer handles, but the
+     * loop state does not own IO, worker, callback, renderer resource, or
+     * handle-catalog lifetime. Completion values are retained by the service
+     * until reconciled or explicitly cleared through service access.
+     */
+    const TerrainManifestAssetLoadServiceTickResult& tickAssetLoadService(
+        std::size_t maxLoads,
+        TerrainManifestAssetLoadCallback callback,
+        void* userData = nullptr);
+
+    /**
+     * @brief Reconciles retained service completions through the existing completion adapter.
+     *
+     * Successful reconciliation consumes retained manifest load requests,
+     * removes matching scheduled jobs, replans readiness, and clears emitted
+     * service completions. Failed reconciliation leaves service completions,
+     * retained load requests, scheduled jobs, and destination handles under
+     * the existing all-or-nothing completion policy.
+     */
+    const TerrainManifestAssetLoadJobCompletionReconcileResult& reconcileAssetLoadServiceCompletions(
+        RendererAssetHandleCatalog& destinationHandles);
+
+    /**
      * @brief Reconciles externally completed scheduled load jobs with retained load state.
      *
      * The call treats `completedHandles` as caller-owned output from an
@@ -359,11 +414,13 @@ public:
 private:
     void refreshDiagnostics() noexcept;
     void resetLoadJobDiagnostics() noexcept;
+    void resetLoadServiceDiagnostics() noexcept;
     void resetStreamingUpdate() noexcept;
 
     TerrainManifestLoadState manifestLoad_ = {};
     TerrainStreamingRuntimeState streamingRuntime_ = {};
     EngineJobQueue manifestAssetLoadJobs_ = {};
+    TerrainManifestAssetLoadService manifestAssetLoadService_ = {};
     TerrainManifestFileReloadPlanResult latestManifestReload_ = {};
     TerrainManifestAssetLoadJobCoordinatorResult latestLoadJobResult_ = {};
     TerrainManifestAssetLoadJobDiagnostics latestLoadJobDiagnostics_ = {};
@@ -371,6 +428,10 @@ private:
     TerrainManifestAssetLoadJobScheduleDiagnostics latestLoadJobScheduleDiagnostics_ = {};
     TerrainManifestAssetLoadJobReconcileResult latestLoadJobReconcileResult_ = {};
     TerrainManifestAssetLoadJobReconcileDiagnostics latestLoadJobReconcileDiagnostics_ = {};
+    TerrainManifestAssetLoadJobWorkPacketResult latestLoadServiceWorkPackets_ = {};
+    TerrainManifestAssetLoadServiceEnqueueResult latestLoadServiceEnqueueResult_ = {};
+    TerrainManifestAssetLoadServiceTickResult latestLoadServiceTickResult_ = {};
+    TerrainManifestAssetLoadJobCompletionReconcileResult latestLoadServiceCompletionReconcileResult_ = {};
     TerrainStreamingManifestUpdateResult latestStreamingUpdate_ = {};
     TerrainStreamingTickHistory tickHistory_ = {};
     TerrainStreamingLoopDiagnostics latestDiagnostics_ = {};

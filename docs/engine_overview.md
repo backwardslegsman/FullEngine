@@ -177,6 +177,16 @@ Implemented pieces:
 - a schedule-only manifest asset-load job boundary that mirrors pending load
   intent into generic jobs without executing callbacks or consuming retained
   requests, giving future async loaders an explicit handoff point
+- a manifest asset-load work-packet helper that decodes scheduled
+  `ManifestAssetLoad` jobs into caller-owned request packets for external
+  workers without executing jobs or touching renderer handles
+- a retained manifest asset-load service that owns copied work packets across
+  ticks, advances them through caller-owned callbacks, and emits completion
+  records for the existing publish/reconcile path without owning workers, IO,
+  or renderer resource creation
+- retained streaming loop ownership of that asset-load service, so scheduled
+  external load jobs can be packetized, progressed, and reconciled from engine
+  loop state instead of temporary sample-side vectors
 - an external manifest asset-load job reconcile pass that consumes retained
   load requests only after caller-owned completed handles satisfy the whole
   batch, removes matching scheduled jobs, and replans readiness
@@ -184,6 +194,9 @@ Implemented pieces:
   caller-owned completion records into a temporary completed-handle catalog
   before reconcile, giving async/threaded loaders an explicit handoff shape
   without making the engine own workers, IO, or renderer resource creation
+- a test-only external worker completion proof that reads scheduled
+  `ManifestAssetLoad` jobs, emits completion records from caller-owned handles,
+  reconciles them, and replans retained manifest readiness as ready
 - reusable manifest asset-load job diagnostics that copy coordinator status,
   pending job counts, mirror/execution/consume/reconcile counters, and final
   readiness counters for debug UI or tooling without retaining job or load
@@ -233,8 +246,9 @@ Implemented pieces:
   continuous camera-driven streaming, while retaining lower-level manual
   streaming and load-job controls for inspection
 - sample debug wiring for the schedule-only load path, including an external
-  load scheduling toggle and a reconcile action that uses sample-created
-  renderer handles as completed job outputs
+  load scheduling toggle and a reconcile action that drives the retained load
+  service with sample-created renderer handles before consuming retained load
+  requests
 - a simple terrain streaming budget policy that selects deterministic setup,
   residency, and lifecycle caps from named runtime profiles, plus an adaptive
   selector that chooses a profile from retained tick-history pressure before

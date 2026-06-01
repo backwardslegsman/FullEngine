@@ -35,12 +35,12 @@ threaded loader exists.
   manifest terrain setup descriptors, runs streaming policy, and queues safe
   runtime intent without applying it.
 - `TerrainStreamingLoopState.hpp/.cpp` - retained synchronous holder for
-  manifest load state, streaming runtime state, manifest asset-load jobs, and
-  latest coordination diagnostics. It can also reconcile externally completed
-  scheduled load jobs back into retained manifest readiness. It keeps a compact
-  fixed-capacity tick history ring for budget/deferred-work visibility across
-  recent frames and exposes the latest adaptive budget selection in loop
-  diagnostics.
+  manifest load state, streaming runtime state, manifest asset-load jobs, a
+  retained manifest asset-load service, and latest coordination diagnostics. It
+  can packetize scheduled load jobs, progress caller-owned load callbacks,
+  reconcile emitted completions back into retained manifest readiness, and keep
+  a compact fixed-capacity tick history ring for budget/deferred-work
+  visibility across recent frames.
 - `TerrainStreamingLoopUpdate.hpp/.cpp` - synchronous tick-shaped helper that
   runs retained manifest-aware streaming coordination and then applies queued
   terrain setup/residency work through `TerrainRuntimeState::updateWithSnapshot`
@@ -126,9 +126,12 @@ remove matching scheduled jobs, and replan readiness without owning async
 execution. A completion adapter also accepts caller-owned completed job output
 records and publishes their handles into a temporary completed-handle catalog
 before reconcile, giving future async workers an explicit handoff-and-return
-contract. A compact diagnostics snapshot lets the sample terrain panel show
-that scheduler tick without retaining or reaching through full per-phase result
-records. Scheduler-driven streaming ticks annotate retained history with copied
+contract. The retained loop state now owns the load-service progress between
+scheduled jobs and completion reconcile, so sample/editor code can trigger
+external-style load work without building temporary completion vectors. A
+compact diagnostics snapshot lets the sample terrain panel show that scheduler
+tick without retaining or reaching through full per-phase result records.
+Scheduler-driven streaming ticks annotate retained history with copied
 decision/status/pressure fields, so exported traces show policy choices beside
 deferred work. The panel can run that tick once or use it as the continuous
 camera-streaming path while keeping lower-level manual controls available for

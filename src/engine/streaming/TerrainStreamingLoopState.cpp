@@ -101,6 +101,16 @@ const EngineJobQueue& TerrainStreamingLoopState::manifestAssetLoadJobs() const n
     return manifestAssetLoadJobs_;
 }
 
+TerrainManifestAssetLoadService& TerrainStreamingLoopState::manifestAssetLoadService() noexcept
+{
+    return manifestAssetLoadService_;
+}
+
+const TerrainManifestAssetLoadService& TerrainStreamingLoopState::manifestAssetLoadService() const noexcept
+{
+    return manifestAssetLoadService_;
+}
+
 const TerrainManifestFileReloadPlanResult& TerrainStreamingLoopState::latestManifestReload() const noexcept
 {
     return latestManifestReload_;
@@ -119,6 +129,27 @@ const TerrainManifestAssetLoadJobScheduleResult& TerrainStreamingLoopState::late
 const TerrainManifestAssetLoadJobReconcileResult& TerrainStreamingLoopState::latestLoadJobReconcileResult() const noexcept
 {
     return latestLoadJobReconcileResult_;
+}
+
+const TerrainManifestAssetLoadJobWorkPacketResult& TerrainStreamingLoopState::latestLoadServiceWorkPackets() const noexcept
+{
+    return latestLoadServiceWorkPackets_;
+}
+
+const TerrainManifestAssetLoadServiceEnqueueResult& TerrainStreamingLoopState::latestLoadServiceEnqueueResult() const noexcept
+{
+    return latestLoadServiceEnqueueResult_;
+}
+
+const TerrainManifestAssetLoadServiceTickResult& TerrainStreamingLoopState::latestLoadServiceTickResult() const noexcept
+{
+    return latestLoadServiceTickResult_;
+}
+
+const TerrainManifestAssetLoadJobCompletionReconcileResult&
+TerrainStreamingLoopState::latestLoadServiceCompletionReconcileResult() const noexcept
+{
+    return latestLoadServiceCompletionReconcileResult_;
 }
 
 const TerrainStreamingManifestUpdateResult& TerrainStreamingLoopState::latestStreamingUpdate() const noexcept
@@ -176,7 +207,9 @@ const TerrainManifestFileReloadPlanResult& TerrainStreamingLoopState::reloadMani
 {
     latestManifestReload_ = reloadTerrainManifestFileAndQueueMissingAssetLoads(path, manifestLoad_, handles);
     manifestAssetLoadJobs_.clear();
+    manifestAssetLoadService_.clear();
     resetLoadJobDiagnostics();
+    resetLoadServiceDiagnostics();
     streamingRuntime_.clear();
     resetStreamingUpdate();
     refreshDiagnostics();
@@ -204,6 +237,8 @@ const TerrainManifestAssetLoadJobCoordinatorResult& TerrainStreamingLoopState::r
     if (latestLoadJobResult_.status == TerrainManifestAssetLoadJobCoordinatorStatus::Success)
     {
         (void)manifestLoad_.planAssetLoadRequests();
+        manifestAssetLoadService_.clear();
+        resetLoadServiceDiagnostics();
     }
     refreshDiagnostics();
     return latestLoadJobResult_;
@@ -223,6 +258,50 @@ const TerrainManifestAssetLoadJobScheduleResult& TerrainStreamingLoopState::sche
     return latestLoadJobScheduleResult_;
 }
 
+const TerrainManifestAssetLoadServiceEnqueueResult& TerrainStreamingLoopState::enqueueScheduledAssetLoadWork()
+{
+    latestLoadServiceWorkPackets_ = buildTerrainManifestAssetLoadJobWorkPackets(manifestAssetLoadJobs_);
+    latestLoadServiceEnqueueResult_ = manifestAssetLoadService_.enqueueWorkPackets(
+        latestLoadServiceWorkPackets_);
+    refreshDiagnostics();
+    return latestLoadServiceEnqueueResult_;
+}
+
+const TerrainManifestAssetLoadServiceTickResult& TerrainStreamingLoopState::tickAssetLoadService(
+    const std::size_t maxLoads,
+    const TerrainManifestAssetLoadCallback callback,
+    void* const userData)
+{
+    latestLoadServiceTickResult_ = manifestAssetLoadService_.tick(maxLoads, callback, userData);
+    refreshDiagnostics();
+    return latestLoadServiceTickResult_;
+}
+
+const TerrainManifestAssetLoadJobCompletionReconcileResult&
+TerrainStreamingLoopState::reconcileAssetLoadServiceCompletions(
+    RendererAssetHandleCatalog& destinationHandles)
+{
+    latestLoadServiceCompletionReconcileResult_ =
+        reconcileTerrainManifestAssetLoadJobCompletions(
+            manifestLoad_,
+            manifestAssetLoadJobs_,
+            manifestAssetLoadService_.completions().data(),
+            manifestAssetLoadService_.completions().size(),
+            destinationHandles);
+    latestLoadJobReconcileResult_ = latestLoadServiceCompletionReconcileResult_.reconcile;
+    latestLoadJobReconcileDiagnostics_ = makeTerrainManifestAssetLoadJobReconcileDiagnostics(
+        latestLoadJobReconcileResult_,
+        manifestAssetLoadJobs_);
+    if (latestLoadServiceCompletionReconcileResult_.status ==
+        TerrainManifestAssetLoadJobCompletionReconcileStatus::Success)
+    {
+        manifestAssetLoadService_.clearCompletions();
+        (void)manifestLoad_.planAssetLoadRequests();
+    }
+    refreshDiagnostics();
+    return latestLoadServiceCompletionReconcileResult_;
+}
+
 const TerrainManifestAssetLoadJobReconcileResult& TerrainStreamingLoopState::reconcileScheduledAssetLoadJobs(
     const RendererAssetHandleCatalog& completedHandles,
     RendererAssetHandleCatalog& destinationHandles)
@@ -238,6 +317,8 @@ const TerrainManifestAssetLoadJobReconcileResult& TerrainStreamingLoopState::rec
     if (latestLoadJobReconcileResult_.status == TerrainManifestAssetLoadJobReconcileStatus::Success)
     {
         (void)manifestLoad_.planAssetLoadRequests();
+        manifestAssetLoadService_.clear();
+        resetLoadServiceDiagnostics();
     }
     refreshDiagnostics();
     return latestLoadJobReconcileResult_;
@@ -279,9 +360,11 @@ void TerrainStreamingLoopState::clear() noexcept
     manifestLoad_.clearManifest();
     streamingRuntime_.clear();
     manifestAssetLoadJobs_.clear();
+    manifestAssetLoadService_.clear();
     tickHistory_.clear();
     latestManifestReload_ = {};
     resetLoadJobDiagnostics();
+    resetLoadServiceDiagnostics();
     resetStreamingUpdate();
     refreshDiagnostics();
 }
@@ -291,9 +374,11 @@ void TerrainStreamingLoopState::clearManifest()
     manifestLoad_.clearManifest();
     streamingRuntime_.clear();
     manifestAssetLoadJobs_.clear();
+    manifestAssetLoadService_.clear();
     tickHistory_.clear();
     latestManifestReload_ = {};
     resetLoadJobDiagnostics();
+    resetLoadServiceDiagnostics();
     resetStreamingUpdate();
     refreshDiagnostics();
 }
@@ -301,7 +386,9 @@ void TerrainStreamingLoopState::clearManifest()
 void TerrainStreamingLoopState::clearJobs() noexcept
 {
     manifestAssetLoadJobs_.clear();
+    manifestAssetLoadService_.clear();
     resetLoadJobDiagnostics();
+    resetLoadServiceDiagnostics();
     refreshDiagnostics();
 }
 
@@ -337,6 +424,14 @@ void TerrainStreamingLoopState::resetLoadJobDiagnostics() noexcept
     latestLoadJobReconcileDiagnostics_ = makeTerrainManifestAssetLoadJobReconcileDiagnostics(
         latestLoadJobReconcileResult_,
         manifestAssetLoadJobs_);
+}
+
+void TerrainStreamingLoopState::resetLoadServiceDiagnostics() noexcept
+{
+    latestLoadServiceWorkPackets_ = {};
+    latestLoadServiceEnqueueResult_ = {};
+    latestLoadServiceTickResult_ = {};
+    latestLoadServiceCompletionReconcileResult_ = {};
 }
 
 void TerrainStreamingLoopState::resetStreamingUpdate() noexcept

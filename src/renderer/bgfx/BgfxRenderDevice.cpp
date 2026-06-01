@@ -454,6 +454,8 @@ bool allocateFullscreenQuad(bgfx::TransientVertexBuffer& vertexBuffer, const bgf
     return true;
 }
 
+#endif
+
 bool invertMatrix4x4(const float m[16], float invOut[16]) noexcept
 {
     float inv[16] = {};
@@ -607,7 +609,6 @@ void normalize3(const float in[3], float out[3]) noexcept
     out[1] = in[1] * invLength;
     out[2] = in[2] * invLength;
 }
-#endif
 } // namespace
 
 BgfxRenderDevice::~BgfxRenderDevice()
@@ -4806,6 +4807,8 @@ RendererResult BgfxRenderDevice::submit(const RenderPacket& packet)
         scene::makeWeatherRenderPlan(packet.weather, packet.environment);
     const EnvironmentDesc& effectiveEnvironment = weatherPlan.environment;
 
+    bool meshShadowsEnabled = false;
+
 #if FULL_RENDERER_ENABLE_BGFX
     if (!bgfx::isValid(forwardProgram_))
     {
@@ -4887,7 +4890,6 @@ RendererResult BgfxRenderDevice::submit(const RenderPacket& packet)
     float shadowViewProjMatrices[kMaxDirectionalShadowCascades][16] = {};
     float cascadeSplits[4] = {};
     std::uint32_t activeShadowCascadeCount = 0;
-    bool meshShadowsEnabled = false;
     if (!prepareCsmForwardState(
             packet,
             shadowViewProjMatrices,
@@ -5096,11 +5098,12 @@ RendererResult BgfxRenderDevice::submitInstanced(
     stats_.submittedDraws += batchCount;
     stats_.submittedAnimatedDraws += packet.animatedDrawCount;
 
+    bool terrainShadowsEnabled = false;
+
 #if FULL_RENDERER_ENABLE_BGFX
     float shadowViewProjMatrices[kMaxDirectionalShadowCascades][16] = {};
     float cascadeSplits[4] = {};
     std::uint32_t activeShadowCascadeCount = 0;
-    bool terrainShadowsEnabled = false;
     if (packet.directionalShadow.enabled)
     {
         const std::uint32_t shadowResolution = scene::clampShadowMapResolution(packet.directionalShadow.mapResolution);

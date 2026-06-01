@@ -10,6 +10,7 @@
 #include "engine/renderer_integration/TerrainDescriptorBuilder.hpp"
 #include "engine/renderer_integration/TerrainIntegrationDiagnostics.hpp"
 #include "engine/renderer_integration/TerrainLifecyclePlan.hpp"
+#include "engine/renderer_integration/TerrainManifestAssetLoadJobCompletions.hpp"
 #include "engine/renderer_integration/TerrainManifestAssetLoadJobCoordinator.hpp"
 #include "engine/renderer_integration/TerrainManifestFileLoad.hpp"
 #include "engine/renderer_integration/TerrainManifestLoadState.hpp"
@@ -1904,9 +1905,37 @@ void drawTerrainDiagnosticsPanel(
         ImGui::SameLine();
         if (ImGui::Button("Reconcile Load Jobs"))
         {
-            (void)streamingLoop.reconcileScheduledAssetLoadJobs(
-                engineTerrainAssetHandles,
-                engineTerrainAssetHandles);
+            (void)streamingLoop.enqueueScheduledAssetLoadWork();
+            (void)streamingLoop.tickAssetLoadService(
+                streamingLoop.manifestAssetLoadService().pendingCount(),
+                sampleTerrainManifestAssetLoadCallback,
+                &engineTerrainAssetHandles);
+            const full_engine::TerrainManifestAssetLoadJobCompletionReconcileResult& serviceReconcile =
+                streamingLoop.reconcileAssetLoadServiceCompletions(engineTerrainAssetHandles);
+            const full_engine::TerrainManifestAssetLoadJobWorkPacketResult& servicePackets =
+                streamingLoop.latestLoadServiceWorkPackets();
+            const full_engine::TerrainManifestAssetLoadServiceTickResult& serviceTick =
+                streamingLoop.latestLoadServiceTickResult();
+            if (servicePackets.summary.invalidPayloadCount > 0 ||
+                serviceReconcile.status ==
+                    full_engine::TerrainManifestAssetLoadJobCompletionReconcileStatus::CompletionPublishFailed ||
+                serviceReconcile.status ==
+                    full_engine::TerrainManifestAssetLoadJobCompletionReconcileStatus::CompletionPending ||
+                serviceReconcile.status ==
+                    full_engine::TerrainManifestAssetLoadJobCompletionReconcileStatus::LoadConsumeBlocked)
+            {
+                std::cerr << "Sample external load job completion publish blocked: packets "
+                          << servicePackets.summary.packetizedCount
+                          << ", invalid payloads "
+                          << servicePackets.summary.invalidPayloadCount
+                          << ", loaded "
+                          << serviceTick.summary.loadedCount
+                          << ", missing handles "
+                          << serviceReconcile.publish.summary.missingHandleCount
+                          << ", rejected "
+                          << serviceReconcile.publish.summary.catalogRejectedCount
+                          << '\n';
+            }
         }
         ImGui::InputInt("Streaming Load Radius", &terrainResidencyControls.streamingLoadRadius);
         ImGui::InputInt("Streaming Resident Radius", &terrainResidencyControls.streamingResidentRadius);
@@ -2034,6 +2063,36 @@ void drawTerrainDiagnosticsPanel(
             static_cast<unsigned long long>(schedulerTick.scheduledLoadJobMirror.queuedCount),
             static_cast<unsigned long long>(schedulerTick.scheduledLoadJobMirror.alreadyQueuedCount),
             static_cast<unsigned long long>(schedulerTick.scheduledLoadJobMirror.invalidArgumentCount));
+        ImGui::Text(
+            "External load work packets: packets/skipped/invalid %llu/%llu/%llu",
+            static_cast<unsigned long long>(
+                streamingLoop.latestLoadServiceWorkPackets().summary.packetizedCount),
+            static_cast<unsigned long long>(
+                streamingLoop.latestLoadServiceWorkPackets().summary.skippedUnsupportedJobCount),
+            static_cast<unsigned long long>(
+                streamingLoop.latestLoadServiceWorkPackets().summary.invalidPayloadCount));
+        ImGui::Text(
+            "External load service: queued/already/invalid %llu/%llu/%llu, attempted loaded/missing/failed %llu/%llu/%llu",
+            static_cast<unsigned long long>(
+                streamingLoop.latestLoadServiceEnqueueResult().summary.queuedCount),
+            static_cast<unsigned long long>(
+                streamingLoop.latestLoadServiceEnqueueResult().summary.alreadyQueuedCount),
+            static_cast<unsigned long long>(
+                streamingLoop.latestLoadServiceEnqueueResult().summary.invalidPacketCount),
+            static_cast<unsigned long long>(
+                streamingLoop.latestLoadServiceTickResult().summary.loadedCount),
+            static_cast<unsigned long long>(
+                streamingLoop.latestLoadServiceTickResult().summary.missingCount),
+            static_cast<unsigned long long>(
+                streamingLoop.latestLoadServiceTickResult().summary.failedCount));
+        ImGui::Text(
+            "External load service retained: pending/completed/failed/completions %llu/%llu/%llu/%llu, completion reconcile %s",
+            static_cast<unsigned long long>(streamingLoop.manifestAssetLoadService().pendingCount()),
+            static_cast<unsigned long long>(streamingLoop.manifestAssetLoadService().completedCount()),
+            static_cast<unsigned long long>(streamingLoop.manifestAssetLoadService().failedCount()),
+            static_cast<unsigned long long>(streamingLoop.manifestAssetLoadService().completions().size()),
+            full_engine::terrainManifestAssetLoadJobCompletionReconcileStatusName(
+                streamingLoop.latestLoadServiceCompletionReconcileResult().status));
         ImGui::Text(
             "Load job reconcile: %s, pending loads %llu/%llu, jobs %llu/%llu, removed %llu",
             full_engine::terrainManifestAssetLoadJobReconcileStatusName(

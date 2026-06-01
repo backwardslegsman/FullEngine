@@ -657,9 +657,33 @@ move gameplay, streaming policy, or editor concepts into renderer internals.
   handles into a temporary completed-handle catalog, and then delegates to the
   existing all-or-nothing reconcile path without owning threads, IO, renderer
   calls, or resource creation.
-- Next slice: add a tiny external worker-demo/test harness or sample-only
-  completion-record path that produces these completion values from scheduled
-  jobs, keeping the actual worker lifecycle outside the engine.
+- Twenty-eighth slice is implemented in tests: a tiny external worker harness
+  reads scheduled `ManifestAssetLoad` jobs, emits completion records from
+  caller-owned fake handles, reconciles them through the production adapter,
+  and proves readiness becomes ready without adding threads, IO, callbacks, or
+  renderer resource creation to the engine.
+- Twenty-ninth slice is implemented: a production work-packet helper decodes
+  scheduled `ManifestAssetLoad` jobs into caller-owned asset request packets
+  for external workers, while reporting skipped unrelated jobs and invalid
+  payloads without executing work or mutating queues.
+- Thirtieth slice is implemented: the sample debug `Reconcile Load Jobs`
+  action now builds explicit work packets and completion records from the
+  sample-created renderer handle catalog before reconciling retained load
+  requests, demonstrating the full external-worker handoff shape without real
+  threads or IO.
+- Thirty-first slice is implemented: a retained manifest asset-load service
+  owns copied work packets across ticks, advances pending requests through
+  caller-owned callbacks, tracks pending/completed/failed progress, and emits
+  completion records for the existing all-or-nothing publish/reconcile path
+  without owning workers, IO, renderer calls, or renderer resource creation.
+- Thirty-second slice is implemented: `TerrainStreamingLoopState` now owns the
+  retained load service and can packetize scheduled jobs, tick caller-owned
+  callbacks, reconcile emitted completions, and expose the resulting counters
+  to the sample debug panel without sample-local temporary completion vectors.
+- Next slice: add compact retained diagnostics for the load service itself
+  (service request counts, latest enqueue/tick/reconcile status, and completion
+  counts) so future tools do not need to read through the full service/result
+  objects.
 - Initial sample integration is in place: the debug UI can run the
   manifest-aware streaming coordinator once or continuously from camera
   position, display readiness/load/staging/streaming queue counters, and keep
