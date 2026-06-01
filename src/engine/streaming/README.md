@@ -58,12 +58,25 @@ threaded loader exists.
 - `TerrainStreamingSchedulerTick.hpp/.cpp` - policy-driven synchronous tick
   helper that summarizes history, chooses scheduler work, and either runs load
   jobs synchronously before streaming, mirrors them into the retained job queue
-  for external execution, reconciles caller-owned external completion records,
-  or advances the retained load service before streaming. It returns one copied
+  for external execution, reconciles retained external completion records, or
+  advances the retained load service before streaming. It returns one copied
   result without owning renderer handles, resources, threads, or IO.
 - `TerrainStreamingSchedulerTickDiagnostics.hpp/.cpp` - compact value
   diagnostics for scheduler tick status, decision pressure, load-job counters,
   and streaming-loop counters suitable for sample/editor display.
+
+The sample debug panel exercises the external-completion path with a fake
+worker: it can clear runtime handle mappings, schedule retained load jobs,
+publish completion records from sample-created handles into the retained loop
+inbox, and let a later scheduler tick reconcile those records before streaming
+proceeds. This remains a demo of the handoff contract rather than engine-owned
+worker execution.
+
+Worker-facing completion publish helpers live in `renderer_integration` beside
+the inbox, so external worker code can publish batches into an inbox without
+including or depending on retained streaming loop state. The inbox also exposes
+deterministic remove/replace operations for retry flows that need to discard
+stale output or supersede an older completion before reconcile.
 - `TerrainStreamingTickHistoryExport.hpp/.cpp` - standard-library JSON Lines
   export for retained streaming tick history so deferred-work and scheduler
   decision behavior can be captured from longer manual sessions.

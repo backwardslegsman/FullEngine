@@ -46,11 +46,6 @@ bool serviceReconcileBlocked(const TerrainManifestAssetLoadJobCompletionReconcil
         status == TerrainManifestAssetLoadJobCompletionReconcileStatus::LoadConsumeBlocked;
 }
 
-bool hasExternalCompletions(const TerrainStreamingSchedulerTickOptions& options) noexcept
-{
-    return options.externalCompletionCount > 0;
-}
-
 TerrainStreamingSchedulerTickStatus mapStreamingStatus(
     const TerrainStreamingLoopUpdateStatus status) noexcept
 {
@@ -154,16 +149,13 @@ TerrainStreamingSchedulerTickResult runTerrainStreamingSchedulerTick(
                 return result;
             }
 
-            if (!hasExternalCompletions(options))
+            if (loop.externalLoadCompletions().completionCount() == 0)
             {
                 result.status = TerrainStreamingSchedulerTickStatus::Success;
                 return result;
             }
 
-            result.externalCompletionReconcile = loop.reconcileScheduledAssetLoadCompletions(
-                options.externalCompletions,
-                options.externalCompletionCount,
-                assetHandles);
+            result.externalCompletionReconcile = loop.reconcileExternalAssetLoadCompletions(assetHandles);
             result.externalCompletionsReconciled = true;
             if (serviceReconcileBlocked(result.externalCompletionReconcile.status))
             {

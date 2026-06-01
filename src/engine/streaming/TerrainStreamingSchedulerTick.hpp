@@ -43,23 +43,11 @@ struct TerrainStreamingSchedulerTickOptions
      * also packetizes those jobs into the retained load service, advances
      * caller-owned callbacks synchronously, and reconciles emitted completions
      * before the streaming phase. In `ExternalCompletions` mode, the tick
-     * schedules jobs, then reconciles caller-owned completion records only when
-     * they are provided through `externalCompletions`.
+     * schedules jobs, then reconciles completion records previously published
+     * into `TerrainStreamingLoopState`.
      */
     TerrainStreamingSchedulerLoadJobMode loadJobMode =
         TerrainStreamingSchedulerLoadJobMode::ExecuteSynchronously;
-
-    /**
-     * @brief Caller-owned completed load-job records for `ExternalCompletions` mode.
-     *
-     * The array is read only during `runTerrainStreamingSchedulerTick` and is
-     * never retained. The caller owns any worker state and renderer handles
-     * represented by these records.
-     */
-    const TerrainManifestAssetLoadJobCompletion* externalCompletions = nullptr;
-
-    /** @brief Number of records in `externalCompletions`; zero means no completions yet. */
-    std::size_t externalCompletionCount = 0;
 
     /** @brief Default streaming/runtime options; policy-selected budgets overwrite `budgets`. */
     TerrainStreamingLoopUpdateOptions loopUpdate = {};

@@ -615,8 +615,9 @@ void testExternalCompletionModeReconcilesLaterCompletions(std::vector<std::strin
         runTick(fixture, assetHandles, callbackState, desc, missingSnapshot(), options);
     const std::vector<full_engine::TerrainManifestAssetLoadJobCompletion> completions =
         readyCompletions();
-    options.externalCompletions = completions.data();
-    options.externalCompletionCount = completions.size();
+    (void)fixture.loop.publishExternalAssetLoadCompletions(
+        completions.data(),
+        completions.size());
     const full_engine::TerrainStreamingSchedulerTickResult reconciled =
         runTick(fixture, assetHandles, callbackState, desc, missingSnapshot(), options);
 
@@ -648,8 +649,9 @@ void testExternalCompletionModeReconcilesThenStreams(std::vector<std::string>& f
     (void)runTick(fixture, assetHandles, callbackState, desc, missingSnapshot(), options);
     const std::vector<full_engine::TerrainManifestAssetLoadJobCompletion> completions =
         readyCompletions();
-    options.externalCompletions = completions.data();
-    options.externalCompletionCount = completions.size();
+    (void)fixture.loop.publishExternalAssetLoadCompletions(
+        completions.data(),
+        completions.size());
     const full_engine::TerrainStreamingSchedulerTickResult result =
         runTick(fixture, assetHandles, callbackState, desc, missingSnapshot(), options);
 
@@ -679,22 +681,21 @@ void testExternalCompletionModeBlocksInvalidCompletions(std::vector<std::string>
     options.loadJobMode = full_engine::TerrainStreamingSchedulerLoadJobMode::ExternalCompletions;
 
     (void)runTick(fixture, assetHandles, callbackState, desc, missingSnapshot(), options);
-    std::vector<full_engine::TerrainManifestAssetLoadJobCompletion> completions =
-        readyCompletions();
-    completions[1].output.status = full_engine::TerrainManifestAssetLoadCallbackStatus::Failed;
-    options.externalCompletions = completions.data();
-    options.externalCompletionCount = completions.size();
+    const full_engine::TerrainManifestAssetLoadJobCompletion completionOnly =
+        completion(1, full_engine::AssetKind::Mesh, 10);
+    (void)fixture.loop.publishExternalAssetLoadCompletion(completionOnly);
     const full_engine::TerrainStreamingSchedulerTickResult result =
         runTick(fixture, assetHandles, callbackState, desc, missingSnapshot(), options);
 
-    expect(result.status == full_engine::TerrainStreamingSchedulerTickStatus::LoadJobsBlocked, "external completion invalid completion blocks tick", failures);
-    expect(result.externalCompletionsReconciled, "external completion invalid completion attempts reconcile", failures);
-    expect(!result.streamingRan, "external completion invalid completion skips streaming", failures);
-    expect(result.externalCompletionReconcile.status == full_engine::TerrainManifestAssetLoadJobCompletionReconcileStatus::CompletionPublishFailed, "external completion invalid completion reports publish failure", failures);
-    expect(result.externalCompletionReconcile.publish.summary.missingHandleCount == 1, "external completion invalid completion counts missing handle", failures);
-    expect(fixture.loop.manifestLoad().pendingLoadRequestCount() == 3, "external completion invalid completion preserves load requests", failures);
-    expect(fixture.loop.manifestAssetLoadJobs().jobCount() == 3, "external completion invalid completion preserves jobs", failures);
-    expect(assetHandles.meshHandleCount() == 0, "external completion invalid completion leaves destination unchanged", failures);
+    expect(result.status == full_engine::TerrainStreamingSchedulerTickStatus::LoadJobsBlocked, "external completion partial completion blocks tick", failures);
+    expect(result.externalCompletionsReconciled, "external completion partial completion attempts reconcile", failures);
+    expect(!result.streamingRan, "external completion partial completion skips streaming", failures);
+    expect(result.externalCompletionReconcile.status == full_engine::TerrainManifestAssetLoadJobCompletionReconcileStatus::CompletionPending, "external completion partial completion reports pending", failures);
+    expect(result.externalCompletionReconcile.publish.summary.publishedCount == 1, "external completion partial completion publishes retained completion", failures);
+    expect(fixture.loop.externalLoadCompletions().completionCount() == 1, "external completion partial completion keeps inbox for retry", failures);
+    expect(fixture.loop.manifestLoad().pendingLoadRequestCount() == 3, "external completion partial completion preserves load requests", failures);
+    expect(fixture.loop.manifestAssetLoadJobs().jobCount() == 3, "external completion partial completion preserves jobs", failures);
+    expect(assetHandles.meshHandleCount() == 0, "external completion partial completion leaves destination unchanged", failures);
 }
 
 void testExternalCompletionModePreservesUnrelatedJobs(std::vector<std::string>& failures)
@@ -718,8 +719,9 @@ void testExternalCompletionModePreservesUnrelatedJobs(std::vector<std::string>& 
         0});
     const std::vector<full_engine::TerrainManifestAssetLoadJobCompletion> completions =
         readyCompletions();
-    options.externalCompletions = completions.data();
-    options.externalCompletionCount = completions.size();
+    (void)fixture.loop.publishExternalAssetLoadCompletions(
+        completions.data(),
+        completions.size());
     const full_engine::TerrainStreamingSchedulerTickResult result =
         runTick(fixture, assetHandles, callbackState, desc, missingSnapshot(), options);
 

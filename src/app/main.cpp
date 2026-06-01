@@ -10,8 +10,10 @@
 #include "engine/renderer_integration/TerrainDescriptorBuilder.hpp"
 #include "engine/renderer_integration/TerrainIntegrationDiagnostics.hpp"
 #include "engine/renderer_integration/TerrainLifecyclePlan.hpp"
+#include "engine/renderer_integration/TerrainManifestAssetLoadCompletionAdapter.hpp"
 #include "engine/renderer_integration/TerrainManifestAssetLoadJobCompletions.hpp"
 #include "engine/renderer_integration/TerrainManifestAssetLoadJobCoordinator.hpp"
+#include "engine/renderer_integration/TerrainManifestAssetLoadJobWorkPackets.hpp"
 #include "engine/renderer_integration/TerrainManifestFileLoad.hpp"
 #include "engine/renderer_integration/TerrainManifestLoadState.hpp"
 #include "engine/renderer_integration/TerrainManifestRuntimeStaging.hpp"
@@ -747,6 +749,12 @@ struct SampleTerrainChunkState
     bool resident = true;
 };
 
+struct SampleExternalManifestAssetWorkerOutput
+{
+    full_engine::TerrainManifestAssetLoadJobWorkPacketResult packets = {};
+    full_engine::TerrainManifestAssetLoadWorkerCompletionPublishResult publish = {};
+};
+
 struct SampleTerrainResidencyControls
 {
     int selectedChunkX = 0;
@@ -783,6 +791,7 @@ struct SampleTerrainResidencyControls
         full_engine::CookedAssetManifestValidationResult::Success;
     full_engine::TerrainStreamingLoopState streamingLoop = {};
     full_engine::TerrainStreamingSchedulerTickDiagnostics lastSchedulerTickDiagnostics = {};
+    SampleExternalManifestAssetWorkerOutput externalWorker = {};
     std::size_t lastImportedManifestAssetCount = 0;
     std::size_t lastImportedManifestTerrainChunkCount = 0;
     std::size_t lastImportedAssetCatalogCount = 0;
@@ -938,6 +947,38 @@ full_engine::TerrainManifestAssetLoadCallbackResult sampleTerrainManifestAssetLo
 
     result.status = full_engine::TerrainManifestAssetLoadCallbackStatus::Missing;
     return result;
+}
+
+void clearSampleExternalManifestAssetWorkerOutput(
+    SampleExternalManifestAssetWorkerOutput& output) noexcept
+{
+    output = {};
+}
+
+void runSampleExternalManifestAssetWorker(
+    const full_engine::EngineJobQueue& scheduledJobs,
+    const full_engine::RendererAssetHandleCatalog& completedHandles,
+    full_engine::TerrainManifestAssetLoadCompletionInbox& destination,
+    SampleExternalManifestAssetWorkerOutput& output)
+{
+    output.packets = full_engine::buildTerrainManifestAssetLoadJobWorkPackets(scheduledJobs);
+
+    std::vector<full_engine::TerrainManifestAssetLoadJobCompletion> completions;
+    completions.reserve(output.packets.packets.size());
+    for (const full_engine::TerrainManifestAssetLoadJobWorkPacket& packet : output.packets.packets)
+    {
+        full_engine::TerrainManifestAssetLoadJobCompletion completion;
+        completion.request = packet.request;
+        completion.output = sampleTerrainManifestAssetLoadCallback(
+            packet.request,
+            const_cast<full_engine::RendererAssetHandleCatalog*>(&completedHandles));
+        completions.push_back(completion);
+    }
+
+    output.publish = full_engine::publishTerrainManifestAssetLoadWorkerCompletions(
+        destination,
+        completions.data(),
+        completions.size());
 }
 
 bool queueSampleTerrainSetupAdds(
@@ -1127,7 +1168,7 @@ full_engine::TerrainStreamingSchedulerTickResult runSampleTerrainStreamingSchedu
     options.loopUpdate.runtime = runtimeOptions;
     if (controls.terrainStreamingSchedulerExternalLoadScheduling)
     {
-        options.loadJobMode = full_engine::TerrainStreamingSchedulerLoadJobMode::RetainedService;
+        options.loadJobMode = full_engine::TerrainStreamingSchedulerLoadJobMode::ExternalCompletions;
     }
 
     return full_engine::runTerrainStreamingSchedulerTick(
@@ -1601,6 +1642,7 @@ void drawTerrainDiagnosticsPanel(
     const full_engine::AssetCatalog& engineAssetCatalog,
     const full_engine::TerrainAssetCatalog& engineTerrainAssets,
     full_engine::RendererAssetHandleCatalog& engineTerrainAssetHandles,
+    const full_engine::RendererAssetHandleCatalog& sampleCompletedTerrainAssetHandles,
     const full_engine::TerrainResourceCatalog& engineTerrainResources,
     const full_engine::ChunkTerrainHandleMap& engineTerrainHandles,
     const full_engine::CookedAssetManifest& sampleTerrainManifest,
@@ -1731,6 +1773,7 @@ void drawTerrainDiagnosticsPanel(
             streamingLoop.clearManifest();
             terrainResidencyControls.lastManifestStageApplyBlocked = false;
             terrainResidencyControls.lastSchedulerTickDiagnostics = {};
+            clearSampleExternalManifestAssetWorkerOutput(terrainResidencyControls.externalWorker);
 
             const full_engine::TerrainManifestFileReloadPlanResult manifestReload =
                 streamingLoop.reloadManifestAndQueueMissingAssetLoads(
@@ -1900,9 +1943,58 @@ void drawTerrainDiagnosticsPanel(
             terrainResidencyControls.terrainStreamingSchedulerRunOnce = true;
         }
         ImGui::Checkbox(
-            "External Load Scheduling",
+            "External Completion Scheduling",
             &terrainResidencyControls.terrainStreamingSchedulerExternalLoadScheduling);
         ImGui::SameLine();
+        if (ImGui::Button("Run Fake Worker"))
+        {
+            runSampleExternalManifestAssetWorker(
+                streamingLoop.manifestAssetLoadJobs(),
+                sampleCompletedTerrainAssetHandles,
+                streamingLoop.externalLoadCompletions(),
+                terrainResidencyControls.externalWorker);
+            streamingLoop.recordExternalAssetLoadCompletionPublish(
+                terrainResidencyControls.externalWorker.publish);
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Clear Worker Outputs"))
+        {
+            streamingLoop.clearExternalAssetLoadCompletions();
+            clearSampleExternalManifestAssetWorkerOutput(terrainResidencyControls.externalWorker);
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Simulate Missing Handles"))
+        {
+            if (manifestLoad.hasManifest())
+            {
+                engineTerrainAssetHandles.clear();
+                (void)manifestLoad.planAssetReadiness(engineTerrainAssetHandles);
+                (void)manifestLoad.planAssetLoadRequests();
+                (void)manifestLoad.queueLatestAssetLoadRequests();
+                streamingLoop.clearJobs();
+                streamingLoop.clearExternalAssetLoadCompletions();
+                clearSampleExternalManifestAssetWorkerOutput(terrainResidencyControls.externalWorker);
+                terrainResidencyControls.lastSchedulerTickDiagnostics = {};
+            }
+        }
+        ImGui::Text(
+            "Fake worker: packets/skipped/invalid %llu/%llu/%llu, completions %llu, publish %llu/%llu/%llu/%llu",
+            static_cast<unsigned long long>(
+                terrainResidencyControls.externalWorker.packets.summary.packetizedCount),
+            static_cast<unsigned long long>(
+                terrainResidencyControls.externalWorker.packets.summary.skippedUnsupportedJobCount),
+            static_cast<unsigned long long>(
+                terrainResidencyControls.externalWorker.packets.summary.invalidPayloadCount),
+            static_cast<unsigned long long>(
+                streamingLoop.latestDiagnostics().pendingExternalCompletionCount),
+            static_cast<unsigned long long>(
+                streamingLoop.latestDiagnostics().externalCompletionPublish.publishedCount),
+            static_cast<unsigned long long>(
+                streamingLoop.latestDiagnostics().externalCompletionPublish.alreadyPublishedCount),
+            static_cast<unsigned long long>(
+                streamingLoop.latestDiagnostics().externalCompletionPublish.invalidRequestCount),
+            static_cast<unsigned long long>(
+                streamingLoop.latestDiagnostics().externalCompletionPublish.missingHandleCount));
         if (ImGui::Button("Reconcile Load Jobs"))
         {
             (void)streamingLoop.enqueueScheduledAssetLoadWork();
@@ -2044,7 +2136,7 @@ void drawTerrainDiagnosticsPanel(
             static_cast<unsigned long long>(schedulerTick.runtimeBacklogCount),
             static_cast<unsigned long long>(schedulerTick.maxAssetLoadJobs));
         ImGui::Text(
-            "Scheduler phases: load %s (%s), schedule %s (%s), service %s, streaming %s (%s)",
+            "Scheduler phases: load %s (%s), schedule %s (%s), service %s, external %s, streaming %s (%s)",
             schedulerTick.loadJobsRan ? "ran" : "skipped",
             full_engine::terrainManifestAssetLoadJobCoordinatorStatusName(
                 schedulerTick.loadJobStatus),
@@ -2052,6 +2144,7 @@ void drawTerrainDiagnosticsPanel(
             full_engine::terrainManifestAssetLoadJobScheduleStatusName(
                 schedulerTick.scheduledLoadJobStatus),
             schedulerTick.loadServiceRan ? "ran" : "skipped",
+            schedulerTick.externalCompletionsReconciled ? "ran" : "skipped",
             schedulerTick.streamingRan ? "ran" : "skipped",
             full_engine::terrainStreamingLoopUpdateStatusName(
                 schedulerTick.streamingStatus));
@@ -2073,6 +2166,33 @@ void drawTerrainDiagnosticsPanel(
             static_cast<unsigned long long>(schedulerTick.loadService.tick.failedCount),
             full_engine::terrainManifestAssetLoadJobCompletionReconcileStatusName(
                 schedulerTick.loadService.completionReconcileStatus));
+        ImGui::Text(
+            "Scheduler external completions: %s, publish %llu/%llu/%llu/%llu/%llu, consume %llu/%llu/%llu/%llu%s, ready/missing %llu/%llu",
+            full_engine::terrainManifestAssetLoadJobCompletionReconcileStatusName(
+                schedulerTick.externalCompletionStatus),
+            static_cast<unsigned long long>(
+                schedulerTick.externalCompletionPublish.publishedCount),
+            static_cast<unsigned long long>(
+                schedulerTick.externalCompletionPublish.alreadyPublishedCount),
+            static_cast<unsigned long long>(
+                schedulerTick.externalCompletionPublish.invalidRequestCount),
+            static_cast<unsigned long long>(
+                schedulerTick.externalCompletionPublish.missingHandleCount),
+            static_cast<unsigned long long>(
+                schedulerTick.externalCompletionPublish.catalogRejectedCount),
+            static_cast<unsigned long long>(
+                schedulerTick.externalCompletionLoadConsume.loadedCount),
+            static_cast<unsigned long long>(
+                schedulerTick.externalCompletionLoadConsume.alreadyLoadedCount),
+            static_cast<unsigned long long>(
+                schedulerTick.externalCompletionLoadConsume.missingHandleCount),
+            static_cast<unsigned long long>(
+                schedulerTick.externalCompletionLoadConsume.catalogRejectedCount),
+            schedulerTick.externalCompletionLoadConsumed ? ", consumed" : "",
+            static_cast<unsigned long long>(
+                schedulerTick.externalCompletionReconcile.finalReadyHandleCount),
+            static_cast<unsigned long long>(
+                schedulerTick.externalCompletionReconcile.finalMissingHandleCount));
         ImGui::Text(
             "External load work packets: packets/skipped/invalid %llu/%llu/%llu",
             static_cast<unsigned long long>(
@@ -4628,6 +4748,8 @@ int main(int argc, char** argv)
         renderer->shutdown();
         return 1;
     }
+    const full_engine::RendererAssetHandleCatalog sampleCompletedTerrainAssetHandles =
+        engineTerrainAssetHandles;
 
     const std::vector<full_engine::ChunkId> initialTerrainChunkIds =
         sampleTerrainChunkIds(sampleTerrainChunks);
@@ -5068,6 +5190,14 @@ int main(int argc, char** argv)
             terrainResidencyControls.lastSchedulerTickDiagnostics =
                 full_engine::makeTerrainStreamingSchedulerTickDiagnostics(schedulerTick);
             terrainResidencyControls.terrainStreamingSchedulerRunOnce = false;
+            if (schedulerTick.externalCompletionsReconciled &&
+                (schedulerTick.externalCompletionReconcile.status ==
+                     full_engine::TerrainManifestAssetLoadJobCompletionReconcileStatus::Success ||
+                 schedulerTick.externalCompletionReconcile.status ==
+                     full_engine::TerrainManifestAssetLoadJobCompletionReconcileStatus::NoPendingLoads))
+            {
+                terrainResidencyControls.streamingLoop.clearExternalAssetLoadCompletions();
+            }
 
             if (schedulerTick.status == full_engine::TerrainStreamingSchedulerTickStatus::RuntimeSetupFailed)
             {
@@ -5682,6 +5812,7 @@ int main(int argc, char** argv)
                 engineAssetCatalog,
                 engineTerrainAssets,
                 engineTerrainAssetHandles,
+                sampleCompletedTerrainAssetHandles,
                 engineTerrainResources,
                 engineTerrainHandles,
                 sampleTerrainManifest,

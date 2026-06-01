@@ -78,6 +78,44 @@ full_engine::RendererAssetHandleCatalog readyHandles()
     return handles;
 }
 
+full_engine::TerrainManifestAssetLoadJobCompletion completion(
+    const std::uint64_t id,
+    const full_engine::AssetKind kind,
+    const std::uint32_t handleValue)
+{
+    full_engine::TerrainManifestAssetLoadJobCompletion result;
+    result.request.id = asset(id);
+    result.request.kind = kind;
+    result.output.status = full_engine::TerrainManifestAssetLoadCallbackStatus::Loaded;
+    switch (kind)
+    {
+    case full_engine::AssetKind::Mesh:
+        result.output.mesh = {handleValue};
+        break;
+    case full_engine::AssetKind::Material:
+        result.output.material = {handleValue};
+        break;
+    case full_engine::AssetKind::Texture:
+        result.output.texture = {handleValue};
+        break;
+    case full_engine::AssetKind::Unknown:
+    case full_engine::AssetKind::TerrainChunk:
+    case full_engine::AssetKind::Skeleton:
+    case full_engine::AssetKind::SkinnedMesh:
+    case full_engine::AssetKind::Shader:
+        break;
+    }
+    return result;
+}
+
+std::vector<full_engine::TerrainManifestAssetLoadJobCompletion> readyCompletions()
+{
+    return {
+        completion(10, full_engine::AssetKind::Mesh, 10),
+        completion(20, full_engine::AssetKind::Material, 20),
+        completion(30, full_engine::AssetKind::Texture, 30)};
+}
+
 struct CallbackState
 {
     full_engine::RendererAssetHandleCatalog handles;
@@ -169,6 +207,7 @@ void testDefaultState(std::vector<std::string>& failures)
     expect(!state.manifestLoad().hasManifest(), "default loop has no manifest", failures);
     expect(state.manifestAssetLoadJobs().jobCount() == 0, "default loop has no jobs", failures);
     expect(state.manifestAssetLoadService().requestCount() == 0, "default loop has no retained service work", failures);
+    expect(state.externalLoadCompletions().completionCount() == 0, "default loop has no external completions", failures);
     expect(state.latestLoadServiceWorkPackets().packets.empty(), "default loop has no service packets", failures);
     expect(state.latestLoadServiceTickResult().summary.attemptedCount == 0, "default loop has no service tick attempts", failures);
     expect(state.latestDiagnostics().loadService.workPackets.packetizedCount == 0, "default diagnostics have no service packets", failures);
@@ -181,6 +220,7 @@ void testDefaultState(std::vector<std::string>& failures)
     expect(state.manifestLoad().pendingLoadRequestCount() == 0, "default loop has no load requests", failures);
     expect(!state.latestDiagnostics().hasManifest, "default diagnostics report no manifest", failures);
     expect(state.latestDiagnostics().pendingJobCount == 0, "default diagnostics report no jobs", failures);
+    expect(state.latestDiagnostics().pendingExternalCompletionCount == 0, "default diagnostics report no external completions", failures);
     expect(state.tickHistoryCount() == 0, "default loop has no tick history", failures);
     expect(state.latestTickEvent() == nullptr, "default loop latest tick is null", failures);
     expect(state.latestDiagnostics().tickHistoryCount == 0, "default diagnostics report no tick history", failures);
@@ -337,6 +377,75 @@ void testReconcileScheduledLoadJobs(std::vector<std::string>& failures)
     expect(state.manifestAssetLoadJobs().jobCount() == 3, "loop schedule after clearJobs restores jobs", failures);
     state.clearManifest();
     expect(state.latestDiagnostics().reconciledLoadJobs.status == full_engine::TerrainManifestAssetLoadJobReconcileStatus::NoPendingLoads, "clearManifest resets reconcile diagnostics", failures);
+
+    std::remove(path);
+}
+
+void testExternalCompletionInboxReconcile(std::vector<std::string>& failures)
+{
+    const char* path = "terrain_streaming_loop_external_inbox.jsonl";
+    writeManifest(path);
+
+    full_engine::TerrainStreamingLoopState state;
+    (void)state.reloadManifestAndQueueMissingAssetLoads(path, {});
+    (void)state.scheduleAssetLoadJobs();
+    const std::vector<full_engine::TerrainManifestAssetLoadJobCompletion> completions =
+        readyCompletions();
+    const full_engine::TerrainManifestAssetLoadCompletionInboxPublishResult& published =
+        state.publishExternalAssetLoadCompletions(completions.data(), completions.size());
+
+    expect(published.summary.publishedCount == 3, "loop external inbox publishes completions", failures);
+    expect(state.externalLoadCompletions().completionCount() == 3, "loop external inbox retains completions", failures);
+    expect(state.latestDiagnostics().pendingExternalCompletionCount == 3, "loop diagnostics copy external completion count", failures);
+    expect(state.latestDiagnostics().externalCompletionPublish.publishedCount == 3, "loop diagnostics copy external publish count", failures);
+
+    full_engine::RendererAssetHandleCatalog destination;
+    const full_engine::TerrainManifestAssetLoadJobCompletionReconcileResult& reconciled =
+        state.reconcileExternalAssetLoadCompletions(destination);
+
+    expect(reconciled.status == full_engine::TerrainManifestAssetLoadJobCompletionReconcileStatus::Success, "loop external inbox reconcile succeeds", failures);
+    expect(state.manifestLoad().pendingLoadRequestCount() == 0, "loop external inbox reconcile clears load requests", failures);
+    expect(state.manifestAssetLoadJobs().jobCount() == 0, "loop external inbox reconcile removes jobs", failures);
+    expect(state.externalLoadCompletions().completionCount() == 0, "loop external inbox reconcile clears inbox", failures);
+    expect(state.latestDiagnostics().pendingExternalCompletionCount == 0, "loop external inbox reconcile refreshes diagnostics", failures);
+    expect(destination.findMeshHandle(asset(10)) != nullptr, "loop external inbox reconcile publishes mesh", failures);
+    expect(destination.findMaterialHandle(asset(20)) != nullptr, "loop external inbox reconcile publishes material", failures);
+    expect(destination.findTextureHandle(asset(30)) != nullptr, "loop external inbox reconcile publishes texture", failures);
+
+    std::remove(path);
+}
+
+void testExternalCompletionInboxBlockedAndCleared(std::vector<std::string>& failures)
+{
+    const char* path = "terrain_streaming_loop_external_inbox_blocked.jsonl";
+    writeManifest(path);
+
+    full_engine::TerrainStreamingLoopState state;
+    (void)state.reloadManifestAndQueueMissingAssetLoads(path, {});
+    (void)state.scheduleAssetLoadJobs();
+    const full_engine::TerrainManifestAssetLoadJobCompletion meshOnly =
+        completion(10, full_engine::AssetKind::Mesh, 10);
+    (void)state.publishExternalAssetLoadCompletion(meshOnly);
+
+    full_engine::RendererAssetHandleCatalog destination;
+    const full_engine::TerrainManifestAssetLoadJobCompletionReconcileResult& blocked =
+        state.reconcileExternalAssetLoadCompletions(destination);
+
+    expect(blocked.status == full_engine::TerrainManifestAssetLoadJobCompletionReconcileStatus::CompletionPending, "loop external inbox partial reconcile is pending", failures);
+    expect(state.externalLoadCompletions().completionCount() == 1, "loop external inbox blocked reconcile preserves completion", failures);
+    expect(state.manifestLoad().pendingLoadRequestCount() == 3, "loop external inbox blocked reconcile preserves load requests", failures);
+    expect(state.manifestAssetLoadJobs().jobCount() == 3, "loop external inbox blocked reconcile preserves jobs", failures);
+    expect(destination.meshHandleCount() == 0, "loop external inbox blocked reconcile leaves destination unchanged", failures);
+
+    state.clearJobs();
+    expect(state.externalLoadCompletions().completionCount() == 0, "clearJobs clears external completion inbox", failures);
+    expect(state.latestDiagnostics().pendingExternalCompletionCount == 0, "clearJobs refreshes external completion diagnostics", failures);
+
+    (void)state.reloadManifestAndQueueMissingAssetLoads(path, {});
+    (void)state.scheduleAssetLoadJobs();
+    (void)state.publishExternalAssetLoadCompletion(meshOnly);
+    state.clearManifest();
+    expect(state.externalLoadCompletions().completionCount() == 0, "clearManifest clears external completion inbox", failures);
 
     std::remove(path);
 }
@@ -610,6 +719,8 @@ int main()
     testRunLoadJobsSuccess(failures);
     testRunLoadJobsBlockedPreservesPending(failures);
     testReconcileScheduledLoadJobs(failures);
+    testExternalCompletionInboxReconcile(failures);
+    testExternalCompletionInboxBlockedAndCleared(failures);
     testRetainedLoadServiceReconcilesScheduledJobs(failures);
     testRetainedLoadServiceMissingAndFailedCallbacks(failures);
     testStreamingUpdateQueuesRuntimeIntent(failures);

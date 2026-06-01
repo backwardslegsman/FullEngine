@@ -3,6 +3,7 @@
 #include "engine/jobs/JobQueue.hpp"
 #include "engine/renderer_integration/TerrainIntegrationDiagnostics.hpp"
 #include "engine/renderer_integration/TerrainManifestAssetLoadExecutor.hpp"
+#include "engine/renderer_integration/TerrainManifestAssetLoadCompletionAdapter.hpp"
 #include "engine/renderer_integration/TerrainManifestAssetLoadJobCompletions.hpp"
 #include "engine/renderer_integration/TerrainManifestAssetLoadService.hpp"
 #include "engine/renderer_integration/TerrainManifestFileLoad.hpp"
@@ -143,6 +144,12 @@ struct TerrainStreamingLoopDiagnostics
     /** @brief Latest retained manifest asset-load service diagnostics. */
     TerrainManifestAssetLoadServiceDiagnostics loadService = {};
 
+    /** @brief Pending caller-owned completion records retained for external-completion scheduling. */
+    std::size_t pendingExternalCompletionCount = 0;
+
+    /** @brief Latest publish counters for retained external completion records. */
+    TerrainManifestAssetLoadCompletionInboxSummary externalCompletionPublish = {};
+
     /** @brief Latest manifest-aware streaming update status. */
     TerrainStreamingManifestUpdateStatus latestStreamingStatus =
         TerrainStreamingManifestUpdateStatus::Success;
@@ -192,6 +199,12 @@ public:
     /** @brief Returns the retained manifest asset-load service. */
     const TerrainManifestAssetLoadService& manifestAssetLoadService() const noexcept;
 
+    /** @brief Returns the retained externally produced completion inbox. */
+    TerrainManifestAssetLoadCompletionInbox& externalLoadCompletions() noexcept;
+
+    /** @brief Returns the retained externally produced completion inbox. */
+    const TerrainManifestAssetLoadCompletionInbox& externalLoadCompletions() const noexcept;
+
     /** @brief Returns latest file reload diagnostics. */
     const TerrainManifestFileReloadPlanResult& latestManifestReload() const noexcept;
 
@@ -218,6 +231,9 @@ public:
 
     /** @brief Returns latest retained service completion reconcile diagnostics. */
     const TerrainManifestAssetLoadJobCompletionReconcileResult& latestLoadServiceCompletionReconcileResult() const noexcept;
+
+    /** @brief Returns latest external completion inbox publish diagnostics. */
+    const TerrainManifestAssetLoadCompletionInboxPublishResult& latestExternalCompletionPublishResult() const noexcept;
 
     /** @brief Returns latest manifest-aware streaming update diagnostics. */
     const TerrainStreamingManifestUpdateResult& latestStreamingUpdate() const noexcept;
@@ -381,6 +397,52 @@ public:
         RendererAssetHandleCatalog& destinationHandles);
 
     /**
+     * @brief Retains one externally produced manifest asset-load completion.
+     *
+     * The completion is copied by value into loop-owned inbox state when valid.
+     * The call does not consume manifest load requests, mutate scheduled jobs,
+     * touch renderer handle catalogs, run callbacks, perform IO, create
+     * renderer resources, or apply terrain runtime queues.
+     */
+    const TerrainManifestAssetLoadCompletionInboxRecord& publishExternalAssetLoadCompletion(
+        const TerrainManifestAssetLoadJobCompletion& completion);
+
+    /**
+     * @brief Retains caller-owned external completions for a later scheduler tick.
+     *
+     * The completion array is read only during the call and is never retained
+     * by reference. Valid records are copied into loop-owned inbox state.
+     */
+    const TerrainManifestAssetLoadCompletionInboxPublishResult& publishExternalAssetLoadCompletions(
+        const TerrainManifestAssetLoadJobCompletion* completions,
+        std::size_t completionCount);
+
+    /**
+     * @brief Stores diagnostics from a worker-facing completion publish.
+     *
+     * Use this after external code publishes directly into
+     * `externalLoadCompletions()` through the renderer-integration worker
+     * adapter. The result is copied by value and no completion records,
+     * workers, handles, or streaming-loop callers are retained by reference.
+     */
+    void recordExternalAssetLoadCompletionPublish(
+        const TerrainManifestAssetLoadWorkerCompletionPublishResult& result) noexcept;
+
+    /** @brief Clears retained external completion records and publish diagnostics. */
+    void clearExternalAssetLoadCompletions() noexcept;
+
+    /**
+     * @brief Reconciles retained external completions with retained manifest load state.
+     *
+     * Successful reconciliation consumes retained manifest load requests,
+     * removes matching scheduled jobs, replans readiness, and clears the
+     * external completion inbox. Blocked reconciliation preserves retained
+     * completions for retry.
+     */
+    const TerrainManifestAssetLoadJobCompletionReconcileResult& reconcileExternalAssetLoadCompletions(
+        RendererAssetHandleCatalog& destinationHandles);
+
+    /**
      * @brief Runs one manifest-aware terrain streaming update.
      *
      * The call delegates to `updateTerrainStreamingFromManifest`, storing the
@@ -444,6 +506,7 @@ private:
     TerrainStreamingRuntimeState streamingRuntime_ = {};
     EngineJobQueue manifestAssetLoadJobs_ = {};
     TerrainManifestAssetLoadService manifestAssetLoadService_ = {};
+    TerrainManifestAssetLoadCompletionInbox externalLoadCompletions_ = {};
     TerrainManifestFileReloadPlanResult latestManifestReload_ = {};
     TerrainManifestAssetLoadJobCoordinatorResult latestLoadJobResult_ = {};
     TerrainManifestAssetLoadJobDiagnostics latestLoadJobDiagnostics_ = {};
@@ -456,6 +519,8 @@ private:
     TerrainManifestAssetLoadServiceEnqueueResult latestLoadServiceEnqueueResult_ = {};
     TerrainManifestAssetLoadServiceTickResult latestLoadServiceTickResult_ = {};
     TerrainManifestAssetLoadJobCompletionReconcileResult latestLoadServiceCompletionReconcileResult_ = {};
+    TerrainManifestAssetLoadCompletionInboxPublishResult latestExternalCompletionPublishResult_ = {};
+    TerrainManifestAssetLoadCompletionInboxRecord latestExternalCompletionPublishRecord_ = {};
     TerrainStreamingManifestUpdateResult latestStreamingUpdate_ = {};
     TerrainStreamingTickHistory tickHistory_ = {};
     TerrainStreamingLoopDiagnostics latestDiagnostics_ = {};

@@ -692,9 +692,26 @@ move gameplay, streaming policy, or editor concepts into renderer internals.
   external-completion load mode that schedules retained manifest asset-load jobs
   without callbacks, then reconciles caller-owned completion records on a later
   tick before streaming when handles are ready.
-- Next slice: wire a sample fake external worker panel around external
-  completions so the demo can show schedule -> worker output -> scheduler
-  reconcile -> streaming without using the retained-service callback shortcut.
+- Thirty-sixth slice is implemented: the sample debug UI now has a fake
+  external worker path for the external-completion scheduler mode. It can
+  simulate missing runtime handle mappings, schedule manifest asset-load jobs,
+  emit caller-owned completion records from sample-created handles, and let a
+  later scheduler tick reconcile those completions before streaming.
+- Thirty-seventh slice is implemented: externally produced manifest asset-load
+  completions now publish into a retained engine-owned inbox on
+  `TerrainStreamingLoopState`, and the scheduler external-completion mode
+  reconciles that retained inbox instead of reading sample-owned arrays.
+- Thirty-eighth slice is implemented: worker-facing completion publish helpers
+  now wrap the retained completion inbox, so external worker code can publish
+  completion batches without including or depending on `TerrainStreamingLoopState`.
+- Thirty-ninth slice is implemented: the retained external completion inbox now
+  has deterministic remove/replace operations, with worker-facing adapter
+  wrappers, so stale worker outputs can be discarded or superseded before the
+  all-or-nothing reconcile pass.
+- Next slice: add a tiny sample/local worker-output object that uses the
+  worker-facing adapter retry policy directly, demonstrating how a future
+  threaded worker would replace stale completions without UI code holding
+  completion vectors.
 - Initial sample integration is in place: the debug UI can run the
   manifest-aware streaming coordinator once or continuously from camera
   position, display readiness/load/staging/streaming queue counters, and keep

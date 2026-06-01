@@ -194,6 +194,9 @@ Implemented pieces:
   caller-owned completion records into a temporary completed-handle catalog
   before reconcile, giving async/threaded loaders an explicit handoff shape
   without making the engine own workers, IO, or renderer resource creation
+- a retained external completion inbox with explicit remove/replace operations
+  so stale worker outputs can be discarded or superseded deterministically
+  before the all-or-nothing reconcile pass
 - a test-only external worker completion proof that reads scheduled
   `ManifestAssetLoad` jobs, emits completion records from caller-owned handles,
   reconciles them, and replans retained manifest readiness as ready
@@ -327,9 +330,12 @@ manifest asset load job coordinator from
 the debug panel using its sample-created renderer handles as the external load
 callback source, can optionally drive camera streaming through the
 policy-driven scheduler tick, can run that scheduler load phase through the
-retained load-service path or an external-completion handoff, displays retained
-load-service progress through a compact diagnostics snapshot, can export
-retained streaming tick history, and
+retained load-service path or an external-completion handoff, includes a fake
+external worker panel that emits completion records from sample-created handles
+into a retained engine-owned inbox for that handoff, displays retained
+load-service and completion-inbox progress through compact diagnostics
+snapshots, exposes worker-facing helpers for publishing completion batches
+without depending on streaming loop state, can export retained streaming tick history, and
 submits the mapped renderer terrain handles in its render packet.
 
 Still future work:
