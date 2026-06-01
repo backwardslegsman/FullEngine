@@ -78,6 +78,62 @@ full_engine::RendererAssetHandleCatalog readyHandles()
     return handles;
 }
 
+full_engine::AssetSourceDescriptor descriptorForKind(const full_engine::AssetKind kind)
+{
+    full_engine::AssetSourceDescriptor descriptor;
+    switch (kind)
+    {
+    case full_engine::AssetKind::Mesh:
+        descriptor.mesh.vertexCount = 4;
+        descriptor.mesh.indexCount = 6;
+        descriptor.mesh.localBounds.max[0] = 1.0f;
+        descriptor.mesh.localBounds.max[1] = 1.0f;
+        descriptor.mesh.localBounds.max[2] = 1.0f;
+        break;
+    case full_engine::AssetKind::Material:
+        descriptor.material.model = full_engine::AssetSourceMaterialModel::Basic;
+        descriptor.material.alphaMode = full_engine::AssetSourceMaterialAlphaMode::Opaque;
+        break;
+    case full_engine::AssetKind::Texture:
+        descriptor.texture.width = 64;
+        descriptor.texture.height = 64;
+        descriptor.texture.mipCount = 1;
+        descriptor.texture.format = full_engine::AssetSourceTextureFormat::Rgba8;
+        descriptor.texture.semantic = full_engine::AssetSourceTextureSemantic::TerrainSplat;
+        descriptor.texture.colorSpace = full_engine::AssetSourceTextureColorSpace::Linear;
+        break;
+    case full_engine::AssetKind::Unknown:
+    case full_engine::AssetKind::TerrainChunk:
+    case full_engine::AssetKind::Skeleton:
+    case full_engine::AssetKind::SkinnedMesh:
+    case full_engine::AssetKind::Shader:
+        break;
+    }
+    return descriptor;
+}
+
+full_engine::AssetSourceRecord source(
+    const std::uint64_t id,
+    const full_engine::AssetKind kind,
+    const char* const uri)
+{
+    full_engine::AssetSourceRecord record;
+    record.id = asset(id);
+    record.kind = kind;
+    record.uri = uri;
+    record.descriptor = descriptorForKind(kind);
+    return record;
+}
+
+full_engine::AssetSourceCatalog sourceCatalog()
+{
+    full_engine::AssetSourceCatalog catalog;
+    (void)catalog.addSource(source(10, full_engine::AssetKind::Mesh, "meshes/terrain.mesh"));
+    (void)catalog.addSource(source(20, full_engine::AssetKind::Material, "materials/terrain.mat"));
+    (void)catalog.addSource(source(30, full_engine::AssetKind::Texture, "textures/terrain.dds"));
+    return catalog;
+}
+
 full_engine::TerrainManifestAssetLoadJobCompletion completion(
     const std::uint64_t id,
     const full_engine::AssetKind kind,
@@ -212,6 +268,8 @@ void testDefaultState(std::vector<std::string>& failures)
     expect(state.latestLoadServiceTickResult().summary.attemptedCount == 0, "default loop has no service tick attempts", failures);
     expect(state.latestDiagnostics().loadService.workPackets.packetizedCount == 0, "default diagnostics have no service packets", failures);
     expect(state.latestDiagnostics().loadService.retainedRequestCount == 0, "default diagnostics have no retained service work", failures);
+    expect(state.latestDiagnostics().assetSources.retainedSourceCount == 0, "default diagnostics have no retained sources", failures);
+    expect(state.latestDiagnostics().assetSources.requests.mappedCount == 0, "default diagnostics have no mapped sources", failures);
     expect(
         state.latestDiagnostics().loadService.completionReconcileStatus ==
             full_engine::TerrainManifestAssetLoadJobCompletionReconcileStatus::NoPendingLoads,
@@ -253,6 +311,37 @@ void testReloadSuccessQueuesMissingLoads(std::vector<std::string>& failures)
     expect(state.latestDiagnostics().pendingJobCount == 0, "reload clears stale jobs", failures);
     expect(state.manifestAssetLoadService().requestCount() == 0, "reload clears stale service work", failures);
     expect(state.latestDiagnostics().loadService.retainedRequestCount == 0, "reload clears stale service diagnostics", failures);
+
+    std::remove(path);
+}
+
+void testAssetSourcePlanningDiagnostics(std::vector<std::string>& failures)
+{
+    const char* path = "terrain_streaming_loop_sources.jsonl";
+    writeManifest(path);
+
+    full_engine::TerrainStreamingLoopState state;
+    (void)state.reloadManifestAndQueueMissingAssetLoads(path, {});
+    state.setAssetSources(sourceCatalog());
+    const full_engine::TerrainManifestAssetSourceRequestPlan& planned =
+        state.planAssetSources();
+
+    expect(planned.summary.mappedCount == 3, "loop source planning maps load requests", failures);
+    expect(state.manifestLoad().hasAssetSources(), "loop source planning retains sources", failures);
+    expect(state.latestAssetSourceRequests().summary.mappedCount == 3, "loop source planning stores latest source plan", failures);
+    expect(state.latestDiagnostics().assetSources.retainedSourceCount == 3, "loop diagnostics copy retained source count", failures);
+    expect(state.latestDiagnostics().assetSources.requests.mappedCount == 3, "loop diagnostics copy mapped source count", failures);
+    expect(state.latestDiagnostics().pendingLoadRequestCount == 3, "loop source planning preserves pending load requests", failures);
+
+    state.clearAssetSources();
+    expect(!state.manifestLoad().hasAssetSources(), "loop clearAssetSources clears sources", failures);
+    expect(state.latestDiagnostics().assetSources.retainedSourceCount == 0, "loop clearAssetSources refreshes source diagnostics", failures);
+    expect(state.latestAssetSourceRequests().records.empty(), "loop clearAssetSources clears source plan", failures);
+
+    state.setAssetSources(sourceCatalog());
+    (void)state.planAssetSources();
+    state.clearManifest();
+    expect(state.latestDiagnostics().assetSources.retainedSourceCount == 0, "loop clearManifest clears source diagnostics", failures);
 
     std::remove(path);
 }
@@ -715,6 +804,7 @@ int main()
 
     testDefaultState(failures);
     testReloadSuccessQueuesMissingLoads(failures);
+    testAssetSourcePlanningDiagnostics(failures);
     testReloadFailureClearsState(failures);
     testRunLoadJobsSuccess(failures);
     testRunLoadJobsBlockedPreservesPending(failures);

@@ -107,6 +107,10 @@ add_library(full_engine STATIC
     src/engine/assets/AssetCatalog.hpp
     src/engine/assets/AssetDependencyValidator.cpp
     src/engine/assets/AssetDependencyValidator.hpp
+    src/engine/assets/AssetSourceCatalog.cpp
+    src/engine/assets/AssetSourceCatalog.hpp
+    src/engine/assets/AssetSourceDescriptor.cpp
+    src/engine/assets/AssetSourceDescriptor.hpp
     src/engine/assets/CookedAssetManifest.cpp
     src/engine/assets/CookedAssetManifest.hpp
     src/engine/assets/CookedAssetManifestJson.cpp
@@ -123,6 +127,8 @@ add_library(full_engine STATIC
     src/engine/jobs/JobQueue.hpp
     src/engine/renderer_integration/ChunkTerrainHandleMap.cpp
     src/engine/renderer_integration/ChunkTerrainHandleMap.hpp
+    src/engine/renderer_integration/AssetSourceUploadIntent.cpp
+    src/engine/renderer_integration/AssetSourceUploadIntent.hpp
     src/engine/renderer_integration/RenderSpace.cpp
     src/engine/renderer_integration/RenderSpace.hpp
     src/engine/renderer_integration/RendererHost.cpp
@@ -139,6 +145,8 @@ add_library(full_engine STATIC
     src/engine/renderer_integration/TerrainChunkRequests.hpp
     src/engine/renderer_integration/TerrainManifestAssetReadiness.cpp
     src/engine/renderer_integration/TerrainManifestAssetReadiness.hpp
+    src/engine/renderer_integration/TerrainManifestAssetSourcePlan.cpp
+    src/engine/renderer_integration/TerrainManifestAssetSourcePlan.hpp
     src/engine/renderer_integration/TerrainManifestAssetLoader.cpp
     src/engine/renderer_integration/TerrainManifestAssetLoader.hpp
     src/engine/renderer_integration/TerrainManifestAssetLoadCompletionAdapter.cpp

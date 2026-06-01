@@ -148,6 +148,16 @@ Implemented pieces:
 - renderer-free manifest asset load request planning that converts missing
   readiness records into asset ID/kind load intent without IO, async jobs, or
   renderer-resource creation
+- renderer-free asset source catalogs that map loadable mesh/material/texture
+  asset IDs to opaque caller-supplied source URIs and typed renderer-free
+  mesh/material/texture source descriptors, plus request-order lookup
+  diagnostics for mapping missing load intent to those source records
+- upload-intent planning that translates mapped source descriptors into public
+  renderer mesh/texture/material upload expectations without source bytes,
+  renderer handles, renderer calls, or resource creation
+- retained manifest asset source planning that stores caller-supplied source
+  catalogs on `TerrainManifestLoadState` and exposes mapped/missing source
+  counters through loop diagnostics without changing loader or streaming policy
 - retained manifest asset load request queues that deduplicate pending
   mesh/material/texture load intent over repeated readiness scans without
   consuming requests or creating renderer resources
@@ -318,8 +328,10 @@ inspection, validates that exported manifest back through the engine importer
 and catalog builder, stores the imported value in `TerrainStreamingLoopState`,
 reports renderer-handle readiness for declared mesh/material/texture
 references, converts missing handle readiness into renderer-free load intent
-counts, retains pending load intent in a deduplicated queue, can consume that
-intent once externally supplied handles are available, exposes the latest load
+counts, can map that intent to typed asset source URI/descriptor records, retains pending load
+intent in a deduplicated queue, can consume that intent once externally
+supplied handles are available, displays retained/mapped/missing source counts
+beside load intent diagnostics, exposes the latest load
 consume counters in the debug panel, dry-runs a terrain setup staging plan
 through the reusable manifest staging coordinator, can queue safe add/remove
 staging operations through the terrain runtime controller, can drive

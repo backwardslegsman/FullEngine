@@ -80,6 +80,16 @@ TerrainManifestAssetLoadServiceDiagnostics makeTerrainManifestAssetLoadServiceDi
     return diagnostics;
 }
 
+TerrainManifestAssetSourceDiagnostics makeTerrainManifestAssetSourceDiagnostics(
+    const AssetSourceCatalog& sources,
+    const TerrainManifestAssetSourceRequestPlan& plan)
+{
+    TerrainManifestAssetSourceDiagnostics diagnostics;
+    diagnostics.retainedSourceCount = sources.sourceCount();
+    diagnostics.requests = plan.summary;
+    return diagnostics;
+}
+
 TerrainAssetBatchResolveDiagnostics makeTerrainAssetBatchResolveDiagnostics(
     const TerrainAssetBatchResolveResult& result)
 {

@@ -6,6 +6,7 @@
 #include "engine/renderer_integration/TerrainManifestAssetLoadPlan.hpp"
 #include "engine/renderer_integration/TerrainManifestAssetLoadRequests.hpp"
 #include "engine/renderer_integration/TerrainManifestAssetReadiness.hpp"
+#include "engine/renderer_integration/TerrainManifestAssetSourcePlan.hpp"
 
 #include <cstddef>
 
@@ -99,8 +100,29 @@ public:
     /** @brief Returns the latest callback-executor result for retained load requests. */
     const TerrainManifestAssetLoadExecutorResult& latestLoadExecutorResult() const noexcept;
 
+    /** @brief Returns whether asset source metadata is currently retained. */
+    bool hasAssetSources() const noexcept;
+
+    /** @brief Returns retained asset source metadata. */
+    const AssetSourceCatalog& assetSources() const noexcept;
+
+    /** @brief Returns the latest source lookup result for retained load requests. */
+    const TerrainManifestAssetSourceRequestPlan& latestSourceRequests() const noexcept;
+
     /** @brief Returns the number of pending retained asset load requests. */
     std::size_t pendingLoadRequestCount() const noexcept;
+
+    /**
+     * @brief Stores source metadata by move and clears stale source lookup diagnostics.
+     *
+     * Source metadata is renderer-free and copied/moved into this state. The
+     * state does not normalize paths, open files, run importers, create
+     * renderer resources, mutate handle catalogs, or queue jobs.
+     */
+    void setAssetSources(AssetSourceCatalog sources);
+
+    /** @brief Clears retained source metadata and latest source lookup diagnostics. */
+    void clearAssetSources();
 
     /**
      * @brief Plans renderer handle readiness for the retained manifest value.
@@ -141,6 +163,19 @@ public:
      * queue or manifest mutation call.
      */
     const TerrainManifestAssetLoadQueuePushResult& queueLatestAssetLoadRequests();
+
+    /**
+     * @brief Maps latest renderer-free load requests to retained source metadata.
+     *
+     * This uses `latestLoadRequests()` and the retained source catalog. Missing
+     * source metadata is diagnostic-only in this slice and does not change the
+     * pending load request queue, job queues, handle catalogs, manifests, or
+     * runtime state.
+     *
+     * @return Retained value plan owned by this state until the next source
+     * planning, source mutation, load-plan mutation, or manifest mutation call.
+     */
+    const TerrainManifestAssetSourceRequestPlan& planAssetSources();
 
     /**
      * @brief Consumes retained pending load requests using externally supplied handles.
@@ -259,5 +294,8 @@ private:
     TerrainManifestAssetLoadQueuePushResult latestLoadRequestQueueResult_ = {};
     TerrainManifestAssetLoadResult latestLoadConsumeResult_ = {};
     TerrainManifestAssetLoadExecutorResult latestLoadExecutorResult_ = {};
+    AssetSourceCatalog assetSources_ = {};
+    bool hasAssetSources_ = false;
+    TerrainManifestAssetSourceRequestPlan latestSourceRequests_ = {};
 };
 } // namespace full_engine

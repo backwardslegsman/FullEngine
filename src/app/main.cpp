@@ -3,6 +3,7 @@
 #include "engine/assets/CookedAssetManifest.hpp"
 #include "engine/assets/CookedAssetManifestJson.hpp"
 #include "engine/assets/CookedAssetManifestSummary.hpp"
+#include "engine/assets/AssetSourceCatalog.hpp"
 #include "engine/jobs/JobQueue.hpp"
 #include "engine/renderer_integration/ChunkTerrainHandleMap.hpp"
 #include "engine/renderer_integration/TerrainAssetResolver.hpp"
@@ -74,6 +75,7 @@
 #include <iostream>
 #include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 #ifndef FULL_RENDERER_SAMPLE_SHADER_DIR
@@ -825,6 +827,75 @@ full_engine::AssetId sampleTerrainMaterialAssetId() noexcept
 full_engine::AssetId sampleTerrainSplatAssetId() noexcept
 {
     return full_engine::AssetId{300000ULL};
+}
+
+full_engine::AssetSourceRecord sampleTerrainAssetSource(
+    const full_engine::AssetId id,
+    const full_engine::AssetKind kind,
+    std::string uri)
+{
+    full_engine::AssetSourceRecord record;
+    record.id = id;
+    record.kind = kind;
+    record.uri = std::move(uri);
+    switch (kind)
+    {
+    case full_engine::AssetKind::Mesh:
+    {
+        constexpr float kDescriptorChunkSizeMeters = 16.0f;
+        record.descriptor.mesh.vertexCount = 4;
+        record.descriptor.mesh.indexCount = 6;
+        record.descriptor.mesh.localBounds.min[0] = -0.5f * kDescriptorChunkSizeMeters;
+        record.descriptor.mesh.localBounds.min[1] = -2.0f;
+        record.descriptor.mesh.localBounds.min[2] = -0.5f * kDescriptorChunkSizeMeters;
+        record.descriptor.mesh.localBounds.max[0] = 0.5f * kDescriptorChunkSizeMeters;
+        record.descriptor.mesh.localBounds.max[1] = 4.0f;
+        record.descriptor.mesh.localBounds.max[2] = 0.5f * kDescriptorChunkSizeMeters;
+        break;
+    }
+    case full_engine::AssetKind::Material:
+        record.descriptor.material.model = full_engine::AssetSourceMaterialModel::TerrainSplat;
+        record.descriptor.material.alphaMode = full_engine::AssetSourceMaterialAlphaMode::Opaque;
+        record.descriptor.material.textureRefs[0] = sampleTerrainSplatAssetId();
+        record.descriptor.material.textureRefCount = 1;
+        break;
+    case full_engine::AssetKind::Texture:
+        record.descriptor.texture.width = 16;
+        record.descriptor.texture.height = 16;
+        record.descriptor.texture.mipCount = 1;
+        record.descriptor.texture.format = full_engine::AssetSourceTextureFormat::Rgba8;
+        record.descriptor.texture.semantic = full_engine::AssetSourceTextureSemantic::TerrainSplat;
+        record.descriptor.texture.colorSpace = full_engine::AssetSourceTextureColorSpace::Linear;
+        break;
+    case full_engine::AssetKind::Unknown:
+    case full_engine::AssetKind::TerrainChunk:
+    case full_engine::AssetKind::Skeleton:
+    case full_engine::AssetKind::SkinnedMesh:
+    case full_engine::AssetKind::Shader:
+        break;
+    }
+    return record;
+}
+
+full_engine::AssetSourceCatalog makeSampleTerrainAssetSourceCatalog()
+{
+    full_engine::AssetSourceCatalog catalog;
+    for (std::uint32_t lodIndex = 0; lodIndex < full_renderer::kMaxTerrainLodLevels; ++lodIndex)
+    {
+        (void)catalog.addSource(sampleTerrainAssetSource(
+            sampleTerrainMeshAssetId(lodIndex),
+            full_engine::AssetKind::Mesh,
+            "sample://terrain/mesh/lod" + std::to_string(lodIndex)));
+    }
+    (void)catalog.addSource(sampleTerrainAssetSource(
+        sampleTerrainMaterialAssetId(),
+        full_engine::AssetKind::Material,
+        "sample://terrain/material/base"));
+    (void)catalog.addSource(sampleTerrainAssetSource(
+        sampleTerrainSplatAssetId(),
+        full_engine::AssetKind::Texture,
+        "sample://terrain/texture/splat"));
+    return catalog;
 }
 
 const char* terrainAssetResolveStatusName(const full_engine::TerrainAssetResolveStatus status) noexcept
@@ -1785,6 +1856,8 @@ void drawTerrainDiagnosticsPanel(
             {
                 terrainResidencyControls.lastImportedManifestAssetCount = manifestReload.load.assetCount;
                 terrainResidencyControls.lastImportedManifestTerrainChunkCount = manifestReload.load.terrainChunkCount;
+                streamingLoop.setAssetSources(makeSampleTerrainAssetSourceCatalog());
+                (void)streamingLoop.planAssetSources();
 
                 const std::vector<full_engine::WorldChunkDesc> sampleWorldDescs =
                     sampleTerrainWorldDescs(sampleTerrainChunks);
@@ -1840,6 +1913,16 @@ void drawTerrainDiagnosticsPanel(
                 manifestLoad.latestLoadRequests().summary.materialRequestCount),
             static_cast<unsigned long long>(
                 manifestLoad.latestLoadRequests().summary.textureRequestCount));
+        ImGui::Text(
+            "Manifest sources: retained %llu, mapped/missing/invalid %llu/%llu/%llu",
+            static_cast<unsigned long long>(
+                loopDiagnostics.assetSources.retainedSourceCount),
+            static_cast<unsigned long long>(
+                loopDiagnostics.assetSources.requests.mappedCount),
+            static_cast<unsigned long long>(
+                loopDiagnostics.assetSources.requests.missingSourceCount),
+            static_cast<unsigned long long>(
+                loopDiagnostics.assetSources.requests.invalidRequestCount));
         ImGui::Text(
             "Manifest load queue: pending %llu, queued/already/invalid %llu/%llu/%llu",
             static_cast<unsigned long long>(manifestLoad.pendingLoadRequestCount()),

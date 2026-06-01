@@ -484,6 +484,24 @@ move gameplay, streaming policy, or editor concepts into renderer internals.
   can be converted into renderer-free asset ID/kind load intent records,
   creating an explicit bridge toward loading without adding IO, async work, or
   renderer-resource creation.
+- Asset source catalogs are in place: loadable mesh/material/texture asset IDs
+  can be mapped to opaque renderer-free source URIs plus typed source
+  descriptors for expected mesh counts/bounds, texture metadata, and material
+  texture references. Manifest load intent can be checked against those source
+  records in request order before any real importer, IO, async work, or
+  renderer-resource creation exists.
+- Asset source upload-intent planning is in place: mapped source descriptors
+  can be translated into public renderer mesh/texture/material upload
+  expectations, including current renderer-contract limits, without source
+  bytes, handle resolution, renderer calls, or resource creation.
+- Retained manifest asset source planning is in place: `TerrainManifestLoadState`
+  can own caller-supplied source metadata, map latest missing-handle load
+  requests to source records, and expose mapped/missing source counters through
+  loop diagnostics without changing scheduler or loader behavior.
+- Sample asset source diagnostics are in place: the terrain debug panel builds
+  a typed sample source catalog for the generated cooked manifest after
+  validation and displays retained/mapped/missing source counts beside manifest
+  load intent diagnostics.
 - Manifest asset load request queueing is in place: load intent records can be
   retained and deduplicated over time in `TerrainManifestLoadState`, exposing
   pending queue counters while still avoiding IO, async work, and renderer

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "engine/assets/AssetSourceCatalog.hpp"
 #include "engine/jobs/JobQueue.hpp"
 #include "engine/renderer_integration/TerrainIntegrationDiagnostics.hpp"
 #include "engine/renderer_integration/TerrainManifestAssetLoadExecutor.hpp"
@@ -144,6 +145,9 @@ struct TerrainStreamingLoopDiagnostics
     /** @brief Latest retained manifest asset-load service diagnostics. */
     TerrainManifestAssetLoadServiceDiagnostics loadService = {};
 
+    /** @brief Latest retained manifest asset source lookup diagnostics. */
+    TerrainManifestAssetSourceDiagnostics assetSources = {};
+
     /** @brief Pending caller-owned completion records retained for external-completion scheduling. */
     std::size_t pendingExternalCompletionCount = 0;
 
@@ -205,6 +209,18 @@ public:
     /** @brief Returns the retained externally produced completion inbox. */
     const TerrainManifestAssetLoadCompletionInbox& externalLoadCompletions() const noexcept;
 
+    /**
+     * @brief Stores renderer-free source metadata on the retained manifest load state.
+     *
+     * The catalog is moved into the loop-owned load state. This does not run
+     * file IO, importers, asset jobs, renderer calls, renderer-resource
+     * creation, or terrain runtime queue application.
+     */
+    void setAssetSources(AssetSourceCatalog sources);
+
+    /** @brief Clears retained source metadata and source diagnostics from the load state. */
+    void clearAssetSources();
+
     /** @brief Returns latest file reload diagnostics. */
     const TerrainManifestFileReloadPlanResult& latestManifestReload() const noexcept;
 
@@ -234,6 +250,17 @@ public:
 
     /** @brief Returns latest external completion inbox publish diagnostics. */
     const TerrainManifestAssetLoadCompletionInboxPublishResult& latestExternalCompletionPublishResult() const noexcept;
+
+    /** @brief Returns latest retained asset source lookup diagnostics. */
+    const TerrainManifestAssetSourceRequestPlan& latestAssetSourceRequests() const noexcept;
+
+    /**
+     * @brief Maps latest retained load requests to retained asset source metadata.
+     *
+     * Missing sources are diagnostics only and do not block scheduler,
+     * load-service, streaming, or runtime update behavior in this slice.
+     */
+    const TerrainManifestAssetSourceRequestPlan& planAssetSources();
 
     /** @brief Returns latest manifest-aware streaming update diagnostics. */
     const TerrainStreamingManifestUpdateResult& latestStreamingUpdate() const noexcept;

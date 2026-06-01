@@ -37,11 +37,11 @@ threaded loader exists.
 - `TerrainStreamingLoopState.hpp/.cpp` - retained synchronous holder for
   manifest load state, streaming runtime state, manifest asset-load jobs, a
   retained manifest asset-load service, and latest coordination diagnostics. It
-  can packetize scheduled load jobs, progress caller-owned load callbacks,
-  reconcile emitted completions back into retained manifest readiness, expose
-  service progress through compact copied diagnostics, and keep a compact
-  fixed-capacity tick history ring for budget/deferred-work visibility across
-  recent frames.
+  can retain source metadata for missing asset-load requests, packetize
+  scheduled load jobs, progress caller-owned load callbacks, reconcile emitted
+  completions back into retained manifest readiness, expose service/source
+  progress through compact copied diagnostics, and keep a compact fixed-capacity
+  tick history ring for budget/deferred-work visibility across recent frames.
 - `TerrainStreamingLoopUpdate.hpp/.cpp` - synchronous tick-shaped helper that
   runs retained manifest-aware streaming coordination and then applies queued
   terrain setup/residency work through `TerrainRuntimeState::updateWithSnapshot`
@@ -70,7 +70,9 @@ worker: it can clear runtime handle mappings, schedule retained load jobs,
 publish completion records from sample-created handles into the retained loop
 inbox, and let a later scheduler tick reconcile those records before streaming
 proceeds. This remains a demo of the handoff contract rather than engine-owned
-worker execution.
+worker execution. The same panel also builds an opaque sample asset source
+catalog after manifest validation and displays retained/mapped/missing source
+counters without treating missing source metadata as a streaming failure.
 
 Worker-facing completion publish helpers live in `renderer_integration` beside
 the inbox, so external worker code can publish batches into an inbox without
@@ -113,10 +115,11 @@ The first real slice is planning-only:
 The retained runtime state can queue safe plan intent through
 `TerrainRuntimeState`. The manifest coordinator connects retained manifest
 values and asset-load intent to that streaming plan. Pending manifest asset-load
-requests can now be mirrored into generic jobs for deterministic callback
-execution. The retained loop state groups those pieces into one synchronous
-state holder while keeping renderer handles, renderer resources, file paths,
-and explicit runtime application caller-owned. The synchronous loop update
+requests can now be mapped to retained opaque source URIs and mirrored into
+generic jobs for deterministic callback execution. The retained loop state
+groups those pieces into one synchronous state holder while keeping renderer
+handles, renderer resources, file paths, and explicit runtime application
+caller-owned. The synchronous loop update
 helper composes that retained state with terrain runtime queue application for
 sample/runtime ticks without owning sample UI mirrors. Per-tick budgets now cap
 setup adds/removes, residency transitions, and terrain renderer lifecycle work

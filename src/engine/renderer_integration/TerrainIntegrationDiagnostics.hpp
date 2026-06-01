@@ -6,6 +6,7 @@
 #include "engine/renderer_integration/TerrainDescriptorBuilder.hpp"
 #include "engine/renderer_integration/TerrainManifestAssetLoadJobCoordinator.hpp"
 #include "engine/renderer_integration/TerrainManifestAssetLoadService.hpp"
+#include "engine/renderer_integration/TerrainManifestAssetSourcePlan.hpp"
 #include "engine/renderer_integration/TerrainManifestRuntimeStaging.hpp"
 #include "engine/renderer_integration/TerrainRenderPrep.hpp"
 #include "engine/renderer_integration/TerrainRendererCommands.hpp"
@@ -153,6 +154,16 @@ struct TerrainManifestAssetLoadServiceDiagnostics
     TerrainManifestAssetReadinessSummary completionReadiness = {};
 };
 
+/** @brief Value snapshot of retained manifest asset source planning. */
+struct TerrainManifestAssetSourceDiagnostics
+{
+    /** @brief Number of source records retained by the load state. */
+    std::size_t retainedSourceCount = 0;
+
+    /** @brief Counters from mapping latest manifest load requests to source records. */
+    TerrainManifestAssetSourceRequestSummary requests = {};
+};
+
 /** @brief Value snapshot of the most recent terrain asset batch resolution. */
 struct TerrainAssetBatchResolveDiagnostics
 {
@@ -275,6 +286,18 @@ TerrainManifestAssetLoadServiceDiagnostics makeTerrainManifestAssetLoadServiceDi
     const TerrainManifestAssetLoadServiceTickResult& tick,
     const TerrainManifestAssetLoadJobCompletionReconcileResult& completionReconcile,
     const TerrainManifestAssetLoadService& service);
+
+/**
+ * @brief Builds reusable diagnostics from manifest asset source planning.
+ *
+ * The returned value copies counters only. It does not retain source records,
+ * request records, manifests, load state, job queues, renderer handles, or
+ * resource descriptors. The source catalog and plan are inspected read-only
+ * and are not mutated.
+ */
+TerrainManifestAssetSourceDiagnostics makeTerrainManifestAssetSourceDiagnostics(
+    const AssetSourceCatalog& sources,
+    const TerrainManifestAssetSourceRequestPlan& plan);
 
 /**
  * @brief Builds reusable diagnostics from a terrain asset batch resolve result.

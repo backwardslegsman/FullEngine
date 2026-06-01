@@ -2,6 +2,8 @@
 
 #include "engine/streaming/TerrainStreamingBudgetPolicy.hpp"
 
+#include <utility>
+
 namespace full_engine
 {
 void TerrainStreamingTickHistory::append(const TerrainStreamingTickEvent& event)
@@ -121,6 +123,18 @@ const TerrainManifestAssetLoadCompletionInbox& TerrainStreamingLoopState::extern
     return externalLoadCompletions_;
 }
 
+void TerrainStreamingLoopState::setAssetSources(AssetSourceCatalog sources)
+{
+    manifestLoad_.setAssetSources(std::move(sources));
+    refreshDiagnostics();
+}
+
+void TerrainStreamingLoopState::clearAssetSources()
+{
+    manifestLoad_.clearAssetSources();
+    refreshDiagnostics();
+}
+
 const TerrainManifestFileReloadPlanResult& TerrainStreamingLoopState::latestManifestReload() const noexcept
 {
     return latestManifestReload_;
@@ -172,6 +186,18 @@ const TerrainManifestAssetLoadCompletionInboxPublishResult&
 TerrainStreamingLoopState::latestExternalCompletionPublishResult() const noexcept
 {
     return latestExternalCompletionPublishResult_;
+}
+
+const TerrainManifestAssetSourceRequestPlan& TerrainStreamingLoopState::latestAssetSourceRequests() const noexcept
+{
+    return manifestLoad_.latestSourceRequests();
+}
+
+const TerrainManifestAssetSourceRequestPlan& TerrainStreamingLoopState::planAssetSources()
+{
+    const TerrainManifestAssetSourceRequestPlan& result = manifestLoad_.planAssetSources();
+    refreshDiagnostics();
+    return result;
 }
 
 const TerrainStreamingManifestUpdateResult& TerrainStreamingLoopState::latestStreamingUpdate() const noexcept
@@ -557,6 +583,9 @@ void TerrainStreamingLoopState::refreshDiagnostics() noexcept
         latestLoadServiceTickResult_,
         latestLoadServiceCompletionReconcileResult_,
         manifestAssetLoadService_);
+    latestDiagnostics_.assetSources = makeTerrainManifestAssetSourceDiagnostics(
+        manifestLoad_.assetSources(),
+        manifestLoad_.latestSourceRequests());
     latestDiagnostics_.pendingExternalCompletionCount = externalLoadCompletions_.completionCount();
     latestDiagnostics_.externalCompletionPublish = latestExternalCompletionPublishResult_.summary;
     latestDiagnostics_.latestStreamingStatus = latestStreamingUpdate_.status;

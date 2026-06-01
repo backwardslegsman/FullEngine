@@ -29,6 +29,9 @@ void TerrainManifestLoadState::setManifest(CookedAssetManifest manifest)
     latestLoadRequestQueueResult_ = {};
     latestLoadConsumeResult_ = {};
     latestLoadExecutorResult_ = {};
+    assetSources_.clear();
+    hasAssetSources_ = false;
+    latestSourceRequests_ = {};
 }
 
 void TerrainManifestLoadState::clearManifest()
@@ -43,6 +46,9 @@ void TerrainManifestLoadState::clearManifest()
     latestLoadRequestQueueResult_ = {};
     latestLoadConsumeResult_ = {};
     latestLoadExecutorResult_ = {};
+    assetSources_.clear();
+    hasAssetSources_ = false;
+    latestSourceRequests_ = {};
 }
 
 bool TerrainManifestLoadState::hasManifest() const noexcept
@@ -95,9 +101,38 @@ const TerrainManifestAssetLoadExecutorResult& TerrainManifestLoadState::latestLo
     return latestLoadExecutorResult_;
 }
 
+bool TerrainManifestLoadState::hasAssetSources() const noexcept
+{
+    return hasAssetSources_;
+}
+
+const AssetSourceCatalog& TerrainManifestLoadState::assetSources() const noexcept
+{
+    return assetSources_;
+}
+
+const TerrainManifestAssetSourceRequestPlan& TerrainManifestLoadState::latestSourceRequests() const noexcept
+{
+    return latestSourceRequests_;
+}
+
 std::size_t TerrainManifestLoadState::pendingLoadRequestCount() const noexcept
 {
     return loadRequestQueue_.requestCount();
+}
+
+void TerrainManifestLoadState::setAssetSources(AssetSourceCatalog sources)
+{
+    assetSources_ = std::move(sources);
+    hasAssetSources_ = true;
+    latestSourceRequests_ = {};
+}
+
+void TerrainManifestLoadState::clearAssetSources()
+{
+    assetSources_.clear();
+    hasAssetSources_ = false;
+    latestSourceRequests_ = {};
 }
 
 const TerrainManifestAssetReadinessPlan& TerrainManifestLoadState::planAssetReadiness(
@@ -106,12 +141,14 @@ const TerrainManifestAssetReadinessPlan& TerrainManifestLoadState::planAssetRead
     latestReadiness_ = hasManifest_ ? planTerrainManifestAssetReadiness(manifest_, handles)
                                     : TerrainManifestAssetReadinessPlan{};
     latestLoadRequests_ = {};
+    latestSourceRequests_ = {};
     return latestReadiness_;
 }
 
 const TerrainManifestAssetLoadRequestPlan& TerrainManifestLoadState::planAssetLoadRequests()
 {
     latestLoadRequests_ = buildTerrainManifestAssetLoadRequestPlan(latestReadiness_);
+    latestSourceRequests_ = {};
     return latestLoadRequests_;
 }
 
@@ -121,12 +158,21 @@ const TerrainManifestAssetLoadQueuePushResult& TerrainManifestLoadState::queueLa
     return latestLoadRequestQueueResult_;
 }
 
+const TerrainManifestAssetSourceRequestPlan& TerrainManifestLoadState::planAssetSources()
+{
+    latestSourceRequests_ = hasAssetSources_ ?
+        buildTerrainManifestAssetSourceRequestPlan(latestLoadRequests_, assetSources_) :
+        TerrainManifestAssetSourceRequestPlan{};
+    return latestSourceRequests_;
+}
+
 const TerrainManifestAssetLoadResult& TerrainManifestLoadState::consumePendingAssetLoadRequests(
     const RendererAssetHandleCatalog& sourceHandles,
     RendererAssetHandleCatalog& destinationHandles)
 {
     latestLoadConsumeResult_ =
         consumeTerrainManifestAssetLoadRequests(loadRequestQueue_, sourceHandles, destinationHandles);
+    latestSourceRequests_ = {};
     return latestLoadConsumeResult_;
 }
 
@@ -138,6 +184,7 @@ const TerrainManifestAssetLoadExecutorResult& TerrainManifestLoadState::executeP
     latestLoadExecutorResult_ =
         executeTerrainManifestAssetLoadRequests(loadRequestQueue_, destinationHandles, callback, userData);
     latestLoadConsumeResult_ = latestLoadExecutorResult_.consume;
+    latestSourceRequests_ = {};
     return latestLoadExecutorResult_;
 }
 

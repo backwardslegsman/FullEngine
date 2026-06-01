@@ -53,6 +53,12 @@ int main()
         assert(!loadService.completionLoadConsumed);
         assert(loadService.completionReconcile.finalReadyHandleCount == 0);
         assert(loadService.completionReadiness.readyCount == 0);
+
+        const full_engine::TerrainManifestAssetSourceDiagnostics assetSources;
+        assert(assetSources.retainedSourceCount == 0);
+        assert(assetSources.requests.mappedCount == 0);
+        assert(assetSources.requests.missingSourceCount == 0);
+        assert(assetSources.requests.invalidRequestCount == 0);
     }
 
     {
@@ -395,6 +401,50 @@ int main()
             full_engine::TerrainManifestAssetLoadJobCompletionReconcileStatus::CompletionPublishFailed);
         assert(diagnostics.completionPublish.catalogRejectedCount == 1);
         assert(!diagnostics.completionLoadConsumed);
+    }
+
+    {
+        full_engine::AssetSourceCatalog sources;
+        full_engine::AssetSourceRecord meshSource;
+        meshSource.id = full_engine::AssetId{80};
+        meshSource.kind = full_engine::AssetKind::Mesh;
+        meshSource.uri = "meshes/source.mesh";
+        meshSource.descriptor.mesh.vertexCount = 4;
+        meshSource.descriptor.mesh.indexCount = 6;
+        meshSource.descriptor.mesh.localBounds.max[0] = 1.0f;
+        meshSource.descriptor.mesh.localBounds.max[1] = 1.0f;
+        meshSource.descriptor.mesh.localBounds.max[2] = 1.0f;
+        assert(sources.addSource(meshSource) == full_engine::AssetSourceCatalogResult::Success);
+
+        full_engine::AssetSourceRecord textureSource;
+        textureSource.id = full_engine::AssetId{90};
+        textureSource.kind = full_engine::AssetKind::Texture;
+        textureSource.uri = "textures/source.dds";
+        textureSource.descriptor.texture.width = 64;
+        textureSource.descriptor.texture.height = 64;
+        textureSource.descriptor.texture.mipCount = 1;
+        textureSource.descriptor.texture.format = full_engine::AssetSourceTextureFormat::Rgba8;
+        textureSource.descriptor.texture.semantic = full_engine::AssetSourceTextureSemantic::Color;
+        textureSource.descriptor.texture.colorSpace = full_engine::AssetSourceTextureColorSpace::Srgb;
+        assert(sources.addSource(textureSource) == full_engine::AssetSourceCatalogResult::Success);
+
+        full_engine::TerrainManifestAssetSourceRequestPlan plan;
+        plan.summary.mappedCount = 3;
+        plan.summary.missingSourceCount = 4;
+        plan.summary.invalidRequestCount = 5;
+        plan.records.push_back({});
+
+        const std::size_t sourceCount = sources.sourceCount();
+        const std::size_t recordCount = plan.records.size();
+        const full_engine::TerrainManifestAssetSourceDiagnostics diagnostics =
+            full_engine::makeTerrainManifestAssetSourceDiagnostics(sources, plan);
+
+        assert(diagnostics.retainedSourceCount == 2);
+        assert(diagnostics.requests.mappedCount == 3);
+        assert(diagnostics.requests.missingSourceCount == 4);
+        assert(diagnostics.requests.invalidRequestCount == 5);
+        assert(sources.sourceCount() == sourceCount);
+        assert(plan.records.size() == recordCount);
     }
 
     {

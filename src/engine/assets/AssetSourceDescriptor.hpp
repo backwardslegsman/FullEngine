@@ -1,0 +1,177 @@
+#pragma once
+
+#include "engine/assets/AssetCatalog.hpp"
+
+#include <array>
+#include <cstdint>
+
+namespace full_engine
+{
+/** @brief Maximum texture asset references carried by one material source descriptor. */
+constexpr std::uint32_t kMaxAssetSourceMaterialTextureRefs = 8;
+
+/**
+ * @brief Renderer-free local-space bounds for a mesh source.
+ *
+ * Values are expressed in mesh-local meters using the engine/renderer Y-up
+ * convention. They are declarative source metadata only and are not derived or
+ * validated against bytes at the source URI.
+ */
+struct AssetSourceBounds
+{
+    /** @brief Minimum local-space corner in meters. */
+    float min[3] = {};
+
+    /** @brief Maximum local-space corner in meters. */
+    float max[3] = {};
+};
+
+/** @brief Renderer-free mesh source metadata. */
+struct AssetSourceMeshDescriptor
+{
+    /** @brief Expected vertex count. Zero is invalid. */
+    std::uint32_t vertexCount = 0;
+
+    /** @brief Expected index count. Zero is invalid. */
+    std::uint32_t indexCount = 0;
+
+    /** @brief Expected mesh-local bounds in meters. */
+    AssetSourceBounds localBounds = {};
+};
+
+/** @brief Renderer-free texture source format contract. */
+enum class AssetSourceTextureFormat
+{
+    Unknown,
+    Rgba8,
+};
+
+/** @brief Renderer-free texture usage semantic. */
+enum class AssetSourceTextureSemantic
+{
+    Unknown,
+    Color,
+    LinearData,
+    NormalMap,
+    TerrainSplat,
+    ColorGradingLut,
+    Debug,
+};
+
+/** @brief Renderer-free color-space expectation for texture source data. */
+enum class AssetSourceTextureColorSpace
+{
+    Unknown,
+    Srgb,
+    Linear,
+    EncodedNormal,
+};
+
+/** @brief Renderer-free texture source metadata. */
+struct AssetSourceTextureDescriptor
+{
+    /** @brief Expected texture width in texels. Zero is invalid. */
+    std::uint32_t width = 0;
+
+    /** @brief Expected texture height in texels. Zero is invalid. */
+    std::uint32_t height = 0;
+
+    /** @brief Expected mip count. Zero is invalid. */
+    std::uint32_t mipCount = 0;
+
+    /** @brief Expected source pixel format. */
+    AssetSourceTextureFormat format = AssetSourceTextureFormat::Unknown;
+
+    /** @brief Expected renderer-facing usage semantic. */
+    AssetSourceTextureSemantic semantic = AssetSourceTextureSemantic::Unknown;
+
+    /** @brief Expected color-space interpretation. */
+    AssetSourceTextureColorSpace colorSpace = AssetSourceTextureColorSpace::Unknown;
+};
+
+/** @brief Renderer-free material source model. */
+enum class AssetSourceMaterialModel
+{
+    Unknown,
+    Basic,
+    TerrainSplat,
+};
+
+/** @brief Renderer-free material alpha/depth policy. */
+enum class AssetSourceMaterialAlphaMode
+{
+    Unknown,
+    Opaque,
+    AlphaTest,
+    AlphaBlend,
+};
+
+/** @brief Renderer-free material source metadata. */
+struct AssetSourceMaterialDescriptor
+{
+    /** @brief Expected material model. */
+    AssetSourceMaterialModel model = AssetSourceMaterialModel::Unknown;
+
+    /** @brief Expected material alpha/depth policy. */
+    AssetSourceMaterialAlphaMode alphaMode = AssetSourceMaterialAlphaMode::Unknown;
+
+    /** @brief Texture asset IDs referenced by this material source. */
+    std::array<AssetId, kMaxAssetSourceMaterialTextureRefs> textureRefs = {};
+
+    /** @brief Number of active texture references in `textureRefs`. */
+    std::uint32_t textureRefCount = 0;
+};
+
+/**
+ * @brief Union-style renderer-free source descriptor for loadable asset kinds.
+ *
+ * Only the descriptor matching the owning `AssetSourceRecord::kind` is active.
+ * Inactive fields are ignored by validation. The descriptor is copied by value
+ * and does not retain source bytes, importer state, renderer handles, or live
+ * renderer resources.
+ */
+struct AssetSourceDescriptor
+{
+    /** @brief Mesh metadata used when the source record kind is `Mesh`. */
+    AssetSourceMeshDescriptor mesh = {};
+
+    /** @brief Texture metadata used when the source record kind is `Texture`. */
+    AssetSourceTextureDescriptor texture = {};
+
+    /** @brief Material metadata used when the source record kind is `Material`. */
+    AssetSourceMaterialDescriptor material = {};
+};
+
+/** @brief Validation result for one active source descriptor. */
+enum class AssetSourceDescriptorValidationResult
+{
+    Success,
+    InvalidKind,
+    InvalidMeshCounts,
+    InvalidMeshBounds,
+    InvalidTextureDimensions,
+    InvalidTextureMipCount,
+    InvalidTextureFormat,
+    InvalidTextureSemantic,
+    InvalidTextureColorSpace,
+    InvalidMaterialModel,
+    InvalidMaterialAlphaMode,
+    InvalidMaterialTextureCount,
+    InvalidMaterialTextureRef,
+};
+
+/** @brief Returns a stable diagnostic name for a descriptor validation result. */
+const char* assetSourceDescriptorValidationResultName(
+    AssetSourceDescriptorValidationResult result) noexcept;
+
+/**
+ * @brief Validates the descriptor field active for `kind`.
+ *
+ * The helper validates only metadata shape. It performs no source URI lookup,
+ * file IO, importer work, dependency catalog lookup, renderer calls, renderer
+ * handle checks, or renderer resource creation.
+ */
+AssetSourceDescriptorValidationResult validateAssetSourceDescriptor(
+    AssetKind kind,
+    const AssetSourceDescriptor& descriptor) noexcept;
+} // namespace full_engine
