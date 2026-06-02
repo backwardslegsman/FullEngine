@@ -495,6 +495,11 @@ move gameplay, streaming policy, or editor concepts into renderer internals.
   renderer-free copied data contract with validation, establishing the first
   concrete importer-output shape without IO, async work, renderer calls, or
   renderer-resource creation.
+- A dev-only loaded asset importer is in place: tiny tracked ASCII mesh,
+  texture, and material fixtures can be parsed into `LoadedAssetPayload` values
+  and validated against `AssetSourceRecord` descriptors. This proves the first
+  source-file-to-payload path while keeping production glTF/PNG/KTX or packed
+  asset import deferred.
 - Asset source upload-intent planning is in place: mapped source descriptors
   can be translated into public renderer mesh/texture/material upload
   expectations, including current renderer-contract limits, without source
@@ -504,15 +509,22 @@ move gameplay, streaming policy, or editor concepts into renderer internals.
 - Loaded asset upload planning is in place: validated CPU mesh/texture payloads
   can be copied into owned renderer descriptor work, and material payloads can
   be translated into renderer material-policy expectations while preserving
-  texture asset IDs for a later handle resolver. This is the first bridge from
-  importer-output data to renderer upload work without calling renderer APIs or
-  creating resources.
-- Loaded asset upload execution is in place: planned mesh/texture upload work
-  can be submitted through caller-owned public renderer `createMesh` and
-  `createTexture` calls, with successful handles recorded in
-  `RendererAssetHandleCatalog`. The executor is ordered and diagnostic, does
-  not roll back renderer resources, and keeps material upload deferred until
-  texture asset IDs can be resolved to renderer handles.
+  texture asset IDs for upload-time handle resolution. This is the first bridge
+  from importer-output data to renderer upload work without calling renderer
+  APIs or creating resources.
+- Loaded asset upload execution is in place: planned mesh/texture/material work
+  can be submitted through caller-owned public renderer `createMesh`,
+  `createTexture`, and `createMaterial` calls, with successful handles recorded
+  in `RendererAssetHandleCatalog`. Material upload resolves texture asset IDs
+  through the same catalog and reports missing texture handles as retryable
+  diagnostics. The executor is ordered and diagnostic, and does not roll back
+  renderer resources.
+- Dev manifest asset-load callback wiring is in place: scheduled
+  `ManifestAssetLoad` work can resolve source metadata, import tiny dev
+  mesh/texture/material files, execute caller-owned renderer uploads, and
+  publish completions through the retained service or external inbox paths.
+  This proves source file -> payload -> upload work -> renderer handle ->
+  reconcile flow without production asset formats or async IO.
 - Retained asset-load service input diagnostics now fold source and
   upload-intent planning into queued service work, so tools can see whether
   each pending service batch has source metadata and renderer-upload-ready
@@ -736,8 +748,9 @@ move gameplay, streaming policy, or editor concepts into renderer internals.
 - Thirty-sixth slice is implemented: the sample debug UI now has a fake
   external worker path for the external-completion scheduler mode. It can
   simulate missing runtime handle mappings, schedule manifest asset-load jobs,
-  emit caller-owned completion records from sample-created handles, and let a
-  later scheduler tick reconcile those completions before streaming.
+  import tracked dev asset fixtures, upload mesh/texture/material resources
+  through the caller-owned renderer, emit caller-owned completion records, and
+  let a later scheduler tick reconcile those completions before streaming.
 - Thirty-seventh slice is implemented: externally produced manifest asset-load
   completions now publish into a retained engine-owned inbox on
   `TerrainStreamingLoopState`, and the scheduler external-completion mode
@@ -749,10 +762,14 @@ move gameplay, streaming policy, or editor concepts into renderer internals.
   has deterministic remove/replace operations, with worker-facing adapter
   wrappers, so stale worker outputs can be discarded or superseded before the
   all-or-nothing reconcile pass.
-- Next slice: add a tiny sample/local worker-output object that uses the
-  worker-facing adapter retry policy directly, demonstrating how a future
-  threaded worker would replace stale completions without UI code holding
-  completion vectors.
+- Fortieth slice is implemented: the sample fake external worker and retained
+  load-service debug path now use the dev importer/upload callback with a
+  fixture-backed sample source catalog, so the UI demonstrates real dev
+  file-to-renderer-handle loading instead of relying on pre-created terrain
+  handles.
+- Next slice: add a small production-facing material authoring bridge for
+  richer material source descriptors, or start replacing the dev ASCII importer
+  with a real mesh/texture importer candidate behind the same payload contract.
 - Initial sample integration is in place: the debug UI can run the
   manifest-aware streaming coordinator once or continuously from camera
   position, display readiness/load/staging/streaming queue counters, and keep

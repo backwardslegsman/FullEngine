@@ -19,8 +19,8 @@ enum class LoadedAssetUploadExecuteStatus
     /** @brief A handle for this asset ID and kind was already present, so no upload ran. */
     AlreadyMapped,
 
-    /** @brief Material upload is deferred until texture asset IDs are resolved to renderer handles. */
-    SkippedMaterial,
+    /** @brief A material texture asset reference did not have a renderer texture handle yet. */
+    MissingTextureHandle,
 
     /** @brief The source upload-plan record was not planned and no upload was attempted. */
     SkippedUnplanned,
@@ -66,6 +66,9 @@ struct LoadedAssetUploadExecuteRecord
     /** @brief Texture handle produced or found when `kind` is Texture. */
     full_renderer::TextureHandle texture = {};
 
+    /** @brief Material handle produced or found when `kind` is Material. */
+    full_renderer::MaterialHandle material = {};
+
     /** @brief Result from inserting a produced handle into the renderer asset catalog. */
     RendererAssetHandleCatalogResult catalogResult = RendererAssetHandleCatalogResult::NotFound;
 };
@@ -79,11 +82,14 @@ struct LoadedAssetUploadExecuteSummary
     /** @brief Number of texture uploads that produced and cataloged renderer handles. */
     std::size_t uploadedTextureCount = 0;
 
+    /** @brief Number of material uploads that produced and cataloged renderer handles. */
+    std::size_t uploadedMaterialCount = 0;
+
     /** @brief Number of records skipped because the catalog already had a mapping. */
     std::size_t alreadyMappedCount = 0;
 
-    /** @brief Number of material records skipped by this v1 executor. */
-    std::size_t skippedMaterialCount = 0;
+    /** @brief Number of material records waiting for texture handles. */
+    std::size_t missingTextureHandleCount = 0;
 
     /** @brief Number of records skipped because the source upload plan did not plan them. */
     std::size_t skippedUnplannedCount = 0;
@@ -109,14 +115,14 @@ struct LoadedAssetUploadExecuteResult
 };
 
 /**
- * @brief Executes planned loaded mesh and texture uploads through public renderer APIs.
+ * @brief Executes planned loaded mesh, texture, and material uploads through public renderer APIs.
  *
  * The function is synchronous and must be called on the renderer owner thread
- * at a point where `IRenderer::createMesh` and `IRenderer::createTexture` are
- * valid. Successful mesh and texture handles are copied into `handles`.
- * Existing mappings are preserved and are not replaced. Material records are
- * diagnostic-only until a later resolver can translate material texture asset
- * IDs into renderer texture handles.
+ * at a point where `IRenderer::createMesh`, `IRenderer::createTexture`, and
+ * `IRenderer::createMaterial` are valid. Successful handles are copied into
+ * `handles`. Existing mappings are preserved and are not replaced. Material
+ * texture asset IDs are resolved against `handles`; missing texture mappings
+ * are reported as retryable diagnostics and do not call `createMaterial`.
  *
  * This executor does not mutate load state, job queues, manifests, source
  * catalogs, or terrain runtime state. It also does not roll back renderer

@@ -19,12 +19,16 @@ void incrementSummary(
         {
             ++summary.uploadedTextureCount;
         }
+        else if (record.kind == AssetKind::Material)
+        {
+            ++summary.uploadedMaterialCount;
+        }
         break;
     case LoadedAssetUploadExecuteStatus::AlreadyMapped:
         ++summary.alreadyMappedCount;
         break;
-    case LoadedAssetUploadExecuteStatus::SkippedMaterial:
-        ++summary.skippedMaterialCount;
+    case LoadedAssetUploadExecuteStatus::MissingTextureHandle:
+        ++summary.missingTextureHandleCount;
         break;
     case LoadedAssetUploadExecuteStatus::SkippedUnplanned:
         ++summary.skippedUnplannedCount;
@@ -115,6 +119,85 @@ LoadedAssetUploadExecuteRecord executeTextureUpload(
     return record;
 }
 
+bool buildMaterialDesc(
+    const LoadedAssetUploadRecord& source,
+    const RendererAssetHandleCatalog& handles,
+    full_renderer::MaterialDesc& desc) noexcept
+{
+    desc.kind = source.material.kind;
+    desc.alphaMode = source.material.alphaMode;
+
+    if (desc.kind == full_renderer::MaterialKind::TerrainSplat)
+    {
+        if (source.material.textureRefs.size() > full_renderer::kMaxTerrainMaterialLayers)
+        {
+            return false;
+        }
+
+        for (std::size_t index = 0; index < source.material.textureRefs.size(); ++index)
+        {
+            const full_renderer::TextureHandle* const handle =
+                handles.findTextureHandle(source.material.textureRefs[index]);
+            if (handle == nullptr)
+            {
+                return false;
+            }
+            desc.terrain.layers[index].albedoTexture = *handle;
+        }
+    }
+    else
+    {
+        for (const AssetId textureRef : source.material.textureRefs)
+        {
+            if (handles.findTextureHandle(textureRef) == nullptr)
+            {
+                return false;
+            }
+        }
+    }
+
+    return true;
+}
+
+LoadedAssetUploadExecuteRecord executeMaterialUpload(
+    full_renderer::IRenderer& renderer,
+    const LoadedAssetUploadRecord& source,
+    RendererAssetHandleCatalog& handles)
+{
+    LoadedAssetUploadExecuteRecord record = makeBaseRecord(source);
+
+    const full_renderer::MaterialHandle* const existing = handles.findMaterialHandle(source.id);
+    if (existing != nullptr)
+    {
+        record.status = LoadedAssetUploadExecuteStatus::AlreadyMapped;
+        record.material = *existing;
+        record.catalogResult = RendererAssetHandleCatalogResult::AlreadyExists;
+        return record;
+    }
+
+    full_renderer::MaterialDesc desc;
+    if (!buildMaterialDesc(source, handles, desc))
+    {
+        record.status = LoadedAssetUploadExecuteStatus::MissingTextureHandle;
+        return record;
+    }
+
+    const full_renderer::MaterialHandle created = renderer.createMaterial(desc);
+    record.material = created;
+    if (!full_renderer::isValid(created))
+    {
+        record.status = LoadedAssetUploadExecuteStatus::RendererFailed;
+        return record;
+    }
+
+    record.catalogResult = handles.addMaterialHandle(source.id, created);
+    record.status =
+        record.catalogResult == RendererAssetHandleCatalogResult::Success ?
+        LoadedAssetUploadExecuteStatus::Uploaded :
+        LoadedAssetUploadExecuteStatus::CatalogRejected;
+    return record;
+}
+
 LoadedAssetUploadExecuteRecord executeRecord(
     full_renderer::IRenderer& renderer,
     const LoadedAssetUploadRecord& source,
@@ -134,8 +217,7 @@ LoadedAssetUploadExecuteRecord executeRecord(
     case AssetKind::Texture:
         return executeTextureUpload(renderer, source, handles);
     case AssetKind::Material:
-        record.status = LoadedAssetUploadExecuteStatus::SkippedMaterial;
-        return record;
+        return executeMaterialUpload(renderer, source, handles);
     case AssetKind::Unknown:
     case AssetKind::TerrainChunk:
     case AssetKind::Skeleton:
@@ -159,8 +241,8 @@ const char* loadedAssetUploadExecuteStatusName(
         return "Uploaded";
     case LoadedAssetUploadExecuteStatus::AlreadyMapped:
         return "AlreadyMapped";
-    case LoadedAssetUploadExecuteStatus::SkippedMaterial:
-        return "SkippedMaterial";
+    case LoadedAssetUploadExecuteStatus::MissingTextureHandle:
+        return "MissingTextureHandle";
     case LoadedAssetUploadExecuteStatus::SkippedUnplanned:
         return "SkippedUnplanned";
     case LoadedAssetUploadExecuteStatus::RendererFailed:

@@ -1,0 +1,7 @@
+ftexdev 1
+size 2 2
+mip 1
+format Rgba8
+semantic TerrainSplat
+colorspace Linear
+bytes 16 255 0 0 255 0 255 0 255 0 0 255 255 255 255 255 255

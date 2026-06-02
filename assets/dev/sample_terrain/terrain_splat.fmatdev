@@ -1,0 +1,4 @@
+fmatdev 1
+model TerrainSplat
+alpha Opaque
+textures 1 300000

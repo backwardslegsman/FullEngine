@@ -82,7 +82,7 @@ full_engine::LoadedAssetPayload materialPayload(const std::uint64_t id = 30)
     full_engine::LoadedMaterialAsset material;
     material.id = asset(id);
     material.model = full_engine::AssetSourceMaterialModel::TerrainSplat;
-    material.alphaMode = full_engine::AssetSourceMaterialAlphaMode::AlphaTest;
+    material.alphaMode = full_engine::AssetSourceMaterialAlphaMode::Opaque;
     material.textureRefs[0] = asset(20);
     material.textureRefCount = 1;
 
@@ -109,6 +109,7 @@ public:
     int materialCreateCalls = 0;
     std::uint32_t lastMeshVertexCount = 0;
     std::uint32_t lastTextureWidth = 0;
+    full_renderer::MaterialDesc lastMaterial = {};
 
     full_renderer::RendererResult initialize(const full_renderer::RendererInitDesc&) override
     {
@@ -154,9 +155,10 @@ public:
 
     void destroyTexture(full_renderer::TextureHandle) noexcept override {}
 
-    full_renderer::MaterialHandle createMaterial(const full_renderer::MaterialDesc&) override
+    full_renderer::MaterialHandle createMaterial(const full_renderer::MaterialDesc& desc) override
     {
         ++materialCreateCalls;
+        lastMaterial = desc;
         return nextMaterial;
     }
 
@@ -249,7 +251,26 @@ void testUploadsMeshAndTexture(std::vector<std::string>& failures)
     expect(handles.findTextureHandle(asset(20)) != nullptr && handles.findTextureHandle(asset(20))->id == 201, "texture upload catalogs returned handle", failures);
 }
 
-void testMaterialIsSkipped(std::vector<std::string>& failures)
+void testMaterialUploadsAfterTextureResolution(std::vector<std::string>& failures)
+{
+    const std::vector<full_engine::LoadedAssetPayload> payloads = {materialPayload()};
+    const full_engine::LoadedAssetUploadPlan plan = uploadPlan(payloads);
+
+    FakeRenderer renderer;
+    full_engine::RendererAssetHandleCatalog handles;
+    (void)handles.addTextureHandle(asset(20), {601});
+    const full_engine::LoadedAssetUploadExecuteResult result =
+        full_engine::executeLoadedAssetUploadPlan(renderer, plan, handles);
+
+    expect(result.records[0].status == full_engine::LoadedAssetUploadExecuteStatus::Uploaded, "material upload reports uploaded", failures);
+    expect(result.summary.uploadedMaterialCount == 1, "material upload summary increments", failures);
+    expect(renderer.materialCreateCalls == 1, "material upload calls renderer", failures);
+    expect(renderer.lastMaterial.kind == full_renderer::MaterialKind::TerrainSplat, "material upload maps kind", failures);
+    expect(renderer.lastMaterial.terrain.layers[0].albedoTexture.id == 601, "material upload resolves texture ref", failures);
+    expect(handles.findMaterialHandle(asset(30)) != nullptr && handles.findMaterialHandle(asset(30))->id == 301, "material upload catalogs returned handle", failures);
+}
+
+void testMaterialMissingTextureIsRetryable(std::vector<std::string>& failures)
 {
     const std::vector<full_engine::LoadedAssetPayload> payloads = {materialPayload()};
     const full_engine::LoadedAssetUploadPlan plan = uploadPlan(payloads);
@@ -259,10 +280,10 @@ void testMaterialIsSkipped(std::vector<std::string>& failures)
     const full_engine::LoadedAssetUploadExecuteResult result =
         full_engine::executeLoadedAssetUploadPlan(renderer, plan, handles);
 
-    expect(result.records[0].status == full_engine::LoadedAssetUploadExecuteStatus::SkippedMaterial, "material upload is skipped", failures);
-    expect(result.summary.skippedMaterialCount == 1, "material skipped summary increments", failures);
-    expect(renderer.materialCreateCalls == 0, "material skip does not call renderer", failures);
-    expect(handles.materialHandleCount() == 0, "material skip does not mutate catalog", failures);
+    expect(result.records[0].status == full_engine::LoadedAssetUploadExecuteStatus::MissingTextureHandle, "missing material texture reports retryable status", failures);
+    expect(result.summary.missingTextureHandleCount == 1, "missing material texture summary increments", failures);
+    expect(renderer.materialCreateCalls == 0, "missing texture does not call renderer", failures);
+    expect(handles.materialHandleCount() == 0, "missing texture does not mutate material catalog", failures);
 }
 
 void testExistingMappingsSkipUpload(std::vector<std::string>& failures)
@@ -276,6 +297,7 @@ void testExistingMappingsSkipUpload(std::vector<std::string>& failures)
     full_engine::RendererAssetHandleCatalog handles;
     (void)handles.addMeshHandle(asset(10), {501});
     (void)handles.addTextureHandle(asset(20), {601});
+    (void)handles.addMaterialHandle(asset(30), {701});
 
     const full_engine::LoadedAssetUploadExecuteResult result =
         full_engine::executeLoadedAssetUploadPlan(renderer, plan, handles);
@@ -369,6 +391,7 @@ void testMixedOrderAndStatusNames(std::vector<std::string>& failures)
 
     FakeRenderer renderer;
     full_engine::RendererAssetHandleCatalog handles;
+    (void)handles.addTextureHandle(asset(20), {401});
     const full_engine::LoadedAssetUploadExecuteResult result =
         full_engine::executeLoadedAssetUploadPlan(renderer, plan, handles);
 
@@ -376,13 +399,13 @@ void testMixedOrderAndStatusNames(std::vector<std::string>& failures)
     expect(result.records[1].id == asset(2), "mixed executor preserves second record order", failures);
     expect(result.records[2].id == asset(3), "mixed executor preserves third record order", failures);
     expect(result.summary.uploadedTextureCount == 1, "mixed executor counts texture upload", failures);
-    expect(result.summary.skippedMaterialCount == 1, "mixed executor counts material skip", failures);
+    expect(result.summary.uploadedMaterialCount == 1, "mixed executor counts material upload", failures);
     expect(result.summary.uploadedMeshCount == 1, "mixed executor counts mesh upload", failures);
 
     const full_engine::LoadedAssetUploadExecuteStatus statuses[] = {
         full_engine::LoadedAssetUploadExecuteStatus::Uploaded,
         full_engine::LoadedAssetUploadExecuteStatus::AlreadyMapped,
-        full_engine::LoadedAssetUploadExecuteStatus::SkippedMaterial,
+        full_engine::LoadedAssetUploadExecuteStatus::MissingTextureHandle,
         full_engine::LoadedAssetUploadExecuteStatus::SkippedUnplanned,
         full_engine::LoadedAssetUploadExecuteStatus::RendererFailed,
         full_engine::LoadedAssetUploadExecuteStatus::CatalogRejected,
@@ -402,7 +425,8 @@ int main()
     std::vector<std::string> failures;
 
     testUploadsMeshAndTexture(failures);
-    testMaterialIsSkipped(failures);
+    testMaterialUploadsAfterTextureResolution(failures);
+    testMaterialMissingTextureIsRetryable(failures);
     testExistingMappingsSkipUpload(failures);
     testRendererFailureDoesNotMutateCatalog(failures);
     testCatalogRejectedPreservesExistingMappings(failures);

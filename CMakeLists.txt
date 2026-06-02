@@ -119,6 +119,8 @@ add_library(full_engine STATIC
     src/engine/assets/CookedAssetManifestSummary.hpp
     src/engine/assets/LoadedAssetPayload.cpp
     src/engine/assets/LoadedAssetPayload.hpp
+    src/engine/assets/LoadedAssetImporter.cpp
+    src/engine/assets/LoadedAssetImporter.hpp
     src/engine/assets/TerrainAssetCatalog.cpp
     src/engine/assets/TerrainAssetCatalog.hpp
     src/engine/assets/TerrainAssetDependencyValidator.cpp
@@ -159,6 +161,8 @@ add_library(full_engine STATIC
     src/engine/renderer_integration/TerrainManifestAssetLoadCompletionAdapter.hpp
     src/engine/renderer_integration/TerrainManifestAssetLoadCompletionInbox.cpp
     src/engine/renderer_integration/TerrainManifestAssetLoadCompletionInbox.hpp
+    src/engine/renderer_integration/TerrainManifestDevAssetLoadCallback.cpp
+    src/engine/renderer_integration/TerrainManifestDevAssetLoadCallback.hpp
     src/engine/renderer_integration/TerrainManifestAssetLoadJobCoordinator.cpp
     src/engine/renderer_integration/TerrainManifestAssetLoadJobCoordinator.hpp
     src/engine/renderer_integration/TerrainManifestAssetLoadJobCompletions.cpp
@@ -1202,9 +1206,11 @@ if(FULL_RENDERER_BUILD_SAMPLE)
             ${FULL_RENDERER_SDL3_TARGET}
     )
     file(TO_CMAKE_PATH "${FULL_RENDERER_SHADER_OUTPUT_DIR}" FULL_RENDERER_SAMPLE_SHADER_DIR)
+    file(TO_CMAKE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/assets/dev/sample_terrain" FULL_RENDERER_SAMPLE_DEV_ASSET_DIR)
     target_compile_definitions(full_renderer_sample
         PRIVATE
             FULL_RENDERER_SAMPLE_SHADER_DIR="${FULL_RENDERER_SAMPLE_SHADER_DIR}"
+            FULL_RENDERER_SAMPLE_DEV_ASSET_DIR="${FULL_RENDERER_SAMPLE_DEV_ASSET_DIR}"
     )
     target_include_directories(full_renderer_sample
         PRIVATE

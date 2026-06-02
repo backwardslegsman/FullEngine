@@ -1,7 +1,13 @@
 # Asset Pipeline Tooling
 
-No importer or asset database tooling is implemented yet. The current renderer
-milestone defines shared contracts and runtime descriptor validation only.
+Production importer or asset database tooling is not implemented yet. The
+engine asset layer now has a tiny dev-only ASCII importer used by tests to
+prove `AssetSourceRecord -> LoadedAssetPayload` flow, but that format is not a
+shipping content contract. Renderer integration can now use that dev importer
+from scheduled manifest asset-load work to produce mesh/texture/material
+handles through caller-owned renderer uploads and the existing completion
+reconcile path. glTF/PNG/KTX, packed assets, async IO, richer material
+authoring, and production packaging are still future work.
 
 Future validation tools should consume authored assets, convert them to the
 renderer-facing contracts in `docs/assets.md`, and report actionable errors

@@ -155,17 +155,25 @@ Implemented pieces:
 - renderer-free loaded asset payloads for mesh, texture, and material data,
   giving future importers a copied CPU data contract before renderer upload,
   handle creation, async IO, or renderer-resource ownership
+- a dev-only loaded asset importer that reads tiny tracked ASCII mesh,
+  texture, and material fixtures into `LoadedAssetPayload` values, proving the
+  first real source-file-to-payload path without adopting a production asset
+  format
 - upload-intent planning that translates mapped source descriptors into public
   renderer mesh/texture/material upload expectations without source bytes,
   renderer handles, renderer calls, or resource creation
 - loaded-payload upload planning that translates validated CPU mesh/texture
-  payloads into owned renderer descriptor work and material upload
-  expectations, ready for a later caller-owned upload executor without
-  invoking renderer APIs or creating resources
-- loaded-payload upload execution that consumes that planned mesh/texture work
-  through caller-owned public renderer `createMesh`/`createTexture` calls and
-  records successful handles in `RendererAssetHandleCatalog`, while leaving
-  material handle resolution and renderer resource destruction policy external
+  payloads into owned renderer descriptor work and material payloads into
+  texture-ID-based material upload expectations without invoking renderer APIs
+  or creating resources
+- loaded-payload upload execution that consumes planned mesh/texture/material
+  work through caller-owned public renderer `createMesh`, `createTexture`, and
+  `createMaterial` calls, resolving material texture asset IDs through
+  `RendererAssetHandleCatalog` before recording successful handles
+- a dev manifest asset-load callback that resolves retained source metadata,
+  imports tiny dev mesh/texture/material files, executes caller-owned renderer
+  uploads, and publishes handle completions through the existing retained
+  service and inbox/reconcile paths
 - retained manifest asset source planning that stores caller-supplied source
   catalogs on `TerrainManifestLoadState` and exposes mapped/missing source
   counters plus renderer upload-intent counters through loop diagnostics
@@ -354,12 +362,13 @@ setup/residency intent from the camera through the retained streaming loop
 update helper, can select adaptive automatic streaming budget profiles from
 recent deferred-work pressure or use manual debug budget overrides, can run the
 manifest asset load job coordinator from
-the debug panel using its sample-created renderer handles as the external load
-callback source, can optionally drive camera streaming through the
-policy-driven scheduler tick, can run that scheduler load phase through the
-retained load-service path or an external-completion handoff, includes a fake
-external worker panel that emits completion records from sample-created handles
-into a retained engine-owned inbox for that handoff, displays retained
+the debug panel using caller-owned callback sources, can optionally drive
+camera streaming through the policy-driven scheduler tick, can run that
+scheduler load phase through the retained load-service path or an
+external-completion handoff, includes a fake external worker panel that imports
+tracked dev asset fixture files, uploads them through the caller-owned
+renderer, and emits completion records into a retained engine-owned inbox for
+that handoff, displays retained
 load-service and completion-inbox progress through compact diagnostics
 snapshots, exposes worker-facing helpers for publishing completion batches
 without depending on streaming loop state, can export retained streaming tick history, and
@@ -370,12 +379,12 @@ Still future work:
 - async loading, streaming jobs, and IO
 - a scheduler that consumes selected budget profiles or offline summary tooling
   for imported streaming tick traces
-- production cooked manifest formats, importers, and renderer-resource
-  creation policy
+- production cooked manifest formats, glTF/PNG/KTX or packed importers, and
+  renderer-resource creation policy
 - production terrain streaming policy and editor-owned residency controls
 - real engine-owned mesh/material/texture creation and lifetime policy
-- material upload execution once material texture asset IDs can be resolved to
-  renderer texture handles
+- production material import/rendering policy beyond the current basic and
+  terrain-splat descriptor bridge
 - renderer descriptor conversion for non-terrain draws and cameras
 - scene/entity ownership, gameplay simulation, persistence, and editor tooling
 

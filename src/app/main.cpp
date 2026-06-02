@@ -15,6 +15,7 @@
 #include "engine/renderer_integration/TerrainManifestAssetLoadJobCompletions.hpp"
 #include "engine/renderer_integration/TerrainManifestAssetLoadJobCoordinator.hpp"
 #include "engine/renderer_integration/TerrainManifestAssetLoadJobWorkPackets.hpp"
+#include "engine/renderer_integration/TerrainManifestDevAssetLoadCallback.hpp"
 #include "engine/renderer_integration/TerrainManifestFileLoad.hpp"
 #include "engine/renderer_integration/TerrainManifestLoadState.hpp"
 #include "engine/renderer_integration/TerrainManifestRuntimeStaging.hpp"
@@ -80,6 +81,10 @@
 
 #ifndef FULL_RENDERER_SAMPLE_SHADER_DIR
 #define FULL_RENDERER_SAMPLE_SHADER_DIR "shaders/dx11"
+#endif
+
+#ifndef FULL_RENDERER_SAMPLE_DEV_ASSET_DIR
+#define FULL_RENDERER_SAMPLE_DEV_ASSET_DIR "assets/dev/sample_terrain"
 #endif
 
 namespace
@@ -829,6 +834,17 @@ full_engine::AssetId sampleTerrainSplatAssetId() noexcept
     return full_engine::AssetId{300000ULL};
 }
 
+std::string sampleDevAssetPath(const char* const filename)
+{
+    std::string path = FULL_RENDERER_SAMPLE_DEV_ASSET_DIR;
+    if (!path.empty() && path.back() != '/' && path.back() != '\\')
+    {
+        path.push_back('/');
+    }
+    path += filename;
+    return path;
+}
+
 full_engine::AssetSourceRecord sampleTerrainAssetSource(
     const full_engine::AssetId id,
     const full_engine::AssetKind kind,
@@ -860,8 +876,8 @@ full_engine::AssetSourceRecord sampleTerrainAssetSource(
         record.descriptor.material.textureRefCount = 1;
         break;
     case full_engine::AssetKind::Texture:
-        record.descriptor.texture.width = 16;
-        record.descriptor.texture.height = 16;
+        record.descriptor.texture.width = 2;
+        record.descriptor.texture.height = 2;
         record.descriptor.texture.mipCount = 1;
         record.descriptor.texture.format = full_engine::AssetSourceTextureFormat::Rgba8;
         record.descriptor.texture.semantic = full_engine::AssetSourceTextureSemantic::TerrainSplat;
@@ -885,16 +901,16 @@ full_engine::AssetSourceCatalog makeSampleTerrainAssetSourceCatalog()
         (void)catalog.addSource(sampleTerrainAssetSource(
             sampleTerrainMeshAssetId(lodIndex),
             full_engine::AssetKind::Mesh,
-            "sample://terrain/mesh/lod" + std::to_string(lodIndex)));
+            sampleDevAssetPath("terrain_quad.fmeshdev")));
     }
     (void)catalog.addSource(sampleTerrainAssetSource(
         sampleTerrainMaterialAssetId(),
         full_engine::AssetKind::Material,
-        "sample://terrain/material/base"));
+        sampleDevAssetPath("terrain_splat.fmatdev")));
     (void)catalog.addSource(sampleTerrainAssetSource(
         sampleTerrainSplatAssetId(),
         full_engine::AssetKind::Texture,
-        "sample://terrain/texture/splat"));
+        sampleDevAssetPath("terrain_splat_2x2.ftexdev")));
     return catalog;
 }
 
@@ -1028,28 +1044,32 @@ void clearSampleExternalManifestAssetWorkerOutput(
 
 void runSampleExternalManifestAssetWorker(
     const full_engine::EngineJobQueue& scheduledJobs,
-    const full_engine::RendererAssetHandleCatalog& completedHandles,
+    const full_engine::AssetSourceCatalog& sources,
+    full_renderer::IRenderer& renderer,
+    const full_engine::RendererAssetHandleCatalog& alreadyLoadedHandles,
+    full_engine::RendererAssetHandleCatalog& completedHandles,
     full_engine::TerrainManifestAssetLoadCompletionInbox& destination,
     SampleExternalManifestAssetWorkerOutput& output)
 {
-    output.packets = full_engine::buildTerrainManifestAssetLoadJobWorkPackets(scheduledJobs);
+    full_engine::TerrainManifestDevAssetLoadContext context;
+    context.sources = &sources;
+    context.renderer = &renderer;
+    context.completedHandles = &completedHandles;
+    context.alreadyLoadedHandles = &alreadyLoadedHandles;
 
-    std::vector<full_engine::TerrainManifestAssetLoadJobCompletion> completions;
-    completions.reserve(output.packets.packets.size());
-    for (const full_engine::TerrainManifestAssetLoadJobWorkPacket& packet : output.packets.packets)
+    constexpr int kMaxWorkerPasses = 3;
+    for (int pass = 0; pass < kMaxWorkerPasses; ++pass)
     {
-        full_engine::TerrainManifestAssetLoadJobCompletion completion;
-        completion.request = packet.request;
-        completion.output = sampleTerrainManifestAssetLoadCallback(
-            packet.request,
-            const_cast<full_engine::RendererAssetHandleCatalog*>(&completedHandles));
-        completions.push_back(completion);
+        const full_engine::TerrainManifestDevAssetLoadWorkerResult passResult =
+            full_engine::runTerrainManifestDevAssetLoadWorker(scheduledJobs, destination, context);
+        output.packets = passResult.packets;
+        output.publish = passResult.publish;
+        if (passResult.publish.publish.summary.missingHandleCount == 0 ||
+            passResult.packets.summary.packetizedCount == 0)
+        {
+            break;
+        }
     }
-
-    output.publish = full_engine::publishTerrainManifestAssetLoadWorkerCompletions(
-        destination,
-        completions.data(),
-        completions.size());
 }
 
 bool queueSampleTerrainSetupAdds(
@@ -1713,7 +1733,7 @@ void drawTerrainDiagnosticsPanel(
     const full_engine::AssetCatalog& engineAssetCatalog,
     const full_engine::TerrainAssetCatalog& engineTerrainAssets,
     full_engine::RendererAssetHandleCatalog& engineTerrainAssetHandles,
-    const full_engine::RendererAssetHandleCatalog& sampleCompletedTerrainAssetHandles,
+    full_engine::RendererAssetHandleCatalog& sampleCompletedTerrainAssetHandles,
     const full_engine::TerrainResourceCatalog& engineTerrainResources,
     const full_engine::ChunkTerrainHandleMap& engineTerrainHandles,
     const full_engine::CookedAssetManifest& sampleTerrainManifest,
@@ -2046,6 +2066,9 @@ void drawTerrainDiagnosticsPanel(
         {
             runSampleExternalManifestAssetWorker(
                 streamingLoop.manifestAssetLoadJobs(),
+                manifestLoad.assetSources(),
+                renderer,
+                engineTerrainAssetHandles,
                 sampleCompletedTerrainAssetHandles,
                 streamingLoop.externalLoadCompletions(),
                 terrainResidencyControls.externalWorker);
@@ -2094,12 +2117,32 @@ void drawTerrainDiagnosticsPanel(
         if (ImGui::Button("Reconcile Load Jobs"))
         {
             (void)streamingLoop.enqueueScheduledAssetLoadWork();
-            const std::size_t pendingServiceLoads =
-                streamingLoop.latestDiagnostics().loadService.retainedPendingCount;
-            (void)streamingLoop.tickAssetLoadService(
-                pendingServiceLoads,
-                sampleTerrainManifestAssetLoadCallback,
-                &engineTerrainAssetHandles);
+            full_engine::TerrainManifestDevAssetLoadContext context;
+            context.sources = &manifestLoad.assetSources();
+            context.renderer = &renderer;
+            context.completedHandles = &sampleCompletedTerrainAssetHandles;
+            context.alreadyLoadedHandles = &engineTerrainAssetHandles;
+            constexpr int kMaxServicePasses = 3;
+            for (int pass = 0; pass < kMaxServicePasses; ++pass)
+            {
+                const std::size_t pendingServiceLoads =
+                    streamingLoop.latestDiagnostics().loadService.retainedPendingCount;
+                if (pendingServiceLoads == 0)
+                {
+                    break;
+                }
+                (void)streamingLoop.tickAssetLoadService(
+                    pendingServiceLoads,
+                    full_engine::terrainManifestDevAssetLoadCallback,
+                    &context);
+                const full_engine::TerrainManifestAssetLoadServiceDiagnostics& passDiagnostics =
+                    streamingLoop.latestDiagnostics().loadService;
+                if (passDiagnostics.tick.loadedCount == 0 ||
+                    passDiagnostics.tick.missingCount == 0)
+                {
+                    break;
+                }
+            }
             (void)streamingLoop.reconcileAssetLoadServiceCompletions(engineTerrainAssetHandles);
             const full_engine::TerrainManifestAssetLoadServiceDiagnostics& serviceDiagnostics =
                 streamingLoop.latestDiagnostics().loadService;
@@ -4860,8 +4903,7 @@ int main(int argc, char** argv)
         renderer->shutdown();
         return 1;
     }
-    const full_engine::RendererAssetHandleCatalog sampleCompletedTerrainAssetHandles =
-        engineTerrainAssetHandles;
+    full_engine::RendererAssetHandleCatalog sampleCompletedTerrainAssetHandles;
 
     const std::vector<full_engine::ChunkId> initialTerrainChunkIds =
         sampleTerrainChunkIds(sampleTerrainChunks);
