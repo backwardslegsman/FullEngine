@@ -11,6 +11,14 @@ function(add_full_renderer_test target source)
     )
 
     add_test(NAME ${target} COMMAND ${target})
+
+    if(WIN32 AND DEFINED VCPKG_INSTALLED_DIR AND DEFINED VCPKG_TARGET_TRIPLET)
+        add_custom_command(TARGET ${target} POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_directory
+                "$<$<CONFIG:Debug>:${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/debug/bin>$<$<NOT:$<CONFIG:Debug>>:${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/bin>"
+                $<TARGET_FILE_DIR:${target}>
+        )
+    endif()
 endfunction()
 
 function(add_full_engine_test target source)
@@ -39,6 +47,10 @@ add_full_engine_test(full_engine_asset_source_upload_intent_tests engine_asset_s
 add_full_engine_test(full_engine_loaded_asset_importer_tests engine_loaded_asset_importer_test.cpp)
 target_compile_definitions(full_engine_loaded_asset_importer_tests PRIVATE
     FULL_RENDERER_TEST_FIXTURE_DIR="${PROJECT_SOURCE_DIR}/tests/fixtures/assets/dev"
+)
+add_full_engine_test(full_engine_assimp_loaded_asset_importer_tests engine_assimp_loaded_asset_importer_test.cpp)
+target_compile_definitions(full_engine_assimp_loaded_asset_importer_tests PRIVATE
+    FULL_RENDERER_TEST_GLTF_FIXTURE_DIR="${PROJECT_SOURCE_DIR}/tests/fixtures/assets/gltf"
 )
 add_full_engine_test(full_engine_loaded_asset_payload_tests engine_loaded_asset_payload_test.cpp)
 add_full_engine_test(full_engine_loaded_asset_upload_executor_tests engine_loaded_asset_upload_executor_test.cpp)

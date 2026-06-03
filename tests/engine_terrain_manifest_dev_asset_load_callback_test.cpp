@@ -2,6 +2,7 @@
 
 #include "engine/renderer_integration/TerrainManifestAssetLoadJobCoordinator.hpp"
 #include "engine/renderer_integration/TerrainManifestLoadState.hpp"
+#include "engine/streaming/TerrainStreamingLoopUpdate.hpp"
 
 #include <cstdlib>
 #include <cstdint>
@@ -149,6 +150,15 @@ full_engine::TerrainChunkAssetDesc terrainAssets()
     return desc;
 }
 
+full_engine::WorldChunkDesc worldDesc()
+{
+    full_engine::WorldChunkDesc desc;
+    desc.id = {1, 0, 0};
+    desc.bounds.min = {16.0, 0.0, 0.0};
+    desc.bounds.max = {32.0, 4.0, 16.0};
+    return desc;
+}
+
 full_engine::CookedAssetManifest manifest()
 {
     full_engine::CookedAssetManifest result;
@@ -159,15 +169,38 @@ full_engine::CookedAssetManifest manifest()
     return result;
 }
 
+full_engine::TerrainRuntimeStateSnapshot missingSnapshot()
+{
+    full_engine::TerrainRuntimeChunkState state;
+    state.id = {1, 0, 0};
+    state.readiness = full_engine::TerrainRuntimeChunkReadiness::MissingRegistry;
+
+    full_engine::TerrainRuntimeStateSnapshot snapshot;
+    snapshot.chunks.push_back(state);
+    snapshot.missingRegistryCount = 1;
+    return snapshot;
+}
+
+full_engine::TerrainStreamingPlannerConfig streamingConfig() noexcept
+{
+    full_engine::TerrainStreamingPlannerConfig config;
+    config.chunkSizeMeters = 16.0;
+    config.loadRadiusChunks = 0;
+    config.residentRadiusChunks = 0;
+    return config;
+}
+
 class FakeRenderer final : public full_renderer::IRenderer
 {
 public:
     int meshCreateCalls = 0;
     int textureCreateCalls = 0;
     int materialCreateCalls = 0;
+    int terrainCreateCalls = 0;
     full_renderer::MeshHandle nextMesh = {101};
     full_renderer::TextureHandle nextTexture = {303};
     full_renderer::MaterialHandle nextMaterial = {202};
+    full_renderer::TerrainChunkHandle nextTerrain = {404, 1};
 
     full_renderer::RendererResult initialize(const full_renderer::RendererInitDesc&) override
     {
@@ -221,7 +254,8 @@ public:
 
     full_renderer::TerrainChunkHandle createTerrainChunk(const full_renderer::TerrainChunkDesc&) override
     {
-        return {};
+        ++terrainCreateCalls;
+        return nextTerrain;
     }
 
     full_renderer::RendererResult updateTerrainChunk(
@@ -469,6 +503,73 @@ void testExternalWorkerPublishesAndReconciles(std::vector<std::string>& failures
     const full_engine::TerrainManifestAssetReadinessPlan readiness = state.planAssetReadiness(destination);
     expect(readiness.summary.readyCount == readiness.summary.requestedCount, "dev worker flow leaves readiness complete", failures);
 }
+
+void testDevLoadedHandlesDriveStreamingRuntimeSetup(std::vector<std::string>& failures)
+{
+    full_engine::TerrainStreamingLoopState loop;
+    full_engine::RendererAssetHandleCatalog runtimeHandles;
+    loop.manifestLoad().setManifest(manifest());
+    (void)loop.manifestLoad().planAssetReadiness(runtimeHandles);
+    (void)loop.manifestLoad().planAssetLoadRequests();
+    (void)loop.manifestLoad().queueLatestAssetLoadRequests();
+    (void)loop.scheduleAssetLoadJobs();
+
+    const full_engine::AssetSourceCatalog sources = sourceCatalog();
+    FakeRenderer renderer;
+    full_engine::RendererAssetHandleCatalog completed;
+    full_engine::TerrainManifestAssetLoadCompletionInbox inbox;
+    full_engine::TerrainManifestDevAssetLoadContext context;
+    context.sources = &sources;
+    context.renderer = &renderer;
+    context.completedHandles = &completed;
+    context.alreadyLoadedHandles = &runtimeHandles;
+
+    (void)full_engine::runTerrainManifestDevAssetLoadWorker(
+        loop.manifestAssetLoadJobs(),
+        inbox,
+        context);
+    (void)full_engine::runTerrainManifestDevAssetLoadWorker(
+        loop.manifestAssetLoadJobs(),
+        inbox,
+        context);
+    const full_engine::TerrainManifestAssetLoadJobCompletionReconcileResult reconciled =
+        loop.reconcileScheduledAssetLoadCompletions(
+            inbox.completions().data(),
+            inbox.completionCount(),
+            runtimeHandles);
+    expect(reconciled.status == full_engine::TerrainManifestAssetLoadJobCompletionReconcileStatus::Success, "streaming smoke reconciles dev completions", failures);
+    expect(loop.manifestLoad().latestReadiness().summary.missingHandleCount == 0, "streaming smoke readiness is complete", failures);
+
+    full_engine::TerrainRuntimeState runtime;
+    full_engine::WorldChunkRegistry registry;
+    full_engine::WorldChunkCatalog catalog;
+    full_engine::TerrainResourceCatalog resources;
+    full_engine::ChunkTerrainHandleMap terrainHandles;
+    const full_engine::WorldChunkDesc desc = worldDesc();
+    const full_engine::ChunkId trackedId = desc.id;
+    const full_engine::TerrainStreamingLoopUpdateResult updated =
+        full_engine::updateTerrainStreamingLoop(
+            loop,
+            runtime,
+            renderer,
+            registry,
+            catalog,
+            resources,
+            terrainHandles,
+            runtimeHandles,
+            &desc,
+            1,
+            &trackedId,
+            1,
+            streamingConfig(),
+            {16.0, 0.0, 0.0},
+            missingSnapshot());
+    expect(updated.status == full_engine::TerrainStreamingLoopUpdateStatus::Success, "dev-loaded handles let streaming update succeed", failures);
+    expect(updated.runtimeUpdateRan, "dev-loaded streaming applies runtime update", failures);
+    expect(renderer.terrainCreateCalls == 1, "dev-loaded streaming creates terrain chunk", failures);
+    expect(terrainHandles.mappedCount() == 1, "dev-loaded streaming maps terrain handle", failures);
+    expect(runtime.latestSnapshot().renderableCount == 1, "dev-loaded streaming snapshot becomes renderable", failures);
+}
 } // namespace
 
 int main()
@@ -479,6 +580,7 @@ int main()
     testCallbackFailures(failures);
     testRetainedServiceFlowReconcilesReady(failures);
     testExternalWorkerPublishesAndReconciles(failures);
+    testDevLoadedHandlesDriveStreamingRuntimeSetup(failures);
 
     if (!failures.empty())
     {

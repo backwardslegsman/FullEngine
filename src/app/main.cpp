@@ -762,6 +762,48 @@ struct SampleExternalManifestAssetWorkerOutput
     full_engine::TerrainManifestAssetLoadWorkerCompletionPublishResult publish = {};
 };
 
+enum class SampleDevAssetSmokeStep
+{
+    Idle,
+    ResetRuntime,
+    ExportManifest,
+    ReloadManifest,
+    ScheduleLoadJobs,
+    RunFakeWorker,
+    ReconcileCompletions,
+    StreamingUpdate,
+    Complete,
+    Failed,
+};
+
+struct SampleDevAssetSmokeStatus
+{
+    bool hasRun = false;
+    bool success = false;
+    bool runtimeUpdateRan = false;
+    SampleDevAssetSmokeStep step = SampleDevAssetSmokeStep::Idle;
+    full_engine::CookedAssetManifestExportResult exportResult =
+        full_engine::CookedAssetManifestExportResult::Success;
+    full_engine::TerrainManifestFileLoadStatus fileLoadStatus =
+        full_engine::TerrainManifestFileLoadStatus::Success;
+    full_engine::TerrainStreamingSchedulerTickStatus scheduleStatus =
+        full_engine::TerrainStreamingSchedulerTickStatus::Idle;
+    full_engine::TerrainStreamingSchedulerTickStatus reconcileStatus =
+        full_engine::TerrainStreamingSchedulerTickStatus::Idle;
+    full_engine::TerrainStreamingLoopUpdateStatus streamingStatus =
+        full_engine::TerrainStreamingLoopUpdateStatus::Success;
+    std::size_t meshReadyCount = 0;
+    std::size_t meshRequestedCount = 0;
+    std::size_t materialReadyCount = 0;
+    std::size_t materialRequestedCount = 0;
+    std::size_t textureReadyCount = 0;
+    std::size_t textureRequestedCount = 0;
+    std::size_t missingHandleCount = 0;
+    std::size_t pendingLoadRequestCount = 0;
+    std::size_t pendingJobCount = 0;
+    std::size_t pendingCompletionCount = 0;
+};
+
 struct SampleTerrainResidencyControls
 {
     int selectedChunkX = 0;
@@ -799,6 +841,7 @@ struct SampleTerrainResidencyControls
     full_engine::TerrainStreamingLoopState streamingLoop = {};
     full_engine::TerrainStreamingSchedulerTickDiagnostics lastSchedulerTickDiagnostics = {};
     SampleExternalManifestAssetWorkerOutput externalWorker = {};
+    SampleDevAssetSmokeStatus devAssetSmoke = {};
     std::size_t lastImportedManifestAssetCount = 0;
     std::size_t lastImportedManifestTerrainChunkCount = 0;
     std::size_t lastImportedAssetCatalogCount = 0;
@@ -992,6 +1035,19 @@ full_engine::TerrainRuntimeStateSnapshot sampleTerrainRuntimeSnapshot(
     const full_engine::ChunkTerrainHandleMap& handles,
     const std::vector<SampleTerrainChunkState>& chunks);
 
+void destroyMappedTerrainChunks(
+    full_renderer::IRenderer& renderer,
+    full_engine::ChunkTerrainHandleMap& handleMap);
+
+void refreshSampleTerrainMirrorsAfterRuntimeUpdate(
+    full_engine::TerrainRuntimeState& terrainRuntime,
+    const full_engine::WorldChunkRegistry& registry,
+    const full_engine::WorldChunkCatalog& worldCatalog,
+    const full_engine::TerrainResourceCatalog& resources,
+    const full_engine::ChunkTerrainHandleMap& handles,
+    std::vector<SampleTerrainChunkState>& chunks,
+    SampleTerrainResidencyControls& controls);
+
 full_engine::TerrainManifestAssetLoadCallbackResult sampleTerrainManifestAssetLoadCallback(
     const full_engine::TerrainManifestAssetLoadRequest& request,
     void* const userData)
@@ -1042,6 +1098,53 @@ void clearSampleExternalManifestAssetWorkerOutput(
     output = {};
 }
 
+const char* sampleDevAssetSmokeStepName(const SampleDevAssetSmokeStep step) noexcept
+{
+    switch (step)
+    {
+    case SampleDevAssetSmokeStep::Idle:
+        return "Idle";
+    case SampleDevAssetSmokeStep::ResetRuntime:
+        return "ResetRuntime";
+    case SampleDevAssetSmokeStep::ExportManifest:
+        return "ExportManifest";
+    case SampleDevAssetSmokeStep::ReloadManifest:
+        return "ReloadManifest";
+    case SampleDevAssetSmokeStep::ScheduleLoadJobs:
+        return "ScheduleLoadJobs";
+    case SampleDevAssetSmokeStep::RunFakeWorker:
+        return "RunFakeWorker";
+    case SampleDevAssetSmokeStep::ReconcileCompletions:
+        return "ReconcileCompletions";
+    case SampleDevAssetSmokeStep::StreamingUpdate:
+        return "StreamingUpdate";
+    case SampleDevAssetSmokeStep::Complete:
+        return "Complete";
+    case SampleDevAssetSmokeStep::Failed:
+        return "Failed";
+    }
+    return "Unknown";
+}
+
+void captureSampleDevAssetSmokeStatus(
+    SampleDevAssetSmokeStatus& status,
+    const full_engine::TerrainStreamingLoopState& streamingLoop)
+{
+    const full_engine::TerrainManifestLoadState& manifestLoad = streamingLoop.manifestLoad();
+    const full_engine::TerrainManifestAssetReadinessPlan& readiness =
+        manifestLoad.latestReadiness();
+    status.meshReadyCount = readiness.summary.meshReadyCount;
+    status.meshRequestedCount = readiness.summary.meshRequestedCount;
+    status.materialReadyCount = readiness.summary.materialReadyCount;
+    status.materialRequestedCount = readiness.summary.materialRequestedCount;
+    status.textureReadyCount = readiness.summary.textureReadyCount;
+    status.textureRequestedCount = readiness.summary.textureRequestedCount;
+    status.missingHandleCount = readiness.summary.missingHandleCount;
+    status.pendingLoadRequestCount = manifestLoad.pendingLoadRequestCount();
+    status.pendingJobCount = streamingLoop.manifestAssetLoadJobs().jobCount();
+    status.pendingCompletionCount = streamingLoop.externalLoadCompletions().completionCount();
+}
+
 void runSampleExternalManifestAssetWorker(
     const full_engine::EngineJobQueue& scheduledJobs,
     const full_engine::AssetSourceCatalog& sources,
@@ -1070,6 +1173,46 @@ void runSampleExternalManifestAssetWorker(
             break;
         }
     }
+}
+
+bool resetSampleTerrainRuntimeForDevSmoke(
+    full_renderer::IRenderer& renderer,
+    full_engine::TerrainRuntimeState& terrainRuntime,
+    full_engine::WorldChunkRegistry& registry,
+    full_engine::WorldChunkCatalog& worldCatalog,
+    full_engine::TerrainResourceCatalog& resources,
+    full_engine::ChunkTerrainHandleMap& terrainHandles,
+    std::vector<SampleTerrainChunkState>& chunks)
+{
+    destroyMappedTerrainChunks(renderer, terrainHandles);
+    terrainRuntime.clearRequests();
+
+    full_engine::TerrainChunkRequestQueue removeRequests;
+    for (const SampleTerrainChunkState& chunk : chunks)
+    {
+        if (chunk.setupRegistered)
+        {
+            removeRequests.pushRemove(chunk.id);
+        }
+    }
+
+    const full_engine::TerrainChunkRequestApplyResult result =
+        removeRequests.applyTo(registry, worldCatalog, resources);
+    for (const full_engine::TerrainChunkRequestRecord& record : result.records)
+    {
+        if (record.status != full_engine::TerrainChunkRequestStatus::Applied &&
+            record.status != full_engine::TerrainChunkRequestStatus::NotFound)
+        {
+            return false;
+        }
+    }
+
+    for (SampleTerrainChunkState& chunk : chunks)
+    {
+        chunk.setupRegistered = false;
+        chunk.resident = false;
+    }
+    return true;
 }
 
 bool queueSampleTerrainSetupAdds(
@@ -1281,6 +1424,200 @@ full_engine::TerrainStreamingSchedulerTickResult runSampleTerrainStreamingSchedu
         sampleTerrainManifestAssetLoadCallback,
         &handles,
         options);
+}
+
+SampleDevAssetSmokeStatus runSampleDevAssetStreamingSmoke(
+    full_renderer::IRenderer& renderer,
+    full_engine::TerrainRuntimeState& terrainRuntime,
+    full_engine::WorldChunkRegistry& registry,
+    full_engine::WorldChunkCatalog& worldCatalog,
+    full_engine::RendererAssetHandleCatalog& assetHandles,
+    full_engine::RendererAssetHandleCatalog& completedHandles,
+    full_engine::TerrainResourceCatalog& resources,
+    full_engine::ChunkTerrainHandleMap& terrainHandles,
+    const full_engine::CookedAssetManifest& sampleManifest,
+    std::vector<SampleTerrainChunkState>& chunks,
+    SampleTerrainResidencyControls& controls,
+    const float chunkSizeMeters,
+    const Vec3& cameraPosition,
+    const full_engine::TerrainRuntimeUpdateOptions& runtimeOptions)
+{
+    SampleDevAssetSmokeStatus status;
+    status.hasRun = true;
+    status.step = SampleDevAssetSmokeStep::ResetRuntime;
+
+    full_engine::TerrainStreamingLoopState& streamingLoop = controls.streamingLoop;
+    full_engine::TerrainManifestLoadState& manifestLoad = streamingLoop.manifestLoad();
+    controls.lastSchedulerTickDiagnostics = {};
+    clearSampleExternalManifestAssetWorkerOutput(controls.externalWorker);
+    streamingLoop.clearExternalAssetLoadCompletions();
+    streamingLoop.clearJobs();
+    streamingLoop.clearManifest();
+    assetHandles.clear();
+    if (!resetSampleTerrainRuntimeForDevSmoke(
+            renderer,
+            terrainRuntime,
+            registry,
+            worldCatalog,
+            resources,
+            terrainHandles,
+            chunks))
+    {
+        captureSampleDevAssetSmokeStatus(status, streamingLoop);
+        return status;
+    }
+
+    status.step = SampleDevAssetSmokeStep::ExportManifest;
+    controls.lastManifestExportResult =
+        full_engine::exportCookedAssetManifestJsonLines(
+            sampleManifest,
+            "sample_cooked_asset_manifest.jsonl");
+    status.exportResult = controls.lastManifestExportResult;
+    if (status.exportResult != full_engine::CookedAssetManifestExportResult::Success)
+    {
+        captureSampleDevAssetSmokeStatus(status, streamingLoop);
+        return status;
+    }
+
+    status.step = SampleDevAssetSmokeStep::ReloadManifest;
+    controls.lastImportedManifestAssetCount = 0;
+    controls.lastImportedManifestTerrainChunkCount = 0;
+    controls.lastImportedAssetCatalogCount = 0;
+    controls.lastImportedTerrainAssetCatalogCount = 0;
+    const full_engine::TerrainManifestFileReloadPlanResult manifestReload =
+        streamingLoop.reloadManifestAndQueueMissingAssetLoads(
+            "sample_cooked_asset_manifest.jsonl",
+            assetHandles);
+    status.fileLoadStatus = manifestReload.load.status;
+    controls.lastManifestImportResult = manifestReload.load.imported.result;
+    controls.lastManifestImportValidationResult = manifestReload.load.imported.validation.result;
+    if (manifestReload.load.status != full_engine::TerrainManifestFileLoadStatus::Success)
+    {
+        captureSampleDevAssetSmokeStatus(status, streamingLoop);
+        return status;
+    }
+
+    controls.lastImportedManifestAssetCount = manifestReload.load.assetCount;
+    controls.lastImportedManifestTerrainChunkCount = manifestReload.load.terrainChunkCount;
+    streamingLoop.setAssetSources(makeSampleTerrainAssetSourceCatalog());
+    (void)streamingLoop.planAssetSources();
+    (void)streamingLoop.planAssetSourceUploadIntents();
+
+    status.step = SampleDevAssetSmokeStep::ScheduleLoadJobs;
+    const bool previousExternalMode = controls.terrainStreamingSchedulerExternalLoadScheduling;
+    controls.terrainStreamingSchedulerExternalLoadScheduling = true;
+    const full_engine::TerrainStreamingSchedulerTickResult scheduleTick =
+        runSampleTerrainStreamingSchedulerTick(
+            renderer,
+            terrainRuntime,
+            registry,
+            worldCatalog,
+            assetHandles,
+            resources,
+            terrainHandles,
+            chunks,
+            controls,
+            chunkSizeMeters,
+            cameraPosition,
+            runtimeOptions);
+    status.scheduleStatus = scheduleTick.status;
+    if (scheduleTick.status == full_engine::TerrainStreamingSchedulerTickStatus::LoadJobsBlocked)
+    {
+        controls.terrainStreamingSchedulerExternalLoadScheduling = previousExternalMode;
+        captureSampleDevAssetSmokeStatus(status, streamingLoop);
+        return status;
+    }
+
+    status.step = SampleDevAssetSmokeStep::RunFakeWorker;
+    runSampleExternalManifestAssetWorker(
+        streamingLoop.manifestAssetLoadJobs(),
+        manifestLoad.assetSources(),
+        renderer,
+        assetHandles,
+        completedHandles,
+        streamingLoop.externalLoadCompletions(),
+        controls.externalWorker);
+    streamingLoop.recordExternalAssetLoadCompletionPublish(controls.externalWorker.publish);
+    if (streamingLoop.externalLoadCompletions().completionCount() == 0)
+    {
+        controls.terrainStreamingSchedulerExternalLoadScheduling = previousExternalMode;
+        captureSampleDevAssetSmokeStatus(status, streamingLoop);
+        return status;
+    }
+
+    status.step = SampleDevAssetSmokeStep::ReconcileCompletions;
+    const full_engine::TerrainStreamingSchedulerTickResult reconcileTick =
+        runSampleTerrainStreamingSchedulerTick(
+            renderer,
+            terrainRuntime,
+            registry,
+            worldCatalog,
+            assetHandles,
+            resources,
+            terrainHandles,
+            chunks,
+            controls,
+            chunkSizeMeters,
+            cameraPosition,
+            runtimeOptions);
+    controls.lastSchedulerTickDiagnostics =
+        full_engine::makeTerrainStreamingSchedulerTickDiagnostics(reconcileTick);
+    status.reconcileStatus = reconcileTick.status;
+    if (reconcileTick.externalCompletionsReconciled &&
+        (reconcileTick.externalCompletionReconcile.status ==
+             full_engine::TerrainManifestAssetLoadJobCompletionReconcileStatus::Success ||
+         reconcileTick.externalCompletionReconcile.status ==
+             full_engine::TerrainManifestAssetLoadJobCompletionReconcileStatus::NoPendingLoads))
+    {
+        streamingLoop.clearExternalAssetLoadCompletions();
+    }
+    if (reconcileTick.status == full_engine::TerrainStreamingSchedulerTickStatus::LoadJobsBlocked)
+    {
+        controls.terrainStreamingSchedulerExternalLoadScheduling = previousExternalMode;
+        captureSampleDevAssetSmokeStatus(status, streamingLoop);
+        return status;
+    }
+
+    status.step = SampleDevAssetSmokeStep::StreamingUpdate;
+    const full_engine::TerrainStreamingLoopUpdateResult streamingUpdate =
+        runSampleTerrainStreamingLoopUpdate(
+            renderer,
+            terrainRuntime,
+            registry,
+            worldCatalog,
+            assetHandles,
+            resources,
+            terrainHandles,
+            chunks,
+            controls,
+            chunkSizeMeters,
+            cameraPosition,
+            runtimeOptions);
+    status.streamingStatus = streamingUpdate.status;
+    status.runtimeUpdateRan = streamingUpdate.runtimeUpdateRan;
+    if (streamingUpdate.runtimeUpdateRan)
+    {
+        refreshSampleTerrainMirrorsAfterRuntimeUpdate(
+            terrainRuntime,
+            registry,
+            worldCatalog,
+            resources,
+            terrainHandles,
+            chunks,
+            controls);
+    }
+    controls.terrainStreamingSchedulerExternalLoadScheduling = previousExternalMode;
+    captureSampleDevAssetSmokeStatus(status, streamingLoop);
+    status.success =
+        status.missingHandleCount == 0 &&
+        status.pendingLoadRequestCount == 0 &&
+        status.pendingCompletionCount == 0 &&
+        streamingUpdate.status == full_engine::TerrainStreamingLoopUpdateStatus::Success;
+    if (status.success)
+    {
+        status.step = SampleDevAssetSmokeStep::Complete;
+    }
+    return status;
 }
 
 void refreshTerrainSubmitHandles(
@@ -1739,6 +2076,7 @@ void drawTerrainDiagnosticsPanel(
     const full_engine::CookedAssetManifest& sampleTerrainManifest,
     std::vector<SampleTerrainChunkState>& sampleTerrainChunks,
     SampleTerrainResidencyControls& terrainResidencyControls,
+    const float terrainChunkSizeMeters,
     int terrainGridRadius,
     Vec3& cameraPosition,
     Vec3& cameraTarget,
@@ -1753,6 +2091,7 @@ void drawTerrainDiagnosticsPanel(
     const full_renderer::RenderViewDesc& submittedView,
     const std::uint32_t viewportWidth,
     const std::uint32_t viewportHeight,
+    const full_engine::TerrainRuntimeUpdateOptions& runtimeOptions,
     full_renderer::debug::ShadowMapPreviewSettings& shadowPreview,
     bool& showDebugUi)
 {
@@ -2076,6 +2415,26 @@ void drawTerrainDiagnosticsPanel(
                 terrainResidencyControls.externalWorker.publish);
         }
         ImGui::SameLine();
+        if (ImGui::Button("Run Dev Asset Smoke"))
+        {
+            terrainResidencyControls.devAssetSmoke =
+                runSampleDevAssetStreamingSmoke(
+                    renderer,
+                    terrainRuntime,
+                    engineTerrainRegistry,
+                    engineTerrainCatalog,
+                    engineTerrainAssetHandles,
+                    sampleCompletedTerrainAssetHandles,
+                    engineTerrainResources,
+                    engineTerrainHandles,
+                    sampleTerrainManifest,
+                    sampleTerrainChunks,
+                    terrainResidencyControls,
+                    terrainChunkSizeMeters,
+                    cameraPosition,
+                    runtimeOptions);
+        }
+        ImGui::SameLine();
         if (ImGui::Button("Clear Worker Outputs"))
         {
             streamingLoop.clearExternalAssetLoadCompletions();
@@ -2114,6 +2473,29 @@ void drawTerrainDiagnosticsPanel(
                 streamingLoop.latestDiagnostics().externalCompletionPublish.invalidRequestCount),
             static_cast<unsigned long long>(
                 streamingLoop.latestDiagnostics().externalCompletionPublish.missingHandleCount));
+        ImGui::Text(
+            "Dev asset smoke: %s at %s, ready mesh/material/texture %llu/%llu %llu/%llu %llu/%llu",
+            terrainResidencyControls.devAssetSmoke.success ? "Success" : "Pending/Failed",
+            sampleDevAssetSmokeStepName(terrainResidencyControls.devAssetSmoke.step),
+            static_cast<unsigned long long>(terrainResidencyControls.devAssetSmoke.meshReadyCount),
+            static_cast<unsigned long long>(terrainResidencyControls.devAssetSmoke.meshRequestedCount),
+            static_cast<unsigned long long>(terrainResidencyControls.devAssetSmoke.materialReadyCount),
+            static_cast<unsigned long long>(terrainResidencyControls.devAssetSmoke.materialRequestedCount),
+            static_cast<unsigned long long>(terrainResidencyControls.devAssetSmoke.textureReadyCount),
+            static_cast<unsigned long long>(terrainResidencyControls.devAssetSmoke.textureRequestedCount));
+        ImGui::Text(
+            "Dev smoke queues: missing %llu, loads/jobs/completions %llu/%llu/%llu, schedule/reconcile/stream %s/%s/%s%s",
+            static_cast<unsigned long long>(terrainResidencyControls.devAssetSmoke.missingHandleCount),
+            static_cast<unsigned long long>(terrainResidencyControls.devAssetSmoke.pendingLoadRequestCount),
+            static_cast<unsigned long long>(terrainResidencyControls.devAssetSmoke.pendingJobCount),
+            static_cast<unsigned long long>(terrainResidencyControls.devAssetSmoke.pendingCompletionCount),
+            full_engine::terrainStreamingSchedulerTickStatusName(
+                terrainResidencyControls.devAssetSmoke.scheduleStatus),
+            full_engine::terrainStreamingSchedulerTickStatusName(
+                terrainResidencyControls.devAssetSmoke.reconcileStatus),
+            full_engine::terrainStreamingLoopUpdateStatusName(
+                terrainResidencyControls.devAssetSmoke.streamingStatus),
+            terrainResidencyControls.devAssetSmoke.runtimeUpdateRan ? ", runtime applied" : "");
         if (ImGui::Button("Reconcile Load Jobs"))
         {
             (void)streamingLoop.enqueueScheduledAssetLoadWork();
@@ -5972,6 +6354,7 @@ int main(int argc, char** argv)
                 sampleTerrainManifest,
                 sampleTerrainChunks,
                 terrainResidencyControls,
+                kChunkSize,
                 kGridRadius,
                 cameraPosition,
                 cameraTarget,
@@ -5986,6 +6369,7 @@ int main(int argc, char** argv)
                 packet.view,
                 frameDesc.backbufferWidth,
                 frameDesc.backbufferHeight,
+                engineTerrainRuntimeOptions,
                 shadowPreview,
                 showDebugUi);
             ImGui::Render();

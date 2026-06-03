@@ -35,6 +35,8 @@ if(FULL_RENDERER_ENABLE_BGFX)
     endif()
 endif()
 
+find_package(assimp CONFIG REQUIRED)
+
 if(FULL_RENDERER_BUILD_SAMPLE AND NOT FULL_RENDERER_ENABLE_SHADER_COMPILE)
     message(FATAL_ERROR "full_renderer_sample currently requires FULL_RENDERER_ENABLE_SHADER_COMPILE=ON so it can run from deterministic build-local shader outputs.")
 endif()
@@ -121,6 +123,8 @@ add_library(full_engine STATIC
     src/engine/assets/LoadedAssetPayload.hpp
     src/engine/assets/LoadedAssetImporter.cpp
     src/engine/assets/LoadedAssetImporter.hpp
+    src/engine/assets/AssimpLoadedAssetImporter.cpp
+    src/engine/assets/AssimpLoadedAssetImporter.hpp
     src/engine/assets/TerrainAssetCatalog.cpp
     src/engine/assets/TerrainAssetCatalog.hpp
     src/engine/assets/TerrainAssetDependencyValidator.cpp
@@ -294,6 +298,8 @@ target_include_directories(full_engine
 target_link_libraries(full_engine
     PUBLIC
         FullRenderer::full_renderer
+    PRIVATE
+        assimp::assimp
 )
 
 target_link_libraries(full_renderer_engine_bridge

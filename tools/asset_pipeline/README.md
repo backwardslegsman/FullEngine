@@ -1,13 +1,19 @@
 # Asset Pipeline Tooling
 
-Production importer or asset database tooling is not implemented yet. The
-engine asset layer now has a tiny dev-only ASCII importer used by tests to
-prove `AssetSourceRecord -> LoadedAssetPayload` flow, but that format is not a
-shipping content contract. Renderer integration can now use that dev importer
-from scheduled manifest asset-load work to produce mesh/texture/material
+Production asset database tooling is not implemented yet. The engine asset
+layer now has two importer seams behind the same
+`AssetSourceRecord -> LoadedAssetPayload` contract:
+
+- a tiny dev-only ASCII importer used by tests and sample debug assets; this
+  format is not a shipping content contract
+- an Assimp-backed static glTF mesh importer that validates source descriptors
+  and produces renderer-free mesh payloads without renderer headers or handles
+
+Renderer integration can use loaded payloads to produce mesh/texture/material
 handles through caller-owned renderer uploads and the existing completion
-reconcile path. glTF/PNG/KTX, packed assets, async IO, richer material
-authoring, and production packaging are still future work.
+reconcile path. PNG/KTX texture import, production material authoring, skeletal
+meshes, animation clips, packed assets, async IO, and production packaging are
+still future work.
 
 Future validation tools should consume authored assets, convert them to the
 renderer-facing contracts in `docs/assets.md`, and report actionable errors

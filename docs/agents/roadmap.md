@@ -500,6 +500,12 @@ move gameplay, streaming policy, or editor concepts into renderer internals.
   and validated against `AssetSourceRecord` descriptors. This proves the first
   source-file-to-payload path while keeping production glTF/PNG/KTX or packed
   asset import deferred.
+- An Assimp-backed loaded asset importer is in place for static glTF mesh
+  payloads: validated mesh source descriptors can be read from tracked glTF
+  fixtures into the renderer-free `LoadedAssetPayload` mesh contract. This
+  starts the real importer path with Assimp while keeping texture import,
+  material authoring, skeletal meshes, animation clips, packed assets, async IO,
+  and renderer-resource creation outside the asset layer.
 - Asset source upload-intent planning is in place: mapped source descriptors
   can be translated into public renderer mesh/texture/material upload
   expectations, including current renderer-contract limits, without source
@@ -767,9 +773,16 @@ move gameplay, streaming policy, or editor concepts into renderer internals.
   fixture-backed sample source catalog, so the UI demonstrates real dev
   file-to-renderer-handle loading instead of relying on pre-created terrain
   handles.
-- Next slice: add a small production-facing material authoring bridge for
-  richer material source descriptors, or start replacing the dev ASCII importer
-  with a real mesh/texture importer candidate behind the same payload contract.
+- Forty-first slice is implemented: the sample debug panel now has a one-click
+  dev asset streaming smoke action that resets terrain setup, clears runtime
+  handle mappings, reloads the generated manifest, schedules missing load work,
+  imports/uploads dev fixtures through the fake worker, reconciles completions,
+  and runs the streaming loop so terrain can be rebuilt from dev-loaded
+  handles.
+- Next slice: extend the Assimp-backed path toward richer static mesh data
+  first, then add texture import and material authoring; skeletal meshes and
+  animation clips should follow behind explicit payload contracts instead of
+  being folded into the static mesh importer.
 - Initial sample integration is in place: the debug UI can run the
   manifest-aware streaming coordinator once or continuously from camera
   position, display readiness/load/staging/streaming queue counters, and keep

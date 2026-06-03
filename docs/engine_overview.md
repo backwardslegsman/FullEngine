@@ -159,6 +159,10 @@ Implemented pieces:
   texture, and material fixtures into `LoadedAssetPayload` values, proving the
   first real source-file-to-payload path without adopting a production asset
   format
+- an Assimp-backed loaded asset importer that reads static glTF mesh files into
+  the same renderer-free `LoadedAssetPayload` mesh contract, validating source
+  descriptors and payload data while leaving textures, materials, skeletal
+  meshes, animations, async IO, and renderer-resource creation to later slices
 - upload-intent planning that translates mapped source descriptors into public
   renderer mesh/texture/material upload expectations without source bytes,
   renderer handles, renderer calls, or resource creation
@@ -368,7 +372,9 @@ scheduler load phase through the retained load-service path or an
 external-completion handoff, includes a fake external worker panel that imports
 tracked dev asset fixture files, uploads them through the caller-owned
 renderer, and emits completion records into a retained engine-owned inbox for
-that handoff, displays retained
+that handoff, can run a one-click dev asset smoke that resets terrain setup,
+loads fixture-backed mesh/texture/material assets, reconciles handles, and
+rebuilds terrain through the streaming loop, displays retained
 load-service and completion-inbox progress through compact diagnostics
 snapshots, exposes worker-facing helpers for publishing completion batches
 without depending on streaming loop state, can export retained streaming tick history, and
@@ -379,8 +385,8 @@ Still future work:
 - async loading, streaming jobs, and IO
 - a scheduler that consumes selected budget profiles or offline summary tooling
   for imported streaming tick traces
-- production cooked manifest formats, glTF/PNG/KTX or packed importers, and
-  renderer-resource creation policy
+- production cooked manifest formats, texture importers, skeletal/animated
+  mesh import, packed assets, and renderer-resource creation policy
 - production terrain streaming policy and editor-owned residency controls
 - real engine-owned mesh/material/texture creation and lifetime policy
 - production material import/rendering policy beyond the current basic and
