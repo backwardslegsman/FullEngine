@@ -864,6 +864,15 @@ move gameplay, streaming policy, or editor concepts into renderer internals.
   UV0 through upload planning, renderer validation, the bgfx skinned vertex
   layout, and the forward skinned shader, so wolf section materials can sample
   imported base-color textures through the existing basic material path.
+- Fifty-eighth slice is implemented: the wolf animation smoke now has
+  deterministic focus-camera controls, explicit section draw/material/palette
+  diagnostics, and CPU coverage that validates one `AnimatedDrawItem` per
+  resolved material section before treating the sample-visible wolf as ready.
+- Fifty-ninth slice is implemented: manual debug-UI validation now proves the
+  wolf smoke reaches a visible, animated, textured submission path. The sample
+  defers animation smoke run/clear actions until after `endFrame` so
+  `createSkeleton`, `createSkinnedMesh`, and matching destruction obey the
+  public renderer no-active-frame resource lifecycle contract.
 - Initial sample integration is in place: the debug UI can run the
   manifest-aware streaming coordinator once or continuously from camera
   position, display readiness/load/staging/streaming queue counters, and keep

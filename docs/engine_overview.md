@@ -180,7 +180,12 @@ Implemented pieces:
   skinned import mode, preserving imported material sections, extracting and
   uploading referenced texture/material payloads, and submitting multiple
   section draws that share one skinned mesh, skeleton, and palette while using
-  real resolved material handles
+  real resolved material handles. The debug UI includes a deterministic wolf
+  focus camera plus section-draw, material-resolution, bounds, palette, and
+  clip-time diagnostics for visible smoke validation. Smoke run/clear actions
+  are deferred until after `endFrame`, because skeleton and skinned mesh
+  creation/destruction follow the public renderer no-active-frame resource
+  lifecycle rule.
 - a dev-only loaded asset importer that reads tiny tracked ASCII mesh,
   texture, and material fixtures into `LoadedAssetPayload` values, proving the
   first real source-file-to-payload path without adopting a production asset

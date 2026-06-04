@@ -38,7 +38,12 @@ submits one imported `AnimatedDrawItem`. It can also run a wolf fixture smoke
 path that aggregates the skinned meshes from a mixed glTF scene while skipping
 unskinned meshes for the skinned import mode, preserves skinned mesh material
 sections, decodes referenced texture images, uploads material payloads, and
-submits one animated draw per section using resolved material handles.
+submits one animated draw per section using resolved material handles. The
+sample wolf smoke exposes deterministic camera focus and compact draw/material/
+palette diagnostics so visible animation failures are not inferred from only
+renderer counters. The sample queues smoke run/clear button actions during the
+debug-UI frame and executes them after `endFrame`, keeping skeleton/skinned
+resource creation and destruction outside an active renderer frame.
 Blending, animation compression, embedded glTF
 images, tangent payloads, UV1+ sets, full PBR material-section shading, mip
 generation, compression/KTX, production material authoring, packed assets,

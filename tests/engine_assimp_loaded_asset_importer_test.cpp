@@ -4,6 +4,7 @@
 #include "engine/renderer_integration/AnimationPlaybackState.hpp"
 #include "engine/renderer_integration/LoadedAssetUploadExecutor.hpp"
 #include "engine/renderer_integration/LoadedAssetUploadPlan.hpp"
+#include "renderer/animation/AnimationSystem.hpp"
 
 #include <cstdlib>
 #include <algorithm>
@@ -16,6 +17,10 @@
 
 #ifndef FULL_RENDERER_TEST_GLTF_FIXTURE_DIR
 #define FULL_RENDERER_TEST_GLTF_FIXTURE_DIR "."
+#endif
+
+#ifndef FULL_RENDERER_SAMPLE_ANIMATION_FIXTURE_DIR
+#define FULL_RENDERER_SAMPLE_ANIMATION_FIXTURE_DIR "."
 #endif
 
 namespace
@@ -285,6 +290,59 @@ full_engine::AssetSourceRecord animationClipSource(const std::string& uri)
     return record;
 }
 
+full_renderer::Aabb wolfSmokeBounds() noexcept
+{
+    full_renderer::Aabb bounds;
+    bounds.min[0] = -0.2f;
+    bounds.min[1] = -1.15f;
+    bounds.min[2] = 7.5f;
+    bounds.max[0] = 2.2f;
+    bounds.max[1] = 3.05f;
+    bounds.max[2] = 16.2f;
+    return bounds;
+}
+
+void makeWolfSmokeModel(float out[16]) noexcept
+{
+    for (int index = 0; index < 16; ++index)
+    {
+        out[index] = 0.0f;
+    }
+    out[0] = 8.0f;
+    out[5] = 8.0f;
+    out[10] = 8.0f;
+    out[12] = 1.0f;
+    out[13] = -0.95f;
+    out[14] = 13.0f;
+    out[15] = 1.0f;
+}
+
+std::vector<full_renderer::AnimatedDrawItem> buildWolfSmokeDraws(
+    const full_renderer::SkinnedMeshHandle mesh,
+    const std::vector<full_renderer::MaterialHandle>& sectionMaterials,
+    const full_renderer::SkinningPaletteDesc& palette)
+{
+    std::vector<full_renderer::AnimatedDrawItem> draws;
+    draws.reserve(sectionMaterials.size());
+    for (std::uint32_t sectionIndex = 0;
+        sectionIndex < static_cast<std::uint32_t>(sectionMaterials.size());
+        ++sectionIndex)
+    {
+        full_renderer::AnimatedDrawItem draw;
+        draw.mesh = mesh;
+        draw.material = sectionMaterials[sectionIndex];
+        draw.sectionIndex = sectionIndex;
+        makeWolfSmokeModel(draw.model);
+        draw.bounds = wolfSmokeBounds();
+        draw.palette = palette;
+        draw.receivesShadow = true;
+        draw.castsShadow = true;
+        draw.selected = sectionIndex == 0U;
+        draws.push_back(draw);
+    }
+    return draws;
+}
+
 full_engine::AssimpLoadedAssetImportOptions allowMissingUv0()
 {
     full_engine::AssimpLoadedAssetImportOptions options;
@@ -505,6 +563,58 @@ void testSkeletalImport(std::vector<std::string>& failures)
     expect(plan.summary.plannedCount == 2, "imported skeletal payloads plan upload work", failures);
     expect(plan.records[0].kind == full_engine::AssetKind::Skeleton, "upload plan keeps skeleton record", failures);
     expect(plan.records[1].kind == full_engine::AssetKind::SkinnedMesh, "upload plan keeps skinned mesh record", failures);
+}
+
+void testSampleAnimationSmokeFixture(std::vector<std::string>& failures)
+{
+    const std::string path =
+        std::string(FULL_RENDERER_SAMPLE_ANIMATION_FIXTURE_DIR) +
+        "/skinned_triangle_animation.gltf";
+
+    const full_engine::AssimpLoadedAssetImportResult skeleton =
+        full_engine::importLoadedAssetPayloadWithAssimp(skeletonSource(path));
+    expect(skeleton.status == full_engine::AssimpLoadedAssetImportStatus::Success, "sample animation smoke imports skeleton", failures);
+
+    const full_engine::AssimpLoadedAssetImportResult skinned =
+        full_engine::importLoadedAssetPayloadWithAssimp(skinnedMeshSource(path));
+    expect(skinned.status == full_engine::AssimpLoadedAssetImportStatus::Success, "sample animation smoke imports skinned mesh", failures);
+
+    const full_engine::AssimpLoadedAssetImportResult clip =
+        full_engine::importLoadedAssetPayloadWithAssimp(animationClipSource(path));
+    expect(clip.status == full_engine::AssimpLoadedAssetImportStatus::Success, "sample animation smoke imports animation clip", failures);
+    if (skeleton.status != full_engine::AssimpLoadedAssetImportStatus::Success ||
+        skinned.status != full_engine::AssimpLoadedAssetImportStatus::Success ||
+        clip.status != full_engine::AssimpLoadedAssetImportStatus::Success)
+    {
+        return;
+    }
+
+    const full_engine::LoadedAssetPayload payloads[] = {skeleton.payload, skinned.payload};
+    const full_engine::LoadedAssetUploadPlan plan =
+        full_engine::buildLoadedAssetUploadPlan(payloads, 2);
+    expect(plan.summary.plannedCount == 2, "sample animation smoke payloads plan upload work", failures);
+
+    FakeRenderer renderer;
+    full_engine::RendererAssetHandleCatalog handles;
+    const full_engine::LoadedAssetUploadExecuteResult upload =
+        full_engine::executeLoadedAssetUploadPlan(renderer, plan, handles);
+    expect(upload.summary.uploadedSkeletonCount == 1, "sample animation smoke uploads skeleton", failures);
+    expect(upload.summary.uploadedSkinnedMeshCount == 1, "sample animation smoke uploads skinned mesh", failures);
+
+    full_engine::AnimationPlaybackState playback;
+    full_engine::AnimationPlaybackInstanceDesc instance;
+    instance.id = full_engine::AnimationPlaybackInstanceId{1};
+    instance.skeletonAssetId = asset(7);
+    instance.clipAssetId = asset(9);
+    instance.playback = full_engine::LoadedAnimationPlaybackMode::Loop;
+    instance.playing = true;
+    const full_engine::AnimationPlaybackAddResult add = playback.addInstance(instance);
+    expect(add.status == full_engine::AnimationPlaybackAddStatus::Added, "sample animation smoke adds playback instance", failures);
+    const full_engine::AnimationPlaybackTickResult tick =
+        playback.tickInstance(instance.id, skeleton.payload.skeleton, clip.payload.animationClip, 0.0f);
+    expect(tick.status == full_engine::AnimationPlaybackTickStatus::Success, "sample animation smoke ticks playback", failures);
+    const full_engine::AnimationPosePaletteView* const palette = playback.latestPaletteView(instance.id);
+    expect(palette != nullptr && palette->jointCount == 2, "sample animation smoke exposes two-joint palette", failures);
 }
 
 void testSkeletalUvPolicy(std::vector<std::string>& failures)
@@ -769,6 +879,54 @@ void testWolfSkeletalAnimationSmoke(std::vector<std::string>& failures)
         expect(palette->jointCount == 49, "wolf palette preserves joint count", failures);
         expect(palette->palette.matrixCount == 49, "wolf palette has one skinning matrix per joint", failures);
     }
+
+    full_renderer::animation::AnimationSystem animationSystem;
+    const full_renderer::SkeletonHandle validationSkeleton =
+        animationSystem.createSkeleton(plan.records[0].skeleton.desc);
+    expect(full_renderer::isValid(validationSkeleton), "wolf skeleton descriptor validates through animation system", failures);
+    full_renderer::SkinnedMeshDesc validationSkinnedMesh = plan.records[1].skinnedMesh.desc;
+    validationSkinnedMesh.skeleton = validationSkeleton;
+    expect(
+        animationSystem.validateSkinnedMeshDesc(validationSkinnedMesh),
+        "wolf skinned mesh descriptor validates through animation system",
+        failures);
+    const full_renderer::SkinnedMeshHandle validationMesh{9001};
+    animationSystem.registerSkinnedMesh(validationMesh, validationSkinnedMesh);
+
+    std::vector<full_renderer::MaterialHandle> sectionMaterials;
+    for (const full_engine::LoadedSkinnedMeshSection& section : skinnedResult.payload.skinnedMesh.sections)
+    {
+        const full_renderer::MaterialHandle* const material = handles.findMaterialHandle(section.materialAssetId);
+        if (material != nullptr)
+        {
+            sectionMaterials.push_back(*material);
+        }
+    }
+    expect(sectionMaterials.size() == skinnedResult.payload.skinnedMesh.sections.size(), "wolf smoke resolves one material per section", failures);
+    if (palette != nullptr)
+    {
+        const std::vector<full_renderer::AnimatedDrawItem> draws =
+            buildWolfSmokeDraws(validationMesh, sectionMaterials, palette->palette);
+        expect(draws.size() == skinnedResult.payload.skinnedMesh.sections.size(), "wolf smoke builds one draw per section", failures);
+        for (std::uint32_t sectionIndex = 0; sectionIndex < static_cast<std::uint32_t>(draws.size()); ++sectionIndex)
+        {
+            expect(draws[sectionIndex].sectionIndex == sectionIndex, "wolf smoke draw section index is deterministic", failures);
+        }
+        expect(
+            animationSystem.validateAnimatedDraws(draws.data(), static_cast<std::uint32_t>(draws.size())),
+            "wolf smoke section draws validate for renderer animation submission",
+            failures);
+
+        if (!sectionMaterials.empty())
+        {
+            sectionMaterials.pop_back();
+        }
+        const std::vector<full_renderer::AnimatedDrawItem> incompleteDraws =
+            sectionMaterials.size() == skinnedResult.payload.skinnedMesh.sections.size() ?
+            buildWolfSmokeDraws(validationMesh, sectionMaterials, palette->palette) :
+            std::vector<full_renderer::AnimatedDrawItem>{};
+        expect(incompleteDraws.empty(), "missing wolf section material prevents smoke draw submission", failures);
+    }
 }
 
 void testStatusNames(std::vector<std::string>& failures)
@@ -793,6 +951,7 @@ int main()
     testGeneratedNormals(failures);
     testVertexColors(failures);
     testSkeletalImport(failures);
+    testSampleAnimationSmokeFixture(failures);
     testSkeletalUvPolicy(failures);
     testAnimationImport(failures);
     testAnimationSingleTrackImport(failures);
