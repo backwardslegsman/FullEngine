@@ -48,6 +48,10 @@ add_full_engine_test(full_engine_loaded_asset_importer_tests engine_loaded_asset
 target_compile_definitions(full_engine_loaded_asset_importer_tests PRIVATE
     FULL_RENDERER_TEST_FIXTURE_DIR="${PROJECT_SOURCE_DIR}/tests/fixtures/assets/dev"
 )
+add_full_engine_test(full_engine_loaded_texture_image_importer_tests engine_loaded_texture_image_importer_test.cpp)
+target_compile_definitions(full_engine_loaded_texture_image_importer_tests PRIVATE
+    FULL_RENDERER_TEST_IMAGE_FIXTURE_DIR="${PROJECT_SOURCE_DIR}/tests/fixtures/assets/images"
+)
 add_full_engine_test(full_engine_assimp_loaded_asset_importer_tests engine_assimp_loaded_asset_importer_test.cpp)
 target_compile_definitions(full_engine_assimp_loaded_asset_importer_tests PRIVATE
     FULL_RENDERER_TEST_GLTF_FIXTURE_DIR="${PROJECT_SOURCE_DIR}/tests/fixtures/assets/gltf"

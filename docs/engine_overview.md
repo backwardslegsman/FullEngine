@@ -160,9 +160,16 @@ Implemented pieces:
   first real source-file-to-payload path without adopting a production asset
   format
 - an Assimp-backed loaded asset importer that reads static glTF mesh files into
-  the same renderer-free `LoadedAssetPayload` mesh contract, validating source
-  descriptors and payload data while leaving textures, materials, skeletal
+  the same renderer-free `LoadedAssetPayload` mesh contract, aggregating
+  multi-mesh scenes in deterministic order, optionally generating missing
+  normals, copying vertex colors, and validating source descriptors and
+  payload data while leaving textures, materials, tangents, UVs, skeletal
   meshes, animations, async IO, and renderer-resource creation to later slices
+- an stb-backed direct texture image importer that reads image files into the
+  renderer-free `LoadedTextureAsset` contract as tightly packed single-mip
+  RGBA8 bytes, validating source descriptors and payload data while leaving
+  glTF image references, embedded images, mip generation, compression, async
+  IO, and renderer-resource creation to later slices
 - upload-intent planning that translates mapped source descriptors into public
   renderer mesh/texture/material upload expectations without source bytes,
   renderer handles, renderer calls, or resource creation
@@ -385,8 +392,9 @@ Still future work:
 - async loading, streaming jobs, and IO
 - a scheduler that consumes selected budget profiles or offline summary tooling
   for imported streaming tick traces
-- production cooked manifest formats, texture importers, skeletal/animated
-  mesh import, packed assets, and renderer-resource creation policy
+- production cooked manifest formats, glTF material/image reference import,
+  skeletal/animated mesh import, packed assets, and renderer-resource creation
+  policy
 - production terrain streaming policy and editor-owned residency controls
 - real engine-owned mesh/material/texture creation and lifetime policy
 - production material import/rendering policy beyond the current basic and

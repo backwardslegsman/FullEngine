@@ -5,6 +5,7 @@
   "dependencies": [
     "bgfx",
     "assimp",
+    "stb",
     {
       "name": "bgfx",
       "features": [

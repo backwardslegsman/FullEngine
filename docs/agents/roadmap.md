@@ -502,10 +502,13 @@ move gameplay, streaming policy, or editor concepts into renderer internals.
   asset import deferred.
 - An Assimp-backed loaded asset importer is in place for static glTF mesh
   payloads: validated mesh source descriptors can be read from tracked glTF
-  fixtures into the renderer-free `LoadedAssetPayload` mesh contract. This
-  starts the real importer path with Assimp while keeping texture import,
-  material authoring, skeletal meshes, animation clips, packed assets, async IO,
-  and renderer-resource creation outside the asset layer.
+  fixtures into the renderer-free `LoadedAssetPayload` mesh contract. It now
+  aggregates multi-mesh scenes deterministically, can request Assimp-generated
+  normals when source normals are absent, copies vertex color set 0, and
+  enforces the existing 16-bit indexable aggregate vertex budget. This starts
+  the real importer path with Assimp while keeping texture import, material
+  authoring, tangents/UVs, skeletal meshes, animation clips, packed assets,
+  async IO, and renderer-resource creation outside the asset layer.
 - Asset source upload-intent planning is in place: mapped source descriptors
   can be translated into public renderer mesh/texture/material upload
   expectations, including current renderer-contract limits, without source
@@ -779,10 +782,15 @@ move gameplay, streaming policy, or editor concepts into renderer internals.
   imports/uploads dev fixtures through the fake worker, reconciles completions,
   and runs the streaming loop so terrain can be rebuilt from dev-loaded
   handles.
-- Next slice: extend the Assimp-backed path toward richer static mesh data
-  first, then add texture import and material authoring; skeletal meshes and
-  animation clips should follow behind explicit payload contracts instead of
-  being folded into the static mesh importer.
+- Forty-second slice is implemented: direct texture image files can now be
+  decoded through an stb-backed renderer-free importer into tightly packed
+  single-mip RGBA8 `LoadedTextureAsset` payloads, then passed through the
+  existing upload planner/executor path without exposing stb or renderer
+  handles through asset-layer public APIs.
+- Next slice: map glTF material/image references onto `AssetSourceCatalog`
+  texture sources and `LoadedMaterialAsset` records. Tangents/UVs, skeletal
+  meshes, and animation clips should follow only after their payload contracts
+  are explicit.
 - Initial sample integration is in place: the debug UI can run the
   manifest-aware streaming coordinator once or continuously from camera
   position, display readiness/load/staging/streaming queue counters, and keep

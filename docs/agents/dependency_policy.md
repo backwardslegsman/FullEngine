@@ -54,6 +54,16 @@ parsing instead of a third-party JSON dependency. Reconsider a maintained JSON
 library only if future tooling needs broader parsing, schema migration, or
 richer nested document generation.
 
+Assimp is used privately by `src/engine/assets` for static mesh import into
+renderer-free CPU payloads. `stb_image` is used privately by the same asset
+layer for direct image decoding into tightly packed RGBA8 texture payloads.
+Both dependencies support asset import code only, do not appear in public
+renderer or engine headers, and keep renderer resource creation behind existing
+caller-owned upload boundaries. `stb` is header-only, common in C++ rendering
+projects, and currently limited to PNG/JPEG-style direct image decoding; glTF
+image reference extraction, mip generation, compression/KTX, and package IO are
+separate future decisions.
+
 ## Current optional debug dependencies
 
 Dear ImGui is used only by the SDL3 sample diagnostics UI when

@@ -13,12 +13,8 @@ namespace full_engine
 {
 namespace
 {
-AssimpLoadedAssetImportResult makeStatus(const AssimpLoadedAssetImportStatus status)
-{
-    AssimpLoadedAssetImportResult result;
-    result.status = status;
-    return result;
-}
+constexpr std::size_t kMaxIndexedVertexCount =
+    static_cast<std::size_t>(std::numeric_limits<std::uint16_t>::max()) + 1U;
 
 unsigned int postProcessFlags(const AssimpLoadedAssetImportOptions& options) noexcept
 {
@@ -54,24 +50,24 @@ bool sameBounds(const AssetSourceBounds& lhs, const AssetSourceBounds& rhs) noex
     return true;
 }
 
-AssetSourceBounds computeBounds(const aiMesh& mesh) noexcept
+AssetSourceBounds computeBounds(const std::vector<LoadedMeshVertex>& vertices) noexcept
 {
     AssetSourceBounds bounds;
-    bounds.min[0] = mesh.mVertices[0].x;
-    bounds.min[1] = mesh.mVertices[0].y;
-    bounds.min[2] = mesh.mVertices[0].z;
-    bounds.max[0] = mesh.mVertices[0].x;
-    bounds.max[1] = mesh.mVertices[0].y;
-    bounds.max[2] = mesh.mVertices[0].z;
+    bounds.min[0] = vertices[0].position[0];
+    bounds.min[1] = vertices[0].position[1];
+    bounds.min[2] = vertices[0].position[2];
+    bounds.max[0] = vertices[0].position[0];
+    bounds.max[1] = vertices[0].position[1];
+    bounds.max[2] = vertices[0].position[2];
 
-    for (unsigned int index = 1; index < mesh.mNumVertices; ++index)
+    for (std::size_t index = 1; index < vertices.size(); ++index)
     {
-        bounds.min[0] = (std::min)(bounds.min[0], mesh.mVertices[index].x);
-        bounds.min[1] = (std::min)(bounds.min[1], mesh.mVertices[index].y);
-        bounds.min[2] = (std::min)(bounds.min[2], mesh.mVertices[index].z);
-        bounds.max[0] = (std::max)(bounds.max[0], mesh.mVertices[index].x);
-        bounds.max[1] = (std::max)(bounds.max[1], mesh.mVertices[index].y);
-        bounds.max[2] = (std::max)(bounds.max[2], mesh.mVertices[index].z);
+        bounds.min[0] = (std::min)(bounds.min[0], vertices[index].position[0]);
+        bounds.min[1] = (std::min)(bounds.min[1], vertices[index].position[1]);
+        bounds.min[2] = (std::min)(bounds.min[2], vertices[index].position[2]);
+        bounds.max[0] = (std::max)(bounds.max[0], vertices[index].position[0]);
+        bounds.max[1] = (std::max)(bounds.max[1], vertices[index].position[1]);
+        bounds.max[2] = (std::max)(bounds.max[2], vertices[index].position[2]);
     }
 
     return bounds;
@@ -91,7 +87,7 @@ bool canConvertMesh(const aiMesh& mesh) noexcept
     if (!mesh.HasPositions() ||
         !mesh.HasNormals() ||
         mesh.mNumVertices == 0 ||
-        mesh.mNumVertices > std::numeric_limits<std::uint16_t>::max() ||
+        static_cast<std::size_t>(mesh.mNumVertices) > kMaxIndexedVertexCount ||
         mesh.mNumFaces == 0)
     {
         return false;
@@ -111,7 +107,7 @@ bool canConvertMesh(const aiMesh& mesh) noexcept
         }
         for (unsigned int index = 0; index < face.mNumIndices; ++index)
         {
-            if (face.mIndices[index] > std::numeric_limits<std::uint16_t>::max())
+            if (face.mIndices[index] >= mesh.mNumVertices)
             {
                 return false;
             }
@@ -121,11 +117,16 @@ bool canConvertMesh(const aiMesh& mesh) noexcept
     return true;
 }
 
-LoadedMeshAsset convertMesh(const aiMesh& mesh, const AssetId id)
+bool canAppendMesh(const LoadedMeshAsset& aggregate, const aiMesh& mesh) noexcept
 {
-    LoadedMeshAsset result;
-    result.id = id;
-    result.vertices.reserve(mesh.mNumVertices);
+    return aggregate.vertices.size() <= kMaxIndexedVertexCount -
+        static_cast<std::size_t>(mesh.mNumVertices);
+}
+
+void appendMesh(LoadedMeshAsset& aggregate, const aiMesh& mesh)
+{
+    const std::uint16_t baseVertex = static_cast<std::uint16_t>(aggregate.vertices.size());
+    aggregate.vertices.reserve(aggregate.vertices.size() + mesh.mNumVertices);
     for (unsigned int index = 0; index < mesh.mNumVertices; ++index)
     {
         LoadedMeshVertex vertex;
@@ -142,20 +143,44 @@ LoadedMeshAsset convertMesh(const aiMesh& mesh, const AssetId id)
             vertex.colorLinear[2] = mesh.mColors[0][index].b;
             vertex.colorLinear[3] = mesh.mColors[0][index].a;
         }
-        result.vertices.push_back(vertex);
+        aggregate.vertices.push_back(vertex);
     }
 
-    result.indices.reserve(static_cast<std::size_t>(mesh.mNumFaces) * 3U);
+    aggregate.indices.reserve(aggregate.indices.size() + static_cast<std::size_t>(mesh.mNumFaces) * 3U);
     for (unsigned int faceIndex = 0; faceIndex < mesh.mNumFaces; ++faceIndex)
     {
         const aiFace& face = mesh.mFaces[faceIndex];
-        result.indices.push_back(static_cast<std::uint16_t>(face.mIndices[0]));
-        result.indices.push_back(static_cast<std::uint16_t>(face.mIndices[1]));
-        result.indices.push_back(static_cast<std::uint16_t>(face.mIndices[2]));
+        aggregate.indices.push_back(static_cast<std::uint16_t>(baseVertex + face.mIndices[0]));
+        aggregate.indices.push_back(static_cast<std::uint16_t>(baseVertex + face.mIndices[1]));
+        aggregate.indices.push_back(static_cast<std::uint16_t>(baseVertex + face.mIndices[2]));
+    }
+}
+
+bool convertSceneMeshes(const aiScene& scene, const AssetId id, LoadedMeshAsset& mesh)
+{
+    if (scene.mNumMeshes == 0 || scene.mMeshes == nullptr)
+    {
+        return false;
     }
 
-    result.localBounds = computeBounds(mesh);
-    return result;
+    mesh = {};
+    mesh.id = id;
+    for (unsigned int meshIndex = 0; meshIndex < scene.mNumMeshes; ++meshIndex)
+    {
+        const aiMesh* const sourceMesh = scene.mMeshes[meshIndex];
+        if (sourceMesh == nullptr || !canConvertMesh(*sourceMesh) || !canAppendMesh(mesh, *sourceMesh))
+        {
+            return false;
+        }
+        appendMesh(mesh, *sourceMesh);
+    }
+
+    if (mesh.vertices.empty() || mesh.indices.empty())
+    {
+        return false;
+    }
+    mesh.localBounds = computeBounds(mesh.vertices);
+    return true;
 }
 } // namespace
 
@@ -219,32 +244,27 @@ AssimpLoadedAssetImportResult importLoadedAssetPayloadWithAssimp(
         result.status = AssimpLoadedAssetImportStatus::ParseError;
         return result;
     }
-    if (scene->mNumMeshes != 1 || scene->mMeshes == nullptr || scene->mMeshes[0] == nullptr)
-    {
-        result.status = AssimpLoadedAssetImportStatus::UnsupportedScene;
-        return result;
-    }
-
-    const aiMesh& mesh = *scene->mMeshes[0];
-    if (!canConvertMesh(mesh))
-    {
-        result.status = AssimpLoadedAssetImportStatus::UnsupportedScene;
-        return result;
-    }
-
     result.payload.kind = AssetKind::Mesh;
-    result.payload.mesh = convertMesh(mesh, source.id);
+    if (!convertSceneMeshes(*scene, source.id, result.payload.mesh))
+    {
+        result.status = AssimpLoadedAssetImportStatus::UnsupportedScene;
+        return result;
+    }
+
+    result.payloadValidation = validateLoadedAssetPayload(result.payload);
+    if (result.payloadValidation != LoadedAssetPayloadValidationResult::Success)
+    {
+        result.status = AssimpLoadedAssetImportStatus::PayloadValidationFailed;
+        return result;
+    }
+
     if (!descriptorMatches(result.payload.mesh, source.descriptor.mesh))
     {
         result.status = AssimpLoadedAssetImportStatus::DescriptorMismatch;
         return result;
     }
 
-    result.payloadValidation = validateLoadedAssetPayload(result.payload);
-    result.status =
-        result.payloadValidation == LoadedAssetPayloadValidationResult::Success ?
-        AssimpLoadedAssetImportStatus::Success :
-        AssimpLoadedAssetImportStatus::PayloadValidationFailed;
+    result.status = AssimpLoadedAssetImportStatus::Success;
     return result;
 }
 } // namespace full_engine

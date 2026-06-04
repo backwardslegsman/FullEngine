@@ -9,7 +9,7 @@ namespace full_engine
  * @brief Options for importing static mesh payloads through Assimp.
  *
  * This importer is renderer-free and synchronous. Options select Assimp
- * post-processing used before converting the first supported static mesh into
+ * post-processing used before converting supported static meshes into one
  * `LoadedAssetPayload`. The importer does not create renderer resources, own
  * async work, decode textures, import materials, or retain Assimp scene data.
  */
@@ -68,15 +68,17 @@ const char* assimpLoadedAssetImportStatusName(
  * @brief Imports a renderer-free static mesh payload through Assimp.
  *
  * `source.uri` is treated as a direct filesystem path. V1 supports
- * `AssetKind::Mesh` only and converts one static mesh with positions, normals,
- * optional vertex colors, and 16-bit triangle indices into `LoadedMeshAsset`.
- * Parsed metadata is checked against `source.descriptor.mesh`, and the final
- * payload is validated with `validateLoadedAssetPayload`.
+ * `AssetKind::Mesh` only and combines all supported static meshes in the scene
+ * into one `LoadedMeshAsset` with positions, normals, optional color set 0,
+ * and 16-bit triangle indices. Mesh order and face order follow Assimp's
+ * post-processed scene order. Parsed aggregate metadata is checked against
+ * `source.descriptor.mesh`, and the final payload is validated with
+ * `validateLoadedAssetPayload`.
  *
  * The function copies all payload data by value. It performs no renderer
  * calls, renderer handle lookup, renderer resource creation, texture decoding,
- * material import, skeletal import, animation import, async scheduling, or
- * source catalog mutation.
+ * material import, tangent/UV import, skeletal import, animation import, async
+ * scheduling, or source catalog mutation.
  */
 AssimpLoadedAssetImportResult importLoadedAssetPayloadWithAssimp(
     const AssetSourceRecord& source,
