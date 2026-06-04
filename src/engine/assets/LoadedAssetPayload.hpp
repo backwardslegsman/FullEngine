@@ -13,9 +13,10 @@ namespace full_engine
  * @brief Fixed renderer-free vertex shape for loaded mesh asset data.
  *
  * Positions are mesh-local meters in the engine/renderer Y-up convention.
- * Normals are expected to be finite and non-zero. Colors are linear RGBA in
- * `[0, 1]`. The payload owns copied vectors and does not reference importer
- * buffers, renderer handles, renderer resources, or backend objects.
+ * Normals are expected to be finite and non-zero. UV0 values are copied as
+ * renderer-facing texture coordinates and must be finite. Colors are linear
+ * RGBA in `[0, 1]`. The payload owns copied vectors and does not reference
+ * importer buffers, renderer handles, renderer resources, or backend objects.
  */
 struct LoadedMeshVertex
 {
@@ -24,6 +25,9 @@ struct LoadedMeshVertex
 
     /** @brief Mesh-local normal direction. */
     float normal[3] = {0.0f, 1.0f, 0.0f};
+
+    /** @brief Primary texture coordinates copied from source UV set 0. */
+    float uv0[2] = {};
 
     /** @brief Linear RGBA vertex color. */
     float colorLinear[4] = {1.0f, 1.0f, 1.0f, 1.0f};
@@ -104,8 +108,8 @@ struct LoadedMaterialAsset
     /** @brief Renderer-free material alpha/depth policy. */
     AssetSourceMaterialAlphaMode alphaMode = AssetSourceMaterialAlphaMode::Unknown;
 
-    /** @brief Copied texture asset IDs referenced by this material. */
-    std::array<AssetId, kMaxAssetSourceMaterialTextureRefs> textureRefs = {};
+    /** @brief Copied named texture asset references used by this material. */
+    std::array<AssetSourceMaterialTextureRef, kMaxAssetSourceMaterialTextureRefs> textureRefs = {};
 
     /** @brief Number of active entries in `textureRefs`. */
     std::uint32_t textureRefCount = 0;
@@ -152,7 +156,9 @@ enum class LoadedAssetPayloadValidationResult
     InvalidMaterialModel,
     InvalidMaterialAlphaMode,
     InvalidMaterialTextureCount,
+    InvalidMaterialTextureSlot,
     InvalidMaterialTextureRef,
+    DuplicateMaterialTextureSlot,
 };
 
 /** @brief Returns a stable diagnostic name for a loaded payload validation result. */

@@ -8,21 +8,22 @@ layer now has two importer seams behind the same
   format is not a shipping content contract
 - an Assimp-backed static glTF mesh importer that validates source descriptors,
   aggregates multi-mesh scenes into one renderer-free mesh payload, optionally
-  generates missing normals, and copies vertex colors without renderer headers
-  or handles
+  generates missing normals, requires or explicitly defaults UV0, and copies
+  vertex colors without renderer headers or handles
 - an stb-backed direct image importer that decodes texture files into tightly
   packed, single-mip RGBA8 `LoadedTextureAsset` payloads with caller-authored
   semantic/color-space metadata
-- a glTF material/image reference extractor that maps referenced base-color
-  images into texture source records and emits material payloads that refer to
-  those textures by engine asset ID
+- a glTF material/image reference extractor that maps referenced base-color,
+  normal, metallic-roughness, occlusion, and emissive images into texture source
+  records and emits material payloads that refer to those textures by named
+  engine asset slots
 
 Renderer integration can use loaded payloads to produce mesh/texture/material
 handles through caller-owned renderer uploads and the existing completion
-reconcile path. Embedded glTF images, richer PBR material slots, UV/tangent
-payloads, mip generation, compression/KTX, production material authoring,
-skeletal meshes, animation clips, packed assets, async IO, and production
-packaging are still future work.
+reconcile path. Embedded glTF images, tangent payloads, UV1+ sets, mip
+generation, compression/KTX, production material authoring, skeletal meshes,
+animation clips, packed assets, async IO, and production packaging are still
+future work.
 
 Future validation tools should consume authored assets, convert them to the
 renderer-facing contracts in `docs/assets.md`, and report actionable errors

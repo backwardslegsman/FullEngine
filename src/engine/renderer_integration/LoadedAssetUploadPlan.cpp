@@ -144,6 +144,10 @@ full_renderer::MeshVertex toRendererVertex(const LoadedMeshVertex& vertex) noexc
         result.position[axis] = vertex.position[axis];
         result.normal[axis] = vertex.normal[axis];
     }
+    for (int axis = 0; axis < 2; ++axis)
+    {
+        result.uv0[axis] = vertex.uv0[axis];
+    }
     for (int channel = 0; channel < 4; ++channel)
     {
         result.colorLinear[channel] = vertex.colorLinear[channel];

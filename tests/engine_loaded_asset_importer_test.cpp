@@ -69,7 +69,7 @@ full_engine::AssetSourceDescriptor materialDescriptor()
     full_engine::AssetSourceDescriptor descriptor;
     descriptor.material.model = full_engine::AssetSourceMaterialModel::Basic;
     descriptor.material.alphaMode = full_engine::AssetSourceMaterialAlphaMode::Opaque;
-    descriptor.material.textureRefs[0] = asset(20);
+    descriptor.material.textureRefs[0] = {full_engine::AssetSourceMaterialTextureSlot::BaseColor, asset(20)};
     descriptor.material.textureRefCount = 1;
     return descriptor;
 }
@@ -242,7 +242,11 @@ void testValidFixtureImports(std::vector<std::string>& failures)
     expect(material.status == full_engine::LoadedAssetImportStatus::Success, "material fixture imports", failures);
     expect(material.payload.kind == full_engine::AssetKind::Material, "material import sets payload kind", failures);
     expect(material.payload.material.textureRefCount == 1, "material import copies texture ref count", failures);
-    expect(material.payload.material.textureRefs[0] == asset(20), "material import copies texture asset ref", failures);
+    expect(
+        material.payload.material.textureRefs[0].slot == full_engine::AssetSourceMaterialTextureSlot::BaseColor &&
+            material.payload.material.textureRefs[0].id == asset(20),
+        "material import copies named texture asset ref",
+        failures);
 }
 
 void testFailureStatuses(std::vector<std::string>& failures)

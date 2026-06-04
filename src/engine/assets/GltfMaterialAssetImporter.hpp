@@ -3,6 +3,7 @@
 #include "engine/assets/AssetSourceCatalog.hpp"
 #include "engine/assets/LoadedAssetPayload.hpp"
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <string>
@@ -14,12 +15,12 @@ namespace full_engine
  * @brief Options for extracting material and texture source metadata from glTF.
  *
  * The extractor is renderer-free and synchronous. It reads glTF material
- * bindings through Assimp, maps direct base-color image references into
+ * bindings through Assimp, maps direct image references into
  * `AssetSourceRecord` texture sources, and emits `LoadedMaterialAsset`
- * payloads whose texture references are engine asset IDs. It performs no image
- * decoding beyond metadata inspection, renderer calls, renderer handle lookup,
- * renderer resource creation, material graph evaluation, async work, or source
- * catalog mutation.
+ * payloads whose named texture references are engine asset IDs. It performs no
+ * image decoding beyond metadata inspection, renderer calls, renderer handle
+ * lookup, renderer resource creation, material graph evaluation, async work,
+ * or source catalog mutation.
  */
 struct GltfMaterialAssetImportOptions
 {
@@ -76,6 +77,12 @@ struct GltfMaterialAssetImportRecord
 
     /** @brief Resolved direct image URI when a base-color texture was mapped. */
     std::string baseColorTextureUri;
+
+    /** @brief Named texture refs assigned to this material payload. */
+    std::array<AssetSourceMaterialTextureRef, kMaxAssetSourceMaterialTextureRefs> textureRefs = {};
+
+    /** @brief Number of active entries in `textureRefs`. */
+    std::uint32_t textureRefCount = 0;
 
     /** @brief Texture source validation detail for mapped base-color textures. */
     AssetSourceRecordValidationResult textureSourceValidation =

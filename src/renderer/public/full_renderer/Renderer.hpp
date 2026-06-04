@@ -53,9 +53,11 @@ enum class RendererResult
  * @brief Fixed Phase 1 vertex format for uploaded mesh data.
  *
  * Positions and normals are in world-model local space using meters, Y-up, and
- * right-handed coordinates. Colors are linear RGBA values in the range
- * `[0, 1]`. The renderer copies vertex data during `createMesh`; source
- * storage may be released or reused after that call returns.
+ * right-handed coordinates. `uv0` carries the primary texture coordinate set
+ * for future material sampling and must contain finite values. Colors are
+ * linear RGBA values in the range `[0, 1]`. The renderer copies vertex data
+ * during `createMesh`; source storage may be released or reused after that
+ * call returns.
  */
 struct MeshVertex
 {
@@ -64,6 +66,9 @@ struct MeshVertex
 
     /** @brief Local-space unit normal used by the basic forward light. */
     float normal[3] = {0.0f, 1.0f, 0.0f};
+
+    /** @brief Primary mesh UV coordinate set. */
+    float uv0[2] = {};
 
     /** @brief Linear RGBA vertex color multiplied by the material color. */
     float colorLinear[4] = {1.0f, 1.0f, 1.0f, 1.0f};
@@ -330,12 +335,40 @@ struct TerrainMaterialDesc
 };
 
 /**
+ * @brief Texture slots for the basic material model.
+ *
+ * Zero texture handles are valid deterministic fallbacks. Non-zero handles
+ * must refer to live renderer-owned textures when `createMaterial` is called
+ * and while the material can be submitted. The current shaders do not sample
+ * these slots yet; the handles are copied so asset upload and future shader
+ * work can share one material contract.
+ */
+struct BasicMaterialTextureDesc
+{
+    /** @brief Optional base-color/albedo texture. */
+    TextureHandle baseColor;
+
+    /** @brief Optional tangent-space normal map. */
+    TextureHandle normal;
+
+    /** @brief Optional packed metallic/roughness texture. */
+    TextureHandle metallicRoughness;
+
+    /** @brief Optional occlusion texture. */
+    TextureHandle occlusion;
+
+    /** @brief Optional emissive color texture. */
+    TextureHandle emissive;
+};
+
+/**
  * @brief Descriptor for a minimal renderer-owned forward material.
  *
  * Colors are linear RGBA values in `[0, 1]`. The current material model is a
  * deliberately small Phase 1 surface color plus an optional directional-light
- * response; it does not represent textures, shader graphs, or engine material
- * assets. Descriptor data is copied during `createMaterial`.
+ * response. Basic texture slots are copied for future shader sampling but are
+ * not sampled by the current shaders. Descriptor data is copied during
+ * `createMaterial`.
  */
 struct MaterialDesc
 {
@@ -369,6 +402,9 @@ struct MaterialDesc
 
     /** @brief Terrain splat material settings used when `kind` is `TerrainSplat`. */
     TerrainMaterialDesc terrain;
+
+    /** @brief Basic material texture slots used when `kind` is `Basic`. */
+    BasicMaterialTextureDesc basicTextures;
 };
 
 /**

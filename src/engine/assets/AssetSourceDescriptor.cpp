@@ -65,6 +65,30 @@ bool isValidMaterialAlphaMode(const AssetSourceMaterialAlphaMode alphaMode) noex
         alphaMode == AssetSourceMaterialAlphaMode::AlphaBlend;
 }
 
+bool isValidMaterialTextureSlot(const AssetSourceMaterialTextureSlot slot) noexcept
+{
+    return slot == AssetSourceMaterialTextureSlot::BaseColor ||
+        slot == AssetSourceMaterialTextureSlot::Normal ||
+        slot == AssetSourceMaterialTextureSlot::MetallicRoughness ||
+        slot == AssetSourceMaterialTextureSlot::Occlusion ||
+        slot == AssetSourceMaterialTextureSlot::Emissive;
+}
+
+bool hasDuplicateMaterialTextureSlot(
+    const AssetSourceMaterialDescriptor& descriptor,
+    const std::uint32_t candidateIndex) noexcept
+{
+    const AssetSourceMaterialTextureSlot slot = descriptor.textureRefs[candidateIndex].slot;
+    for (std::uint32_t index = 0; index < candidateIndex; ++index)
+    {
+        if (descriptor.textureRefs[index].slot == slot)
+        {
+            return true;
+        }
+    }
+    return false;
+}
+
 AssetSourceDescriptorValidationResult validateMeshDescriptor(
     const AssetSourceMeshDescriptor& descriptor) noexcept
 {
@@ -132,9 +156,19 @@ AssetSourceDescriptorValidationResult validateMaterialDescriptor(
 
     for (std::uint32_t index = 0; index < descriptor.textureRefCount; ++index)
     {
-        if (!isValid(descriptor.textureRefs[index]))
+        if (!isValidMaterialTextureSlot(descriptor.textureRefs[index].slot))
+        {
+            return AssetSourceDescriptorValidationResult::InvalidMaterialTextureSlot;
+        }
+
+        if (!isValid(descriptor.textureRefs[index].id))
         {
             return AssetSourceDescriptorValidationResult::InvalidMaterialTextureRef;
+        }
+
+        if (hasDuplicateMaterialTextureSlot(descriptor, index))
+        {
+            return AssetSourceDescriptorValidationResult::DuplicateMaterialTextureSlot;
         }
     }
 
@@ -171,8 +205,12 @@ const char* assetSourceDescriptorValidationResultName(
         return "InvalidMaterialAlphaMode";
     case AssetSourceDescriptorValidationResult::InvalidMaterialTextureCount:
         return "InvalidMaterialTextureCount";
+    case AssetSourceDescriptorValidationResult::InvalidMaterialTextureSlot:
+        return "InvalidMaterialTextureSlot";
     case AssetSourceDescriptorValidationResult::InvalidMaterialTextureRef:
         return "InvalidMaterialTextureRef";
+    case AssetSourceDescriptorValidationResult::DuplicateMaterialTextureSlot:
+        return "DuplicateMaterialTextureSlot";
     }
 
     return "Unknown";

@@ -106,6 +106,43 @@ enum class AssetSourceMaterialAlphaMode
     AlphaBlend,
 };
 
+/** @brief Named material texture slot carried by renderer-free material metadata. */
+enum class AssetSourceMaterialTextureSlot
+{
+    Unknown,
+    BaseColor,
+    Normal,
+    MetallicRoughness,
+    Occlusion,
+    Emissive,
+};
+
+/** @brief One named texture asset reference used by a material source. */
+struct AssetSourceMaterialTextureRef
+{
+    /** @brief Material slot that will later resolve to a renderer texture handle. */
+    AssetSourceMaterialTextureSlot slot = AssetSourceMaterialTextureSlot::Unknown;
+
+    /** @brief Engine asset ID for the referenced texture source. */
+    AssetId id = {};
+};
+
+/** @brief Returns true when two material texture refs name the same slot and asset ID. */
+constexpr bool operator==(
+    const AssetSourceMaterialTextureRef& lhs,
+    const AssetSourceMaterialTextureRef& rhs) noexcept
+{
+    return lhs.slot == rhs.slot && lhs.id == rhs.id;
+}
+
+/** @brief Returns true when two material texture refs differ. */
+constexpr bool operator!=(
+    const AssetSourceMaterialTextureRef& lhs,
+    const AssetSourceMaterialTextureRef& rhs) noexcept
+{
+    return !(lhs == rhs);
+}
+
 /** @brief Renderer-free material source metadata. */
 struct AssetSourceMaterialDescriptor
 {
@@ -115,8 +152,8 @@ struct AssetSourceMaterialDescriptor
     /** @brief Expected material alpha/depth policy. */
     AssetSourceMaterialAlphaMode alphaMode = AssetSourceMaterialAlphaMode::Unknown;
 
-    /** @brief Texture asset IDs referenced by this material source. */
-    std::array<AssetId, kMaxAssetSourceMaterialTextureRefs> textureRefs = {};
+    /** @brief Named texture asset references used by this material source. */
+    std::array<AssetSourceMaterialTextureRef, kMaxAssetSourceMaterialTextureRefs> textureRefs = {};
 
     /** @brief Number of active texture references in `textureRefs`. */
     std::uint32_t textureRefCount = 0;
@@ -157,7 +194,9 @@ enum class AssetSourceDescriptorValidationResult
     InvalidMaterialModel,
     InvalidMaterialAlphaMode,
     InvalidMaterialTextureCount,
+    InvalidMaterialTextureSlot,
     InvalidMaterialTextureRef,
+    DuplicateMaterialTextureSlot,
 };
 
 /** @brief Returns a stable diagnostic name for a descriptor validation result. */

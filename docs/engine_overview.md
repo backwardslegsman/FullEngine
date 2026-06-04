@@ -153,8 +153,9 @@ Implemented pieces:
   mesh/material/texture source descriptors, plus request-order lookup
   diagnostics for mapping missing load intent to those source records
 - renderer-free loaded asset payloads for mesh, texture, and material data,
-  giving future importers a copied CPU data contract before renderer upload,
-  handle creation, async IO, or renderer-resource ownership
+  including mesh UV0 and named material texture slots, giving future importers
+  a copied CPU data contract before renderer upload, handle creation, async IO,
+  or renderer-resource ownership
 - a dev-only loaded asset importer that reads tiny tracked ASCII mesh,
   texture, and material fixtures into `LoadedAssetPayload` values, proving the
   first real source-file-to-payload path without adopting a production asset
@@ -162,28 +163,30 @@ Implemented pieces:
 - an Assimp-backed loaded asset importer that reads static glTF mesh files into
   the same renderer-free `LoadedAssetPayload` mesh contract, aggregating
   multi-mesh scenes in deterministic order, optionally generating missing
-  normals, copying vertex colors, and validating source descriptors and
-  payload data while leaving textures, materials, tangents, UVs, skeletal
-  meshes, animations, async IO, and renderer-resource creation to later slices
+  normals, requiring or explicitly defaulting UV0, copying vertex colors, and
+  validating source descriptors and payload data while leaving tangents, UV1+,
+  skeletal meshes, animations, async IO, and renderer-resource creation to
+  later slices
 - an stb-backed direct texture image importer that reads image files into the
   renderer-free `LoadedTextureAsset` contract as tightly packed single-mip
   RGBA8 bytes, validating source descriptors and payload data while leaving
   glTF image references, embedded images, mip generation, compression, async
   IO, and renderer-resource creation to later slices
-- a glTF material/image reference extractor that maps referenced base-color
-  images into texture `AssetSourceRecord`s, emits `LoadedMaterialAsset`
-  payloads with texture asset IDs, and leaves actual image decoding/upload to
-  the existing stb and renderer-integration paths
+- a glTF material/image reference extractor that maps base-color, normal,
+  metallic-roughness, occlusion, and emissive image references into texture
+  `AssetSourceRecord`s, emits `LoadedMaterialAsset` payloads with named texture
+  asset slots, and leaves actual image decoding/upload to the existing stb and
+  renderer-integration paths
 - upload-intent planning that translates mapped source descriptors into public
   renderer mesh/texture/material upload expectations without source bytes,
   renderer handles, renderer calls, or resource creation
 - loaded-payload upload planning that translates validated CPU mesh/texture
-  payloads into owned renderer descriptor work and material payloads into
-  texture-ID-based material upload expectations without invoking renderer APIs
-  or creating resources
+  payloads into owned renderer descriptor work, including UV0, and material
+  payloads into named texture-slot upload expectations without invoking
+  renderer APIs or creating resources
 - loaded-payload upload execution that consumes planned mesh/texture/material
   work through caller-owned public renderer `createMesh`, `createTexture`, and
-  `createMaterial` calls, resolving material texture asset IDs through
+  `createMaterial` calls, resolving named material texture asset IDs through
   `RendererAssetHandleCatalog` before recording successful handles
 - a dev manifest asset-load callback that resolves retained source metadata,
   imports tiny dev mesh/texture/material files, executes caller-owned renderer

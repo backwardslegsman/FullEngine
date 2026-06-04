@@ -53,8 +53,8 @@ full_engine::AssetSourceDescriptor materialDescriptor()
     full_engine::AssetSourceDescriptor descriptor;
     descriptor.material.model = full_engine::AssetSourceMaterialModel::TerrainSplat;
     descriptor.material.alphaMode = full_engine::AssetSourceMaterialAlphaMode::Opaque;
-    descriptor.material.textureRefs[0] = asset(100);
-    descriptor.material.textureRefs[1] = asset(101);
+    descriptor.material.textureRefs[0] = {full_engine::AssetSourceMaterialTextureSlot::BaseColor, asset(100)};
+    descriptor.material.textureRefs[1] = {full_engine::AssetSourceMaterialTextureSlot::Normal, asset(101)};
     descriptor.material.textureRefCount = 2;
     return descriptor;
 }
@@ -191,7 +191,7 @@ void testInvalidMaterialDescriptors(std::vector<std::string>& failures)
         failures);
 
     descriptor = materialDescriptor();
-    descriptor.material.textureRefs[1] = {};
+    descriptor.material.textureRefs[1].id = {};
     expect(
         full_engine::validateAssetSourceDescriptor(full_engine::AssetKind::Material, descriptor) ==
             full_engine::AssetSourceDescriptorValidationResult::InvalidMaterialTextureRef,

@@ -71,9 +71,9 @@ struct LoadedTextureUploadWork
 /**
  * @brief Renderer-facing material upload expectation without renderer handles.
  *
- * Materials preserve texture asset references because a later resolver must
- * map those IDs to renderer texture handles before a `MaterialDesc` can be
- * submitted to the renderer.
+ * Materials preserve named texture asset references because a later resolver
+ * must map those IDs to renderer texture handles before a `MaterialDesc` can
+ * be submitted to the renderer.
  */
 struct LoadedMaterialUploadWork
 {
@@ -86,8 +86,8 @@ struct LoadedMaterialUploadWork
     /** @brief Renderer alpha policy mapped from the loaded material payload. */
     full_renderer::MaterialAlphaMode alphaMode = full_renderer::MaterialAlphaMode::Opaque;
 
-    /** @brief Texture asset IDs that still need renderer handle resolution. */
-    std::vector<AssetId> textureRefs;
+    /** @brief Named texture asset references that still need renderer handle resolution. */
+    std::vector<AssetSourceMaterialTextureRef> textureRefs;
 };
 
 /** @brief Ordered upload planning record for one loaded asset payload. */

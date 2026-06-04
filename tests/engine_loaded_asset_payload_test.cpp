@@ -76,8 +76,8 @@ full_engine::LoadedMaterialAsset materialAsset()
     material.id = asset(30);
     material.model = full_engine::AssetSourceMaterialModel::TerrainSplat;
     material.alphaMode = full_engine::AssetSourceMaterialAlphaMode::Opaque;
-    material.textureRefs[0] = asset(20);
-    material.textureRefs[1] = asset(21);
+    material.textureRefs[0] = {full_engine::AssetSourceMaterialTextureSlot::BaseColor, asset(20)};
+    material.textureRefs[1] = {full_engine::AssetSourceMaterialTextureSlot::Normal, asset(21)};
     material.textureRefCount = 2;
     return material;
 }
@@ -289,7 +289,7 @@ void testInvalidMaterialPayloads(std::vector<std::string>& failures)
         failures);
 
     material = materialAsset();
-    material.textureRefs[1] = {};
+    material.textureRefs[1].id = {};
     expect(
         full_engine::validateLoadedMaterialAsset(material) ==
             full_engine::LoadedAssetPayloadValidationResult::InvalidMaterialTextureRef,

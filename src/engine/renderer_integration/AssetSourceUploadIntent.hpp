@@ -77,8 +77,8 @@ struct AssetSourceMaterialUploadExpectation
     /** @brief Renderer material alpha policy corresponding to source metadata. */
     full_renderer::MaterialAlphaMode alphaMode = full_renderer::MaterialAlphaMode::Opaque;
 
-    /** @brief Texture asset IDs that must be resolved to renderer handles later. */
-    std::vector<AssetId> textureRefs;
+    /** @brief Named texture asset references that must be resolved to renderer handles later. */
+    std::vector<AssetSourceMaterialTextureRef> textureRefs;
 };
 
 /**

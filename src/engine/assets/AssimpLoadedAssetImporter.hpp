@@ -26,6 +26,9 @@ struct AssimpLoadedAssetImportOptions
 
     /** @brief Generate normals through Assimp when the source mesh omits them. */
     bool generateMissingNormals = false;
+
+    /** @brief Accept missing UV set 0 and fill imported `uv0` with zero. */
+    bool defaultMissingUv0ToZero = false;
 };
 
 /** @brief Result status for importing one asset source through Assimp. */
@@ -69,15 +72,16 @@ const char* assimpLoadedAssetImportStatusName(
  *
  * `source.uri` is treated as a direct filesystem path. V1 supports
  * `AssetKind::Mesh` only and combines all supported static meshes in the scene
- * into one `LoadedMeshAsset` with positions, normals, optional color set 0,
- * and 16-bit triangle indices. Mesh order and face order follow Assimp's
- * post-processed scene order. Parsed aggregate metadata is checked against
- * `source.descriptor.mesh`, and the final payload is validated with
- * `validateLoadedAssetPayload`.
+ * into one `LoadedMeshAsset` with positions, normals, UV set 0, optional
+ * color set 0, and 16-bit triangle indices. Missing UV0 is rejected unless
+ * `AssimpLoadedAssetImportOptions::defaultMissingUv0ToZero` is explicitly set.
+ * Mesh order and face order follow Assimp's post-processed scene order. Parsed
+ * aggregate metadata is checked against `source.descriptor.mesh`, and the
+ * final payload is validated with `validateLoadedAssetPayload`.
  *
  * The function copies all payload data by value. It performs no renderer
  * calls, renderer handle lookup, renderer resource creation, texture decoding,
- * material import, tangent/UV import, skeletal import, animation import, async
+ * material import, tangent import, UV1+ import, skeletal import, animation import, async
  * scheduling, or source catalog mutation.
  */
 AssimpLoadedAssetImportResult importLoadedAssetPayloadWithAssimp(

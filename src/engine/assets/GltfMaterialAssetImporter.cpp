@@ -6,8 +6,10 @@
 #include <assimp/scene.h>
 #include <stb_image.h>
 
+#include <algorithm>
 #include <filesystem>
 #include <fstream>
+#include <iterator>
 #include <map>
 #include <set>
 #include <vector>
@@ -17,6 +19,53 @@ namespace full_engine
 namespace
 {
 constexpr std::uint32_t kSingleMip = 1;
+
+struct GltfTextureSlotPolicy
+{
+    AssetSourceMaterialTextureSlot slot = AssetSourceMaterialTextureSlot::Unknown;
+    aiTextureType primaryType = aiTextureType_NONE;
+    aiTextureType fallbackType = aiTextureType_NONE;
+    AssetSourceTextureSemantic semantic = AssetSourceTextureSemantic::Unknown;
+    AssetSourceTextureColorSpace colorSpace = AssetSourceTextureColorSpace::Unknown;
+};
+
+constexpr GltfTextureSlotPolicy kTextureSlotPolicies[] = {
+    {
+        AssetSourceMaterialTextureSlot::BaseColor,
+        aiTextureType_BASE_COLOR,
+        aiTextureType_DIFFUSE,
+        AssetSourceTextureSemantic::Color,
+        AssetSourceTextureColorSpace::Srgb,
+    },
+    {
+        AssetSourceMaterialTextureSlot::Normal,
+        aiTextureType_NORMALS,
+        aiTextureType_NONE,
+        AssetSourceTextureSemantic::NormalMap,
+        AssetSourceTextureColorSpace::EncodedNormal,
+    },
+    {
+        AssetSourceMaterialTextureSlot::MetallicRoughness,
+        aiTextureType_DIFFUSE_ROUGHNESS,
+        aiTextureType_METALNESS,
+        AssetSourceTextureSemantic::LinearData,
+        AssetSourceTextureColorSpace::Linear,
+    },
+    {
+        AssetSourceMaterialTextureSlot::Occlusion,
+        aiTextureType_AMBIENT_OCCLUSION,
+        aiTextureType_LIGHTMAP,
+        AssetSourceTextureSemantic::LinearData,
+        AssetSourceTextureColorSpace::Linear,
+    },
+    {
+        AssetSourceMaterialTextureSlot::Emissive,
+        aiTextureType_EMISSIVE,
+        aiTextureType_NONE,
+        AssetSourceTextureSemantic::Color,
+        AssetSourceTextureColorSpace::Srgb,
+    },
+};
 
 AssetId offsetAssetId(const AssetId first, const std::uint32_t offset) noexcept
 {
@@ -52,13 +101,18 @@ AssetSourceMaterialAlphaMode alphaModeForMaterial(const aiMaterial& material)
     return AssetSourceMaterialAlphaMode::Opaque;
 }
 
-bool getBaseColorTexturePath(const aiMaterial& material, aiString& texturePath)
+bool getTexturePath(
+    const aiMaterial& material,
+    const GltfTextureSlotPolicy& policy,
+    aiString& texturePath)
 {
-    if (material.GetTexture(aiTextureType_BASE_COLOR, 0, &texturePath) == AI_SUCCESS)
+    if (policy.primaryType != aiTextureType_NONE &&
+        material.GetTexture(policy.primaryType, 0, &texturePath) == AI_SUCCESS)
     {
         return true;
     }
-    return material.GetTexture(aiTextureType_DIFFUSE, 0, &texturePath) == AI_SUCCESS;
+    return policy.fallbackType != aiTextureType_NONE &&
+        material.GetTexture(policy.fallbackType, 0, &texturePath) == AI_SUCCESS;
 }
 
 std::string resolveTextureUri(const std::filesystem::path& gltfPath, const aiString& texturePath)
@@ -93,7 +147,8 @@ AssetSourceRecord makeTextureSource(
     const std::string& uri,
     const std::uint32_t width,
     const std::uint32_t height,
-    const GltfMaterialAssetImportOptions& options)
+    const AssetSourceTextureSemantic semantic,
+    const AssetSourceTextureColorSpace colorSpace)
 {
     AssetSourceRecord source;
     source.id = id;
@@ -103,8 +158,8 @@ AssetSourceRecord makeTextureSource(
     source.descriptor.texture.height = height;
     source.descriptor.texture.mipCount = kSingleMip;
     source.descriptor.texture.format = AssetSourceTextureFormat::Rgba8;
-    source.descriptor.texture.semantic = options.baseColorTextureSemantic;
-    source.descriptor.texture.colorSpace = options.baseColorTextureColorSpace;
+    source.descriptor.texture.semantic = semantic;
+    source.descriptor.texture.colorSpace = colorSpace;
     return source;
 }
 
@@ -112,19 +167,30 @@ LoadedAssetPayload makeMaterialPayload(
     const AssetId id,
     const AssetSourceMaterialModel model,
     const AssetSourceMaterialAlphaMode alphaMode,
-    const AssetId textureId)
+    const AssetSourceMaterialTextureRef* refs,
+    const std::uint32_t refCount)
 {
     LoadedAssetPayload payload;
     payload.kind = AssetKind::Material;
     payload.material.id = id;
     payload.material.model = model;
     payload.material.alphaMode = alphaMode;
-    if (isValid(textureId))
+    for (std::uint32_t index = 0; index < refCount; ++index)
     {
-        payload.material.textureRefs[0] = textureId;
-        payload.material.textureRefCount = 1;
+        payload.material.textureRefs[index] = refs[index];
     }
+    payload.material.textureRefCount = refCount;
     return payload;
+}
+
+std::string textureKey(
+    const std::string& uri,
+    const AssetSourceTextureSemantic semantic,
+    const AssetSourceTextureColorSpace colorSpace)
+{
+    return uri + "|" +
+        std::to_string(static_cast<int>(semantic)) + "|" +
+        std::to_string(static_cast<int>(colorSpace));
 }
 
 AssetSourceRecord makeMaterialSource(
@@ -188,6 +254,80 @@ std::vector<unsigned int> referencedMaterialIndices(const aiScene& scene)
     }
 
     return {indices.begin(), indices.end()};
+}
+
+bool materialHasAnyTexture(const aiMaterial& material)
+{
+    for (const GltfTextureSlotPolicy& policy : kTextureSlotPolicies)
+    {
+        aiString path;
+        if (getTexturePath(material, policy, path))
+        {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool sourceDeclaresMaterials(const std::string& uri)
+{
+    std::ifstream input(uri);
+    if (!input)
+    {
+        return false;
+    }
+
+    std::string contents(
+        (std::istreambuf_iterator<char>(input)),
+        std::istreambuf_iterator<char>());
+    return contents.find("\"materials\"") != std::string::npos;
+}
+
+std::vector<unsigned int> allMaterialIndices(const aiScene& scene)
+{
+    std::vector<unsigned int> indices;
+    if (scene.mMaterials == nullptr)
+    {
+        return indices;
+    }
+
+    indices.reserve(scene.mNumMaterials);
+    for (unsigned int materialIndex = 0; materialIndex < scene.mNumMaterials; ++materialIndex)
+    {
+        const aiMaterial* const material = scene.mMaterials[materialIndex];
+        if (material == nullptr)
+        {
+            continue;
+        }
+
+        if (materialHasAnyTexture(*material))
+        {
+            indices.push_back(materialIndex);
+        }
+    }
+    return indices;
+}
+
+void removeImplicitNoTextureMaterials(
+    const aiScene& scene,
+    std::vector<unsigned int>& materialIndices)
+{
+    if (materialIndices.size() <= 1 || scene.mMaterials == nullptr)
+    {
+        return;
+    }
+
+    materialIndices.erase(
+        std::remove_if(
+            materialIndices.begin(),
+            materialIndices.end(),
+            [&scene](const unsigned int materialIndex)
+            {
+                return materialIndex < scene.mNumMaterials &&
+                    scene.mMaterials[materialIndex] != nullptr &&
+                    !materialHasAnyTexture(*scene.mMaterials[materialIndex]);
+            }),
+        materialIndices.end());
 }
 } // namespace
 
@@ -258,7 +398,29 @@ GltfMaterialAssetImportResult importGltfMaterialAssetSources(
         result.status = GltfMaterialAssetImportStatus::ParseError;
         return result;
     }
-    const std::vector<unsigned int> materialIndices = referencedMaterialIndices(*scene);
+    std::vector<unsigned int> materialIndices = referencedMaterialIndices(*scene);
+    const bool declaresMaterials = sourceDeclaresMaterials(uri);
+    bool hasExplicitTexturedMaterial = false;
+    if (declaresMaterials)
+    {
+        const std::vector<unsigned int> texturedMaterialIndices = allMaterialIndices(*scene);
+        hasExplicitTexturedMaterial = !texturedMaterialIndices.empty();
+        if (!texturedMaterialIndices.empty())
+        {
+            materialIndices = texturedMaterialIndices;
+        }
+    }
+    if (declaresMaterials && scene->mNumMaterials > 1U && materialIndices.size() > 1U)
+    {
+        materialIndices.erase(
+            std::remove(materialIndices.begin(), materialIndices.end(), 0U),
+            materialIndices.end());
+    }
+    if (materialIndices.empty() && declaresMaterials)
+    {
+        materialIndices = allMaterialIndices(*scene);
+    }
+    removeImplicitNoTextureMaterials(*scene, materialIndices);
     if (scene->mNumMaterials == 0 ||
         scene->mMaterials == nullptr ||
         materialIndices.empty())
@@ -268,7 +430,7 @@ GltfMaterialAssetImportResult importGltfMaterialAssetSources(
     }
 
     const std::filesystem::path gltfPath(uri);
-    std::map<std::string, AssetId> textureIdsByUri;
+    std::map<std::string, AssetId> textureIdsByKey;
     std::uint32_t nextTextureOffset = 0;
 
     for (std::size_t outputIndex = 0; outputIndex < materialIndices.size(); ++outputIndex)
@@ -288,15 +450,35 @@ GltfMaterialAssetImportResult importGltfMaterialAssetSources(
             continue;
         }
 
-        AssetId textureId = {};
-        aiString texturePath;
-        if (getBaseColorTexturePath(*material, texturePath))
+        std::array<AssetSourceMaterialTextureRef, kMaxAssetSourceMaterialTextureRefs> textureRefs = {};
+        std::uint32_t textureRefCount = 0;
+        for (const GltfTextureSlotPolicy& policy : kTextureSlotPolicies)
         {
-            const std::string textureUri = resolveTextureUri(gltfPath, texturePath);
-            record.baseColorTextureUri = textureUri;
+            aiString texturePath;
+            if (!getTexturePath(*material, policy, texturePath))
+            {
+                continue;
+            }
 
-            const auto existing = textureIdsByUri.find(textureUri);
-            if (existing != textureIdsByUri.end())
+            const std::string textureUri = resolveTextureUri(gltfPath, texturePath);
+            if (policy.slot == AssetSourceMaterialTextureSlot::BaseColor)
+            {
+                record.baseColorTextureUri = textureUri;
+            }
+
+            const AssetSourceTextureSemantic semantic =
+                policy.slot == AssetSourceMaterialTextureSlot::BaseColor ?
+                options.baseColorTextureSemantic :
+                policy.semantic;
+            const AssetSourceTextureColorSpace colorSpace =
+                policy.slot == AssetSourceMaterialTextureSlot::BaseColor ?
+                options.baseColorTextureColorSpace :
+                policy.colorSpace;
+            const std::string key = textureKey(textureUri, semantic, colorSpace);
+
+            AssetId textureId = {};
+            const auto existing = textureIdsByKey.find(key);
+            if (existing != textureIdsByKey.end())
             {
                 textureId = existing->second;
             }
@@ -314,7 +496,7 @@ GltfMaterialAssetImportResult importGltfMaterialAssetSources(
 
                 textureId = offsetAssetId(options.firstTextureId, nextTextureOffset);
                 const AssetSourceRecord textureSource =
-                    makeTextureSource(textureId, textureUri, width, height, options);
+                    makeTextureSource(textureId, textureUri, width, height, semantic, colorSpace);
                 record.textureSourceValidation = validateAssetSourceRecord(textureSource);
                 if (record.textureSourceValidation != AssetSourceRecordValidationResult::Success)
                 {
@@ -324,23 +506,36 @@ GltfMaterialAssetImportResult importGltfMaterialAssetSources(
                     continue;
                 }
 
-                textureIdsByUri.emplace(textureUri, textureId);
+                textureIdsByKey.emplace(key, textureId);
                 ++nextTextureOffset;
                 result.sourceRecords.push_back(textureSource);
                 ++result.summary.emittedTextureSourceCount;
             }
-        }
-        else
-        {
-            record.status = GltfMaterialAssetImportRecordStatus::NoBaseColorTexture;
+
+            textureRefs[textureRefCount] = {policy.slot, textureId};
+            ++textureRefCount;
+            if (policy.slot == AssetSourceMaterialTextureSlot::BaseColor)
+            {
+                record.baseColorTextureId = textureId;
+            }
         }
 
-        record.baseColorTextureId = textureId;
+        if (textureRefCount == 0)
+        {
+            record.status = GltfMaterialAssetImportRecordStatus::NoBaseColorTexture;
+            if (hasExplicitTexturedMaterial && scene->mNumMaterials > 1U)
+            {
+                continue;
+            }
+        }
+        record.textureRefs = textureRefs;
+        record.textureRefCount = textureRefCount;
         LoadedAssetPayload payload = makeMaterialPayload(
             record.materialId,
             options.materialModel,
             alphaModeForMaterial(*material),
-            textureId);
+            textureRefs.data(),
+            textureRefCount);
         record.payloadValidation = validateLoadedAssetPayload(payload);
         if (record.payloadValidation != LoadedAssetPayloadValidationResult::Success)
         {

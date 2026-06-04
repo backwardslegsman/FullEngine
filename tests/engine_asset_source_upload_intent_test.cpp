@@ -57,8 +57,8 @@ full_engine::AssetSourceDescriptor materialDescriptor()
     full_engine::AssetSourceDescriptor descriptor;
     descriptor.material.model = full_engine::AssetSourceMaterialModel::TerrainSplat;
     descriptor.material.alphaMode = full_engine::AssetSourceMaterialAlphaMode::AlphaTest;
-    descriptor.material.textureRefs[0] = asset(30);
-    descriptor.material.textureRefs[1] = asset(31);
+    descriptor.material.textureRefs[0] = {full_engine::AssetSourceMaterialTextureSlot::BaseColor, asset(30)};
+    descriptor.material.textureRefs[1] = {full_engine::AssetSourceMaterialTextureSlot::Normal, asset(31)};
     descriptor.material.textureRefCount = 2;
     return descriptor;
 }
@@ -117,7 +117,11 @@ void testValidSourcesPlanUploadIntent(std::vector<std::string>& failures)
     expect(plan.records[2].material.kind == full_renderer::MaterialKind::TerrainSplat, "material upload intent maps kind", failures);
     expect(plan.records[2].material.alphaMode == full_renderer::MaterialAlphaMode::AlphaTest, "material upload intent maps alpha mode", failures);
     expect(plan.records[2].material.textureRefs.size() == 2, "material upload intent copies texture ref count", failures);
-    expect(plan.records[2].material.textureRefs[0] == asset(30), "material upload intent keeps texture refs as asset IDs", failures);
+    expect(
+        plan.records[2].material.textureRefs[0].slot == full_engine::AssetSourceMaterialTextureSlot::BaseColor &&
+            plan.records[2].material.textureRefs[0].id == asset(30),
+        "material upload intent keeps named texture refs",
+        failures);
 }
 
 void testTextureEnumMappings(std::vector<std::string>& failures)

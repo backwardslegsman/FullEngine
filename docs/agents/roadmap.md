@@ -486,15 +486,15 @@ move gameplay, streaming policy, or editor concepts into renderer internals.
   renderer-resource creation.
 - Asset source catalogs are in place: loadable mesh/material/texture asset IDs
   can be mapped to opaque renderer-free source URIs plus typed source
-  descriptors for expected mesh counts/bounds, texture metadata, and material
-  texture references. Manifest load intent can be checked against those source
-  records in request order before any real importer, IO, async work, or
+  descriptors for expected mesh counts/bounds, texture metadata, and named
+  material texture slots. Manifest load intent can be checked against those
+  source records in request order before any real importer, IO, async work, or
   renderer-resource creation exists.
 - CPU loaded asset payloads are in place: mesh vertices/indices/bounds,
-  texture RGBA8 bytes/metadata, and material texture references now have a
-  renderer-free copied data contract with validation, establishing the first
-  concrete importer-output shape without IO, async work, renderer calls, or
-  renderer-resource creation.
+  mesh UV0, texture RGBA8 bytes/metadata, and named material texture references
+  now have a renderer-free copied data contract with validation, establishing
+  the first concrete importer-output shape without IO, async work, renderer
+  calls, or renderer-resource creation.
 - A dev-only loaded asset importer is in place: tiny tracked ASCII mesh,
   texture, and material fixtures can be parsed into `LoadedAssetPayload` values
   and validated against `AssetSourceRecord` descriptors. This proves the first
@@ -504,10 +504,10 @@ move gameplay, streaming policy, or editor concepts into renderer internals.
   payloads: validated mesh source descriptors can be read from tracked glTF
   fixtures into the renderer-free `LoadedAssetPayload` mesh contract. It now
   aggregates multi-mesh scenes deterministically, can request Assimp-generated
-  normals when source normals are absent, copies vertex color set 0, and
-  enforces the existing 16-bit indexable aggregate vertex budget. This starts
-  the real importer path with Assimp while keeping texture import, material
-  authoring, tangents/UVs, skeletal meshes, animation clips, packed assets,
+  normals when source normals are absent, requires or explicitly defaults UV0,
+  copies vertex color set 0, and enforces the existing 16-bit indexable
+  aggregate vertex budget. This starts the real importer path with Assimp while
+  keeping tangents, UV1+, skeletal meshes, animation clips, packed assets,
   async IO, and renderer-resource creation outside the asset layer.
 - Asset source upload-intent planning is in place: mapped source descriptors
   can be translated into public renderer mesh/texture/material upload
@@ -516,11 +516,11 @@ move gameplay, streaming policy, or editor concepts into renderer internals.
   manifest load and streaming loop diagnostics expose the planned/unmapped/
   invalid/unsupported counters beside source mapping counters.
 - Loaded asset upload planning is in place: validated CPU mesh/texture payloads
-  can be copied into owned renderer descriptor work, and material payloads can
-  be translated into renderer material-policy expectations while preserving
-  texture asset IDs for upload-time handle resolution. This is the first bridge
-  from importer-output data to renderer upload work without calling renderer
-  APIs or creating resources.
+  can be copied into owned renderer descriptor work, including UV0, and material
+  payloads can be translated into renderer material-policy expectations while
+  preserving named texture asset slots for upload-time handle resolution. This
+  is the first bridge from importer-output data to renderer upload work without
+  calling renderer APIs or creating resources.
 - Loaded asset upload execution is in place: planned mesh/texture/material work
   can be submitted through caller-owned public renderer `createMesh`,
   `createTexture`, and `createMaterial` calls, with successful handles recorded
@@ -791,9 +791,15 @@ move gameplay, streaming policy, or editor concepts into renderer internals.
   extracted through Assimp into texture source records and material payloads,
   with direct image metadata inspected for the existing stb texture importer
   path and texture dependencies represented as engine asset IDs.
-- Next slice: extend material/mesh payload contracts for UVs and imported
-  material texture slots beyond base color. Tangents, skeletal meshes, and
-  animation clips should follow only after their payload contracts are explicit.
+- Forty-fourth slice is implemented: mesh and material asset contracts now carry
+  UV0 and named material texture slots for BaseColor, Normal,
+  MetallicRoughness, Occlusion, and Emissive. Assimp static mesh import can
+  require/copy UV0 or explicitly default missing UVs, glTF material extraction
+  maps direct texture references into named slots, and renderer upload
+  execution resolves those slots into copied basic material texture handles.
+- Next slice: add tangent payload/upload contracts and decide whether they are
+  generated by Assimp or authored by source assets before moving into skeletal
+  meshes and animation clips.
 - Initial sample integration is in place: the debug UI can run the
   manifest-aware streaming coordinator once or continuously from camera
   position, display readiness/load/staging/streaming queue counters, and keep

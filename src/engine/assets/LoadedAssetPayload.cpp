@@ -12,6 +12,11 @@ bool isFinite3(const float values[3]) noexcept
     return std::isfinite(values[0]) && std::isfinite(values[1]) && std::isfinite(values[2]);
 }
 
+bool isFinite2(const float values[2]) noexcept
+{
+    return std::isfinite(values[0]) && std::isfinite(values[1]);
+}
+
 bool isFinite4(const float values[4]) noexcept
 {
     return std::isfinite(values[0]) &&
@@ -92,6 +97,30 @@ bool isValidMaterialAlphaMode(const AssetSourceMaterialAlphaMode alphaMode) noex
         alphaMode == AssetSourceMaterialAlphaMode::AlphaBlend;
 }
 
+bool isValidMaterialTextureSlot(const AssetSourceMaterialTextureSlot slot) noexcept
+{
+    return slot == AssetSourceMaterialTextureSlot::BaseColor ||
+        slot == AssetSourceMaterialTextureSlot::Normal ||
+        slot == AssetSourceMaterialTextureSlot::MetallicRoughness ||
+        slot == AssetSourceMaterialTextureSlot::Occlusion ||
+        slot == AssetSourceMaterialTextureSlot::Emissive;
+}
+
+bool hasDuplicateMaterialTextureSlot(
+    const LoadedMaterialAsset& material,
+    const std::uint32_t candidateIndex) noexcept
+{
+    const AssetSourceMaterialTextureSlot slot = material.textureRefs[candidateIndex].slot;
+    for (std::uint32_t index = 0; index < candidateIndex; ++index)
+    {
+        if (material.textureRefs[index].slot == slot)
+        {
+            return true;
+        }
+    }
+    return false;
+}
+
 bool textureByteCountOverflows(
     const std::uint32_t width,
     const std::uint32_t height) noexcept
@@ -151,8 +180,12 @@ const char* loadedAssetPayloadValidationResultName(
         return "InvalidMaterialAlphaMode";
     case LoadedAssetPayloadValidationResult::InvalidMaterialTextureCount:
         return "InvalidMaterialTextureCount";
+    case LoadedAssetPayloadValidationResult::InvalidMaterialTextureSlot:
+        return "InvalidMaterialTextureSlot";
     case LoadedAssetPayloadValidationResult::InvalidMaterialTextureRef:
         return "InvalidMaterialTextureRef";
+    case LoadedAssetPayloadValidationResult::DuplicateMaterialTextureSlot:
+        return "DuplicateMaterialTextureSlot";
     }
 
     return "Unknown";
@@ -186,6 +219,7 @@ LoadedAssetPayloadValidationResult validateLoadedMeshAsset(
         if (!isFinite3(vertex.position) ||
             !isFinite3(vertex.normal) ||
             !isNonZeroNormal(vertex.normal) ||
+            !isFinite2(vertex.uv0) ||
             !isFinite4(vertex.colorLinear) ||
             !isColorInRange(vertex.colorLinear))
         {
@@ -272,9 +306,19 @@ LoadedAssetPayloadValidationResult validateLoadedMaterialAsset(
 
     for (std::uint32_t index = 0; index < material.textureRefCount; ++index)
     {
-        if (!isValid(material.textureRefs[index]))
+        if (!isValidMaterialTextureSlot(material.textureRefs[index].slot))
+        {
+            return LoadedAssetPayloadValidationResult::InvalidMaterialTextureSlot;
+        }
+
+        if (!isValid(material.textureRefs[index].id))
         {
             return LoadedAssetPayloadValidationResult::InvalidMaterialTextureRef;
+        }
+
+        if (hasDuplicateMaterialTextureSlot(material, index))
+        {
+            return LoadedAssetPayloadValidationResult::DuplicateMaterialTextureSlot;
         }
     }
 

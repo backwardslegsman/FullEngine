@@ -66,12 +66,20 @@ void testBaseColorMaterialExtraction(std::vector<std::string>& failures)
     expect(result.sourceRecords[1].kind == full_engine::AssetKind::Material, "material source emitted after texture", failures);
     expect(result.sourceRecords[1].descriptor.material.alphaMode == full_engine::AssetSourceMaterialAlphaMode::AlphaBlend, "gltf blend alpha maps to alpha blend", failures);
     expect(result.sourceRecords[1].descriptor.material.textureRefCount == 1, "material source references texture", failures);
-    expect(result.sourceRecords[1].descriptor.material.textureRefs[0] == asset(2000), "material source references assigned texture id", failures);
+    expect(
+        result.sourceRecords[1].descriptor.material.textureRefs[0].slot == full_engine::AssetSourceMaterialTextureSlot::BaseColor &&
+            result.sourceRecords[1].descriptor.material.textureRefs[0].id == asset(2000),
+        "material source references assigned base-color texture id",
+        failures);
     expect(result.materialPayloads.size() == 1, "material payload emitted", failures);
     expect(result.materialPayloads[0].kind == full_engine::AssetKind::Material, "payload kind is material", failures);
     expect(result.materialPayloads[0].material.alphaMode == full_engine::AssetSourceMaterialAlphaMode::AlphaBlend, "payload alpha mode maps from gltf", failures);
     expect(result.materialPayloads[0].material.textureRefCount == 1, "payload references one texture", failures);
-    expect(result.materialPayloads[0].material.textureRefs[0] == asset(2000), "payload references assigned texture id", failures);
+    expect(
+        result.materialPayloads[0].material.textureRefs[0].slot == full_engine::AssetSourceMaterialTextureSlot::BaseColor &&
+            result.materialPayloads[0].material.textureRefs[0].id == asset(2000),
+        "payload references assigned base-color texture id",
+        failures);
     expect(full_engine::validateLoadedAssetPayload(result.materialPayloads[0]) == full_engine::LoadedAssetPayloadValidationResult::Success, "extracted material payload validates", failures);
 
     const full_engine::LoadedTextureImageImportResult texture =

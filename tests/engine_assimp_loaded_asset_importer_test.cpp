@@ -84,6 +84,13 @@ full_engine::AssetSourceRecord textureSource()
     return record;
 }
 
+full_engine::AssimpLoadedAssetImportOptions allowMissingUv0()
+{
+    full_engine::AssimpLoadedAssetImportOptions options;
+    options.defaultMissingUv0ToZero = true;
+    return options;
+}
+
 void writeFloat(std::ofstream& output, const float value)
 {
     output.write(reinterpret_cast<const char*>(&value), sizeof(value));
@@ -185,7 +192,8 @@ void testValidStaticMeshImport(std::vector<std::string>& failures)
 {
     const full_engine::AssimpLoadedAssetImportResult result =
         full_engine::importLoadedAssetPayloadWithAssimp(
-            meshSource(fixturePath("static_triangle.gltf")));
+            meshSource(fixturePath("static_triangle.gltf")),
+            allowMissingUv0());
     expect(result.status == full_engine::AssimpLoadedAssetImportStatus::Success, "valid gltf mesh imports", failures);
     expect(result.payload.kind == full_engine::AssetKind::Mesh, "valid gltf imports mesh payload", failures);
     expect(result.payload.mesh.id == asset(42), "imported mesh preserves asset id", failures);
@@ -194,6 +202,7 @@ void testValidStaticMeshImport(std::vector<std::string>& failures)
     expect(result.payload.mesh.indices[0] == 0 && result.payload.mesh.indices[1] == 1 && result.payload.mesh.indices[2] == 2, "imported mesh preserves indices", failures);
     expect(result.payload.mesh.localBounds.max[0] == 1.0f && result.payload.mesh.localBounds.max[1] == 1.0f, "imported mesh computes bounds", failures);
     expect(result.payload.mesh.vertices[0].normal[2] == 1.0f, "imported mesh copies normals", failures);
+    expect(result.payload.mesh.vertices[0].uv0[0] == 0.0f && result.payload.mesh.vertices[0].uv0[1] == 0.0f, "missing UV0 can default to zero", failures);
     expect(result.payload.mesh.vertices[0].colorLinear[0] == 1.0f && result.payload.mesh.vertices[0].colorLinear[3] == 1.0f, "imported mesh defaults vertex colors", failures);
     expect(
         full_engine::validateLoadedAssetPayload(result.payload) ==
@@ -207,7 +216,7 @@ void testMultiMeshImport(std::vector<std::string>& failures)
     full_engine::AssetSourceRecord source = meshSource(fixturePath("multi_mesh_static.gltf"));
     source.descriptor = meshDescriptor(6, 6, 0.0f, 0.0f, 0.0f, 3.0f, 1.0f, 0.0f);
     const full_engine::AssimpLoadedAssetImportResult result =
-        full_engine::importLoadedAssetPayloadWithAssimp(source);
+        full_engine::importLoadedAssetPayloadWithAssimp(source, allowMissingUv0());
     expect(result.status == full_engine::AssimpLoadedAssetImportStatus::Success, "multi-mesh gltf imports", failures);
     expect(result.payload.mesh.vertices.size() == 6, "multi-mesh import combines vertices", failures);
     expect(result.payload.mesh.indices.size() == 6, "multi-mesh import combines indices", failures);
@@ -226,6 +235,7 @@ void testGeneratedNormals(std::vector<std::string>& failures)
 
     full_engine::AssimpLoadedAssetImportOptions options;
     options.generateMissingNormals = true;
+    options.defaultMissingUv0ToZero = true;
     const full_engine::AssimpLoadedAssetImportResult generated =
         full_engine::importLoadedAssetPayloadWithAssimp(
             meshSource(fixturePath("no_normals.gltf")),
@@ -239,7 +249,8 @@ void testVertexColors(std::vector<std::string>& failures)
 {
     const full_engine::AssimpLoadedAssetImportResult result =
         full_engine::importLoadedAssetPayloadWithAssimp(
-            meshSource(fixturePath("vertex_colors.gltf")));
+            meshSource(fixturePath("vertex_colors.gltf")),
+            allowMissingUv0());
     expect(result.status == full_engine::AssimpLoadedAssetImportStatus::Success, "vertex-color gltf imports", failures);
     expect(result.payload.mesh.vertices[0].colorLinear[0] == 1.0f && result.payload.mesh.vertices[0].colorLinear[1] == 0.0f, "first vertex color copied", failures);
     expect(result.payload.mesh.vertices[1].colorLinear[1] == 1.0f && result.payload.mesh.vertices[1].colorLinear[0] == 0.0f, "second vertex color copied", failures);
@@ -263,25 +274,25 @@ void testFailures(std::vector<std::string>& failures)
     expect(missing.status == full_engine::AssimpLoadedAssetImportStatus::IoError, "missing gltf reports io error", failures);
 
     const full_engine::AssimpLoadedAssetImportResult malformed =
-        full_engine::importLoadedAssetPayloadWithAssimp(meshSource(fixturePath("malformed.gltf")));
+        full_engine::importLoadedAssetPayloadWithAssimp(meshSource(fixturePath("malformed.gltf")), allowMissingUv0());
     expect(malformed.status == full_engine::AssimpLoadedAssetImportStatus::ParseError, "malformed gltf reports parse error", failures);
 
     full_engine::AssetSourceRecord mismatch = meshSource(fixturePath("static_triangle.gltf"));
     mismatch.descriptor.mesh.vertexCount = 4;
     const full_engine::AssimpLoadedAssetImportResult descriptorMismatch =
-        full_engine::importLoadedAssetPayloadWithAssimp(mismatch);
+        full_engine::importLoadedAssetPayloadWithAssimp(mismatch, allowMissingUv0());
     expect(descriptorMismatch.status == full_engine::AssimpLoadedAssetImportStatus::DescriptorMismatch, "descriptor vertex-count mismatch is reported", failures);
 
     full_engine::AssetSourceRecord indexMismatch = meshSource(fixturePath("static_triangle.gltf"));
     indexMismatch.descriptor.mesh.indexCount = 6;
     const full_engine::AssimpLoadedAssetImportResult descriptorIndexMismatch =
-        full_engine::importLoadedAssetPayloadWithAssimp(indexMismatch);
+        full_engine::importLoadedAssetPayloadWithAssimp(indexMismatch, allowMissingUv0());
     expect(descriptorIndexMismatch.status == full_engine::AssimpLoadedAssetImportStatus::DescriptorMismatch, "descriptor index-count mismatch is reported", failures);
 
     full_engine::AssetSourceRecord boundsMismatch = meshSource(fixturePath("static_triangle.gltf"));
     boundsMismatch.descriptor.mesh.localBounds.max[0] = 2.0f;
     const full_engine::AssimpLoadedAssetImportResult descriptorBoundsMismatch =
-        full_engine::importLoadedAssetPayloadWithAssimp(boundsMismatch);
+        full_engine::importLoadedAssetPayloadWithAssimp(boundsMismatch, allowMissingUv0());
     expect(descriptorBoundsMismatch.status == full_engine::AssimpLoadedAssetImportStatus::DescriptorMismatch, "descriptor bounds mismatch is reported", failures);
 }
 
@@ -294,7 +305,8 @@ void testUnsupportedScenes(std::vector<std::string>& failures)
 
     const full_engine::AssimpLoadedAssetImportResult line =
         full_engine::importLoadedAssetPayloadWithAssimp(
-            meshSource(fixturePath("line_primitive.gltf")));
+            meshSource(fixturePath("line_primitive.gltf")),
+            allowMissingUv0());
     expect(line.status == full_engine::AssimpLoadedAssetImportStatus::UnsupportedScene, "non-triangle primitive is unsupported", failures);
 
     full_engine::AssetSourceRecord tooMany = meshSource(makeTooManyVerticesGltf());

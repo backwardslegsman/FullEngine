@@ -33,6 +33,8 @@ void setVertex(
     vertex.normal[0] = 0.0f;
     vertex.normal[1] = 1.0f;
     vertex.normal[2] = 0.0f;
+    vertex.uv0[0] = u;
+    vertex.uv0[1] = v;
     vertex.colorLinear[0] = 0.28f + 0.10f * u;
     vertex.colorLinear[1] = 0.58f + 0.16f * v;
     vertex.colorLinear[2] = 0.30f + 0.08f * (1.0f - u);

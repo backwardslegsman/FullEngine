@@ -499,16 +499,27 @@ bool parseMaterialLine(const std::string& text, MaterialDevData& data)
     }
     if (token == "textures")
     {
+        constexpr AssetSourceMaterialTextureSlot kLegacyTextureSlots[] = {
+            AssetSourceMaterialTextureSlot::BaseColor,
+            AssetSourceMaterialTextureSlot::Normal,
+            AssetSourceMaterialTextureSlot::MetallicRoughness,
+            AssetSourceMaterialTextureSlot::Occlusion,
+            AssetSourceMaterialTextureSlot::Emissive,
+        };
+
         if (data.texturesSeen ||
             !readUint32(line, data.material.textureRefCount) ||
-            data.material.textureRefCount > kMaxAssetSourceMaterialTextureRefs)
+            data.material.textureRefCount > kMaxAssetSourceMaterialTextureRefs ||
+            data.material.textureRefCount >
+                static_cast<std::uint32_t>(sizeof(kLegacyTextureSlots) / sizeof(kLegacyTextureSlots[0])))
         {
             return false;
         }
 
         for (std::uint32_t index = 0; index < data.material.textureRefCount; ++index)
         {
-            if (!readAssetId(line, data.material.textureRefs[index]))
+            data.material.textureRefs[index].slot = kLegacyTextureSlots[index];
+            if (!readAssetId(line, data.material.textureRefs[index].id))
             {
                 return false;
             }

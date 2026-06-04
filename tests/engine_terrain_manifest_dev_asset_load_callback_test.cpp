@@ -85,7 +85,7 @@ full_engine::AssetSourceDescriptor materialDescriptor()
     full_engine::AssetSourceDescriptor descriptor;
     descriptor.material.model = full_engine::AssetSourceMaterialModel::Basic;
     descriptor.material.alphaMode = full_engine::AssetSourceMaterialAlphaMode::Opaque;
-    descriptor.material.textureRefs[0] = asset(3);
+    descriptor.material.textureRefs[0] = {full_engine::AssetSourceMaterialTextureSlot::BaseColor, asset(3)};
     descriptor.material.textureRefCount = 1;
     return descriptor;
 }

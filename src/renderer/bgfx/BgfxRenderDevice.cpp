@@ -424,6 +424,7 @@ struct FullscreenVertex
 {
     float position[3];
     float normal[3];
+    float uv0[2];
     float color[4];
 };
 
@@ -445,12 +446,12 @@ bool allocateFullscreenQuad(bgfx::TransientVertexBuffer& vertexBuffer, const bgf
 
     bgfx::allocTransientVertexBuffer(&vertexBuffer, kVertexCount, layout);
     auto* vertices = reinterpret_cast<FullscreenVertex*>(vertexBuffer.data);
-    vertices[0] = {{-1.0f, -1.0f, 0.0f}, {0.0f, 1.0f, 0.0f}, {1.0f, 1.0f, 1.0f, 1.0f}};
-    vertices[1] = {{1.0f, -1.0f, 0.0f}, {0.0f, 1.0f, 0.0f}, {1.0f, 1.0f, 1.0f, 1.0f}};
-    vertices[2] = {{1.0f, 1.0f, 0.0f}, {0.0f, 1.0f, 0.0f}, {1.0f, 1.0f, 1.0f, 1.0f}};
-    vertices[3] = {{-1.0f, -1.0f, 0.0f}, {0.0f, 1.0f, 0.0f}, {1.0f, 1.0f, 1.0f, 1.0f}};
-    vertices[4] = {{1.0f, 1.0f, 0.0f}, {0.0f, 1.0f, 0.0f}, {1.0f, 1.0f, 1.0f, 1.0f}};
-    vertices[5] = {{-1.0f, 1.0f, 0.0f}, {0.0f, 1.0f, 0.0f}, {1.0f, 1.0f, 1.0f, 1.0f}};
+    vertices[0] = {{-1.0f, -1.0f, 0.0f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f}, {1.0f, 1.0f, 1.0f, 1.0f}};
+    vertices[1] = {{1.0f, -1.0f, 0.0f}, {0.0f, 1.0f, 0.0f}, {1.0f, 0.0f}, {1.0f, 1.0f, 1.0f, 1.0f}};
+    vertices[2] = {{1.0f, 1.0f, 0.0f}, {0.0f, 1.0f, 0.0f}, {1.0f, 1.0f}, {1.0f, 1.0f, 1.0f, 1.0f}};
+    vertices[3] = {{-1.0f, -1.0f, 0.0f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f}, {1.0f, 1.0f, 1.0f, 1.0f}};
+    vertices[4] = {{1.0f, 1.0f, 0.0f}, {0.0f, 1.0f, 0.0f}, {1.0f, 1.0f}, {1.0f, 1.0f, 1.0f, 1.0f}};
+    vertices[5] = {{-1.0f, 1.0f, 0.0f}, {0.0f, 1.0f, 0.0f}, {0.0f, 1.0f}, {1.0f, 1.0f, 1.0f, 1.0f}};
     return true;
 }
 
@@ -1770,6 +1771,7 @@ RendererResult BgfxRenderDevice::initialize(const RendererInitDesc& desc)
         .begin()
         .add(bgfx::Attrib::Position, 3, bgfx::AttribType::Float)
         .add(bgfx::Attrib::Normal, 3, bgfx::AttribType::Float)
+        .add(bgfx::Attrib::TexCoord0, 2, bgfx::AttribType::Float)
         .add(bgfx::Attrib::Color0, 4, bgfx::AttribType::Float)
         .end();
     skinnedMeshVertexLayout_
@@ -2886,7 +2888,23 @@ MaterialHandle BgfxRenderDevice::createMaterial(const MaterialDesc& desc)
         return {};
     }
 
-    if (desc.kind == MaterialKind::TerrainSplat)
+    if (desc.kind == MaterialKind::Basic)
+    {
+        const TextureHandle basicTextures[] = {
+            desc.basicTextures.baseColor,
+            desc.basicTextures.normal,
+            desc.basicTextures.metallicRoughness,
+            desc.basicTextures.occlusion,
+            desc.basicTextures.emissive};
+        for (const TextureHandle texture : basicTextures)
+        {
+            if (isValid(texture) && resolveTexture(texture, false) == nullptr)
+            {
+                return {};
+            }
+        }
+    }
+    else if (desc.kind == MaterialKind::TerrainSplat)
     {
         for (const TerrainMaterialLayerDesc& layer : desc.terrain.layers)
         {
@@ -3163,6 +3181,7 @@ RendererResult BgfxRenderDevice::submitSky(const EnvironmentDesc& environment)
     {
         float position[3];
         float normal[3];
+        float uv0[2];
         float color[4];
     };
     static_assert(sizeof(SkyVertex) == sizeof(MeshVertex), "Sky vertex must match mesh layout.");
@@ -3181,6 +3200,7 @@ RendererResult BgfxRenderDevice::submitSky(const EnvironmentDesc& environment)
         skyVertices[index] = {
             {positions[index][0], positions[index][1], 0.0f},
             {0.0f, 1.0f, 0.0f},
+            {0.0f, 0.0f},
             {1.0f, 1.0f, 1.0f, 1.0f}};
     }
 
@@ -3375,6 +3395,7 @@ RendererResult BgfxRenderDevice::submitSsao(
     {
         float position[3];
         float normal[3];
+        float uv0[2];
         float color[4];
     };
     static_assert(sizeof(FullscreenVertex) == sizeof(MeshVertex), "Fullscreen vertex must match mesh layout.");
@@ -3393,6 +3414,7 @@ RendererResult BgfxRenderDevice::submitSsao(
         quadVertices[index] = {
             {positions[index][0], positions[index][1], 0.0f},
             {0.0f, 1.0f, 0.0f},
+            {0.0f, 0.0f},
             {1.0f, 1.0f, 1.0f, 1.0f}};
     }
 
@@ -3435,6 +3457,7 @@ RendererResult BgfxRenderDevice::submitSsao(
             quadVertices[index] = {
                 {positions[index][0], positions[index][1], 0.0f},
                 {0.0f, 1.0f, 0.0f},
+                {0.0f, 0.0f},
                 {1.0f, 1.0f, 1.0f, 1.0f}};
         }
 
@@ -3464,6 +3487,7 @@ RendererResult BgfxRenderDevice::submitSsao(
             quadVertices[index] = {
                 {positions[index][0], positions[index][1], 0.0f},
                 {0.0f, 1.0f, 0.0f},
+                {0.0f, 0.0f},
                 {1.0f, 1.0f, 1.0f, 1.0f}};
         }
 
@@ -3495,6 +3519,7 @@ RendererResult BgfxRenderDevice::submitSsao(
         quadVertices[index] = {
             {positions[index][0], positions[index][1], 0.0f},
             {0.0f, 1.0f, 0.0f},
+            {0.0f, 0.0f},
             {1.0f, 1.0f, 1.0f, 1.0f}};
     }
 
@@ -4441,6 +4466,7 @@ RendererResult BgfxRenderDevice::submitSelectionOutline(
     {
         float position[3];
         float normal[3];
+        float uv0[2];
         float color[4];
     };
     static_assert(sizeof(FullscreenVertex) == sizeof(MeshVertex), "Fullscreen vertex must match mesh layout.");
@@ -4459,6 +4485,7 @@ RendererResult BgfxRenderDevice::submitSelectionOutline(
         quadVertices[index] = {
             {positions[index][0], positions[index][1], 0.0f},
             {0.0f, 1.0f, 0.0f},
+            {0.0f, 0.0f},
             {1.0f, 1.0f, 1.0f, 1.0f}};
     }
 

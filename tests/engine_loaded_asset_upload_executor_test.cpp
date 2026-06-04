@@ -83,7 +83,7 @@ full_engine::LoadedAssetPayload materialPayload(const std::uint64_t id = 30)
     material.id = asset(id);
     material.model = full_engine::AssetSourceMaterialModel::TerrainSplat;
     material.alphaMode = full_engine::AssetSourceMaterialAlphaMode::Opaque;
-    material.textureRefs[0] = asset(20);
+    material.textureRefs[0] = {full_engine::AssetSourceMaterialTextureSlot::BaseColor, asset(20)};
     material.textureRefCount = 1;
 
     full_engine::LoadedAssetPayload payload;

@@ -82,10 +82,11 @@ bool descriptorMatches(
         sameBounds(mesh.localBounds, descriptor.localBounds);
 }
 
-bool canConvertMesh(const aiMesh& mesh) noexcept
+bool canConvertMesh(const aiMesh& mesh, const AssimpLoadedAssetImportOptions& options) noexcept
 {
     if (!mesh.HasPositions() ||
         !mesh.HasNormals() ||
+        (!options.defaultMissingUv0ToZero && !mesh.HasTextureCoords(0)) ||
         mesh.mNumVertices == 0 ||
         static_cast<std::size_t>(mesh.mNumVertices) > kMaxIndexedVertexCount ||
         mesh.mNumFaces == 0)
@@ -123,7 +124,10 @@ bool canAppendMesh(const LoadedMeshAsset& aggregate, const aiMesh& mesh) noexcep
         static_cast<std::size_t>(mesh.mNumVertices);
 }
 
-void appendMesh(LoadedMeshAsset& aggregate, const aiMesh& mesh)
+void appendMesh(
+    LoadedMeshAsset& aggregate,
+    const aiMesh& mesh,
+    const AssimpLoadedAssetImportOptions& options)
 {
     const std::uint16_t baseVertex = static_cast<std::uint16_t>(aggregate.vertices.size());
     aggregate.vertices.reserve(aggregate.vertices.size() + mesh.mNumVertices);
@@ -136,6 +140,16 @@ void appendMesh(LoadedMeshAsset& aggregate, const aiMesh& mesh)
         vertex.normal[0] = mesh.mNormals[index].x;
         vertex.normal[1] = mesh.mNormals[index].y;
         vertex.normal[2] = mesh.mNormals[index].z;
+        if (mesh.HasTextureCoords(0))
+        {
+            vertex.uv0[0] = mesh.mTextureCoords[0][index].x;
+            vertex.uv0[1] = mesh.mTextureCoords[0][index].y;
+        }
+        else if (options.defaultMissingUv0ToZero)
+        {
+            vertex.uv0[0] = 0.0f;
+            vertex.uv0[1] = 0.0f;
+        }
         if (mesh.HasVertexColors(0))
         {
             vertex.colorLinear[0] = mesh.mColors[0][index].r;
@@ -156,7 +170,11 @@ void appendMesh(LoadedMeshAsset& aggregate, const aiMesh& mesh)
     }
 }
 
-bool convertSceneMeshes(const aiScene& scene, const AssetId id, LoadedMeshAsset& mesh)
+bool convertSceneMeshes(
+    const aiScene& scene,
+    const AssetId id,
+    const AssimpLoadedAssetImportOptions& options,
+    LoadedMeshAsset& mesh)
 {
     if (scene.mNumMeshes == 0 || scene.mMeshes == nullptr)
     {
@@ -168,11 +186,13 @@ bool convertSceneMeshes(const aiScene& scene, const AssetId id, LoadedMeshAsset&
     for (unsigned int meshIndex = 0; meshIndex < scene.mNumMeshes; ++meshIndex)
     {
         const aiMesh* const sourceMesh = scene.mMeshes[meshIndex];
-        if (sourceMesh == nullptr || !canConvertMesh(*sourceMesh) || !canAppendMesh(mesh, *sourceMesh))
+        if (sourceMesh == nullptr ||
+            !canConvertMesh(*sourceMesh, options) ||
+            !canAppendMesh(mesh, *sourceMesh))
         {
             return false;
         }
-        appendMesh(mesh, *sourceMesh);
+        appendMesh(mesh, *sourceMesh, options);
     }
 
     if (mesh.vertices.empty() || mesh.indices.empty())
@@ -245,7 +265,7 @@ AssimpLoadedAssetImportResult importLoadedAssetPayloadWithAssimp(
         return result;
     }
     result.payload.kind = AssetKind::Mesh;
-    if (!convertSceneMeshes(*scene, source.id, result.payload.mesh))
+    if (!convertSceneMeshes(*scene, source.id, options, result.payload.mesh))
     {
         result.status = AssimpLoadedAssetImportStatus::UnsupportedScene;
         return result;

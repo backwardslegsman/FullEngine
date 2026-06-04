@@ -147,6 +147,7 @@ RendererResult validateMeshAssetContract(const MeshDesc& desc) noexcept
         const MeshVertex& vertex = desc.vertices[vertexIndex];
         if (!hasFiniteValues(vertex.position, 3) ||
             !hasUsableNormal(vertex.normal) ||
+            !hasFiniteValues(vertex.uv0, 2) ||
             !isUnitRangeColor(vertex.colorLinear, 4))
         {
             return RendererResult::InvalidDescriptor;

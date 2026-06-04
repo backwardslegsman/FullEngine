@@ -137,7 +137,7 @@ bool buildMaterialDesc(
         for (std::size_t index = 0; index < source.material.textureRefs.size(); ++index)
         {
             const full_renderer::TextureHandle* const handle =
-                handles.findTextureHandle(source.material.textureRefs[index]);
+                handles.findTextureHandle(source.material.textureRefs[index].id);
             if (handle == nullptr)
             {
                 return false;
@@ -147,10 +147,33 @@ bool buildMaterialDesc(
     }
     else
     {
-        for (const AssetId textureRef : source.material.textureRefs)
+        for (const AssetSourceMaterialTextureRef textureRef : source.material.textureRefs)
         {
-            if (handles.findTextureHandle(textureRef) == nullptr)
+            const full_renderer::TextureHandle* const handle =
+                handles.findTextureHandle(textureRef.id);
+            if (handle == nullptr)
             {
+                return false;
+            }
+
+            switch (textureRef.slot)
+            {
+            case AssetSourceMaterialTextureSlot::BaseColor:
+                desc.basicTextures.baseColor = *handle;
+                break;
+            case AssetSourceMaterialTextureSlot::Normal:
+                desc.basicTextures.normal = *handle;
+                break;
+            case AssetSourceMaterialTextureSlot::MetallicRoughness:
+                desc.basicTextures.metallicRoughness = *handle;
+                break;
+            case AssetSourceMaterialTextureSlot::Occlusion:
+                desc.basicTextures.occlusion = *handle;
+                break;
+            case AssetSourceMaterialTextureSlot::Emissive:
+                desc.basicTextures.emissive = *handle;
+                break;
+            case AssetSourceMaterialTextureSlot::Unknown:
                 return false;
             }
         }

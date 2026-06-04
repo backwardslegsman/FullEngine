@@ -79,8 +79,8 @@ full_engine::LoadedMaterialAsset materialAsset()
     material.id = asset(30);
     material.model = full_engine::AssetSourceMaterialModel::TerrainSplat;
     material.alphaMode = full_engine::AssetSourceMaterialAlphaMode::AlphaTest;
-    material.textureRefs[0] = asset(20);
-    material.textureRefs[1] = asset(21);
+    material.textureRefs[0] = {full_engine::AssetSourceMaterialTextureSlot::BaseColor, asset(20)};
+    material.textureRefs[1] = {full_engine::AssetSourceMaterialTextureSlot::Normal, asset(21)};
     material.textureRefCount = 2;
     return material;
 }
@@ -157,7 +157,11 @@ void testValidPayloadsPlanUploadWork(std::vector<std::string>& failures)
     expect(material.material.kind == full_renderer::MaterialKind::TerrainSplat, "material upload maps kind", failures);
     expect(material.material.alphaMode == full_renderer::MaterialAlphaMode::AlphaTest, "material upload maps alpha mode", failures);
     expect(material.material.textureRefs.size() == 2, "material upload copies texture ref count", failures);
-    expect(material.material.textureRefs[0] == asset(20), "material upload preserves texture refs as asset ids", failures);
+    expect(
+        material.material.textureRefs[0].slot == full_engine::AssetSourceMaterialTextureSlot::BaseColor &&
+            material.material.textureRefs[0].id == asset(20),
+        "material upload preserves named texture refs",
+        failures);
 }
 
 void testInvalidPayloadsReportInvalid(std::vector<std::string>& failures)
