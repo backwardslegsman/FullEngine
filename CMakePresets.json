@@ -92,6 +92,15 @@
       }
     },
     {
+      "name": "debug-ui",
+      "displayName": "Debug UI",
+      "description": "Build the sample and tests with Dear ImGui/debug UI dependencies enabled.",
+      "inherits": "dev-debug",
+      "cacheVariables": {
+        "FULL_RENDERER_ENABLE_DEBUG_UI": "ON"
+      }
+    },
+    {
       "name": "tests-debug",
       "displayName": "Tests Debug",
       "description": "Build CPU-side tests without the SDL3 sample or shader target.",
@@ -100,6 +109,19 @@
         "FULL_RENDERER_BUILD_SAMPLE": "OFF",
         "FULL_RENDERER_BUILD_TESTS": "ON",
         "FULL_RENDERER_ENABLE_BGFX": "ON",
+        "FULL_RENDERER_ENABLE_DEBUG_UI": "OFF",
+        "FULL_RENDERER_ENABLE_SHADER_COMPILE": "OFF"
+      }
+    },
+    {
+      "name": "cpu-tests-debug",
+      "displayName": "CPU Tests Debug",
+      "description": "Build CPU-side tests with bgfx disabled, no SDL3 sample, and no shader target.",
+      "inherits": "windows-vs-base",
+      "cacheVariables": {
+        "FULL_RENDERER_BUILD_SAMPLE": "OFF",
+        "FULL_RENDERER_BUILD_TESTS": "ON",
+        "FULL_RENDERER_ENABLE_BGFX": "OFF",
         "FULL_RENDERER_ENABLE_DEBUG_UI": "OFF",
         "FULL_RENDERER_ENABLE_SHADER_COMPILE": "OFF"
       }
@@ -191,8 +213,18 @@
       "configuration": "Debug"
     },
     {
+      "name": "debug-ui",
+      "configurePreset": "debug-ui",
+      "configuration": "Debug"
+    },
+    {
       "name": "tests-debug",
       "configurePreset": "tests-debug",
+      "configuration": "Debug"
+    },
+    {
+      "name": "cpu-tests-debug",
+      "configurePreset": "cpu-tests-debug",
       "configuration": "Debug"
     },
     {
@@ -231,6 +263,14 @@
     {
       "name": "tests-debug",
       "configurePreset": "tests-debug",
+      "configuration": "Debug",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "cpu-tests-debug",
+      "configurePreset": "cpu-tests-debug",
       "configuration": "Debug",
       "output": {
         "outputOnFailure": true
