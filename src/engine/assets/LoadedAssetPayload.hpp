@@ -151,6 +151,83 @@ struct LoadedSkinnedMeshAsset
     AssetSourceBounds localBounds = {};
 };
 
+/** @brief One translation key in a renderer-free loaded animation track. */
+struct LoadedAnimationTranslationKey
+{
+    /** @brief Key time in seconds from clip start. */
+    float timeSeconds = 0.0f;
+
+    /** @brief Local-space translation value in meters. */
+    float value[3] = {};
+};
+
+/** @brief One rotation key in a renderer-free loaded animation track. */
+struct LoadedAnimationRotationKey
+{
+    /** @brief Key time in seconds from clip start. */
+    float timeSeconds = 0.0f;
+
+    /** @brief Normalized local-space quaternion stored as x, y, z, w. */
+    float value[4] = {0.0f, 0.0f, 0.0f, 1.0f};
+};
+
+/** @brief One scale key in a renderer-free loaded animation track. */
+struct LoadedAnimationScaleKey
+{
+    /** @brief Key time in seconds from clip start. */
+    float timeSeconds = 0.0f;
+
+    /** @brief Local-space scale value. */
+    float value[3] = {1.0f, 1.0f, 1.0f};
+};
+
+/**
+ * @brief Renderer-free joint transform track in a loaded animation clip.
+ *
+ * Tracks are keyed by skeleton joint index. Interpolation, blending, root
+ * motion extraction, compression, and runtime sampling are intentionally
+ * outside this copied payload contract.
+ */
+struct LoadedAnimationJointTrack
+{
+    /** @brief Skeleton joint index targeted by this track. */
+    std::uint16_t jointIndex = 0;
+
+    /** @brief Copied translation keys ordered by time. */
+    std::vector<LoadedAnimationTranslationKey> translations;
+
+    /** @brief Copied rotation keys ordered by time. */
+    std::vector<LoadedAnimationRotationKey> rotations;
+
+    /** @brief Copied scale keys ordered by time. */
+    std::vector<LoadedAnimationScaleKey> scales;
+};
+
+/**
+ * @brief Renderer-free loaded skeletal animation clip payload.
+ *
+ * The clip stores raw local transform keyframes targeting one skeleton asset.
+ * It owns copied key data only and performs no evaluation, blending,
+ * compression, renderer upload, or runtime animation state mutation.
+ */
+struct LoadedAnimationClipAsset
+{
+    /** @brief Engine asset identity for this loaded clip. */
+    AssetId id = {};
+
+    /** @brief Skeleton asset ID whose joint order the tracks target. */
+    AssetId skeletonAssetId = {};
+
+    /** @brief Clip duration in seconds. */
+    float durationSeconds = 0.0f;
+
+    /** @brief Source ticks-per-second metadata used when converting key times. */
+    float ticksPerSecond = 0.0f;
+
+    /** @brief Ordered joint tracks. Joint indices must be unique. */
+    std::vector<LoadedAnimationJointTrack> tracks;
+};
+
 /**
  * @brief Renderer-free loaded texture payload.
  *
@@ -216,11 +293,12 @@ struct LoadedMaterialAsset
  *
  * Only the payload slot matching `kind` is active. Validation ignores inactive
  * slots. The value owns copied CPU data only; it does not retain file handles,
- * importer state, renderer handles, or renderer resources.
+ * importer state, renderer handles, runtime animation state, or renderer
+ * resources.
  */
 struct LoadedAssetPayload
 {
-    /** @brief Active payload kind. Mesh, Texture, Material, Skeleton, and SkinnedMesh are supported. */
+    /** @brief Active payload kind. Mesh, Texture, Material, Skeleton, SkinnedMesh, and AnimationClip are supported. */
     AssetKind kind = AssetKind::Unknown;
 
     /** @brief Active when `kind` is `Mesh`. */
@@ -237,6 +315,9 @@ struct LoadedAssetPayload
 
     /** @brief Active when `kind` is `SkinnedMesh`. */
     LoadedSkinnedMeshAsset skinnedMesh = {};
+
+    /** @brief Active when `kind` is `AnimationClip`. */
+    LoadedAnimationClipAsset animationClip = {};
 };
 
 /** @brief Validation result for renderer-free loaded asset payloads. */
@@ -270,6 +351,13 @@ enum class LoadedAssetPayloadValidationResult
     InvalidSkinnedMeshVertexData,
     InvalidSkinnedMeshWeights,
     InvalidSkinnedMeshBounds,
+    InvalidAnimationClipSkeletonRef,
+    InvalidAnimationClipDuration,
+    InvalidAnimationClipTicksPerSecond,
+    InvalidAnimationClipTracks,
+    InvalidAnimationClipJointTrack,
+    InvalidAnimationClipKeyTimes,
+    InvalidAnimationClipKeyData,
 };
 
 /** @brief Returns a stable diagnostic name for a loaded payload validation result. */
@@ -320,6 +408,15 @@ LoadedAssetPayloadValidationResult validateLoadedSkeletonAsset(
  */
 LoadedAssetPayloadValidationResult validateLoadedSkinnedMeshAsset(
     const LoadedSkinnedMeshAsset& mesh) noexcept;
+
+/**
+ * @brief Validates one renderer-free loaded animation clip payload.
+ *
+ * Validation checks copied key data only. It does not verify the referenced
+ * skeleton exists in a catalog and does not evaluate the clip.
+ */
+LoadedAssetPayloadValidationResult validateLoadedAnimationClipAsset(
+    const LoadedAnimationClipAsset& clip) noexcept;
 
 /**
  * @brief Validates the active slot of a loaded asset payload.

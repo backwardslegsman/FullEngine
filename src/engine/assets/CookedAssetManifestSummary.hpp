@@ -16,6 +16,7 @@ struct AssetKindSummary
     std::size_t terrainChunkCount = 0;
     std::size_t skeletonCount = 0;
     std::size_t skinnedMeshCount = 0;
+    std::size_t animationClipCount = 0;
     std::size_t shaderCount = 0;
 };
 

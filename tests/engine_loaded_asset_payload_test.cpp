@@ -159,6 +159,59 @@ full_engine::LoadedSkinnedMeshAsset skinnedMeshAsset()
     return mesh;
 }
 
+full_engine::LoadedAnimationJointTrack animationTrack(const std::uint16_t jointIndex)
+{
+    full_engine::LoadedAnimationJointTrack track;
+    track.jointIndex = jointIndex;
+
+    full_engine::LoadedAnimationTranslationKey translation0;
+    translation0.timeSeconds = 0.0f;
+    translation0.value[0] = 0.0f;
+    translation0.value[1] = 0.0f;
+    translation0.value[2] = 0.0f;
+    full_engine::LoadedAnimationTranslationKey translation1;
+    translation1.timeSeconds = 1.0f;
+    translation1.value[0] = 0.0f;
+    translation1.value[1] = 1.0f;
+    translation1.value[2] = 0.0f;
+    track.translations = {translation0, translation1};
+
+    full_engine::LoadedAnimationRotationKey rotation0;
+    rotation0.timeSeconds = 0.0f;
+    rotation0.value[0] = 0.0f;
+    rotation0.value[1] = 0.0f;
+    rotation0.value[2] = 0.0f;
+    rotation0.value[3] = 1.0f;
+    full_engine::LoadedAnimationRotationKey rotation1 = rotation0;
+    rotation1.timeSeconds = 1.0f;
+    rotation1.value[2] = 0.70710677f;
+    rotation1.value[3] = 0.70710677f;
+    track.rotations = {rotation0, rotation1};
+
+    full_engine::LoadedAnimationScaleKey scale0;
+    scale0.timeSeconds = 0.0f;
+    scale0.value[0] = 1.0f;
+    scale0.value[1] = 1.0f;
+    scale0.value[2] = 1.0f;
+    full_engine::LoadedAnimationScaleKey scale1 = scale0;
+    scale1.timeSeconds = 1.0f;
+    track.scales = {scale0, scale1};
+    return track;
+}
+
+full_engine::LoadedAnimationClipAsset animationClipAsset()
+{
+    full_engine::LoadedAnimationClipAsset clip;
+    clip.id = asset(60);
+    clip.skeletonAssetId = asset(40);
+    clip.durationSeconds = 1.0f;
+    clip.ticksPerSecond = 30.0f;
+    clip.tracks = {
+        animationTrack(0),
+        animationTrack(1)};
+    return clip;
+}
+
 void testValidPayloads(std::vector<std::string>& failures)
 {
     expect(
@@ -185,6 +238,11 @@ void testValidPayloads(std::vector<std::string>& failures)
         full_engine::validateLoadedSkinnedMeshAsset(skinnedMeshAsset()) ==
             full_engine::LoadedAssetPayloadValidationResult::Success,
         "valid skinned mesh payload passes",
+        failures);
+    expect(
+        full_engine::validateLoadedAnimationClipAsset(animationClipAsset()) ==
+            full_engine::LoadedAssetPayloadValidationResult::Success,
+        "valid animation clip payload passes",
         failures);
 }
 
@@ -228,6 +286,14 @@ void testDefaultIdsFail(std::vector<std::string>& failures)
         full_engine::validateLoadedSkinnedMeshAsset(skinnedMesh) ==
             full_engine::LoadedAssetPayloadValidationResult::InvalidAssetId,
         "skinned mesh payload rejects default id",
+        failures);
+
+    full_engine::LoadedAnimationClipAsset clip = animationClipAsset();
+    clip.id = {};
+    expect(
+        full_engine::validateLoadedAnimationClipAsset(clip) ==
+            full_engine::LoadedAssetPayloadValidationResult::InvalidAssetId,
+        "animation clip payload rejects default id",
         failures);
 }
 
@@ -568,6 +634,97 @@ void testInvalidSkinnedMeshPayloads(std::vector<std::string>& failures)
         failures);
 }
 
+void testInvalidAnimationClipPayloads(std::vector<std::string>& failures)
+{
+    full_engine::LoadedAnimationClipAsset clip = animationClipAsset();
+    clip.skeletonAssetId = {};
+    expect(
+        full_engine::validateLoadedAnimationClipAsset(clip) ==
+            full_engine::LoadedAssetPayloadValidationResult::InvalidAnimationClipSkeletonRef,
+        "animation clip payload rejects default skeleton reference",
+        failures);
+
+    clip = animationClipAsset();
+    clip.durationSeconds = 0.0f;
+    expect(
+        full_engine::validateLoadedAnimationClipAsset(clip) ==
+            full_engine::LoadedAssetPayloadValidationResult::InvalidAnimationClipDuration,
+        "animation clip payload rejects zero duration",
+        failures);
+
+    clip = animationClipAsset();
+    clip.ticksPerSecond = 0.0f;
+    expect(
+        full_engine::validateLoadedAnimationClipAsset(clip) ==
+            full_engine::LoadedAssetPayloadValidationResult::InvalidAnimationClipTicksPerSecond,
+        "animation clip payload rejects zero ticks per second",
+        failures);
+
+    clip = animationClipAsset();
+    clip.tracks.clear();
+    expect(
+        full_engine::validateLoadedAnimationClipAsset(clip) ==
+            full_engine::LoadedAssetPayloadValidationResult::InvalidAnimationClipTracks,
+        "animation clip payload rejects empty tracks",
+        failures);
+
+    clip = animationClipAsset();
+    clip.tracks[1].jointIndex = clip.tracks[0].jointIndex;
+    expect(
+        full_engine::validateLoadedAnimationClipAsset(clip) ==
+            full_engine::LoadedAssetPayloadValidationResult::InvalidAnimationClipJointTrack,
+        "animation clip payload rejects duplicate joint tracks",
+        failures);
+
+    clip = animationClipAsset();
+    clip.tracks[0].jointIndex = full_engine::kMaxLoadedSkeletonJoints;
+    expect(
+        full_engine::validateLoadedAnimationClipAsset(clip) ==
+            full_engine::LoadedAssetPayloadValidationResult::InvalidAnimationClipJointTrack,
+        "animation clip payload rejects out-of-range joint track",
+        failures);
+
+    clip = animationClipAsset();
+    clip.tracks[0].translations[1].timeSeconds = -1.0f;
+    expect(
+        full_engine::validateLoadedAnimationClipAsset(clip) ==
+            full_engine::LoadedAssetPayloadValidationResult::InvalidAnimationClipKeyData,
+        "animation clip payload rejects negative key time",
+        failures);
+
+    clip = animationClipAsset();
+    clip.tracks[0].translations[1].timeSeconds = clip.durationSeconds + 1.0f;
+    expect(
+        full_engine::validateLoadedAnimationClipAsset(clip) ==
+            full_engine::LoadedAssetPayloadValidationResult::InvalidAnimationClipKeyData,
+        "animation clip payload rejects key beyond duration",
+        failures);
+
+    clip = animationClipAsset();
+    clip.tracks[0].translations[0].value[1] = std::nanf("");
+    expect(
+        full_engine::validateLoadedAnimationClipAsset(clip) ==
+            full_engine::LoadedAssetPayloadValidationResult::InvalidAnimationClipKeyData,
+        "animation clip payload rejects non-finite translation",
+        failures);
+
+    clip = animationClipAsset();
+    clip.tracks[0].rotations[0].value[3] = 2.0f;
+    expect(
+        full_engine::validateLoadedAnimationClipAsset(clip) ==
+            full_engine::LoadedAssetPayloadValidationResult::InvalidAnimationClipKeyData,
+        "animation clip payload rejects non-normalized rotation",
+        failures);
+
+    clip = animationClipAsset();
+    clip.tracks[0].scales.clear();
+    expect(
+        full_engine::validateLoadedAnimationClipAsset(clip) ==
+            full_engine::LoadedAssetPayloadValidationResult::InvalidAnimationClipKeyData,
+        "animation clip payload rejects missing scale keys",
+        failures);
+}
+
 void testPayloadDispatchAndInactiveSlots(std::vector<std::string>& failures)
 {
     full_engine::LoadedAssetPayload meshPayload;
@@ -629,6 +786,20 @@ void testPayloadDispatchAndInactiveSlots(std::vector<std::string>& failures)
         "payload dispatch validates active skinned mesh slot only",
         failures);
 
+    full_engine::LoadedAssetPayload animationPayload;
+    animationPayload.kind = full_engine::AssetKind::AnimationClip;
+    animationPayload.mesh = {};
+    animationPayload.texture = {};
+    animationPayload.material = {};
+    animationPayload.skeleton = {};
+    animationPayload.skinnedMesh = {};
+    animationPayload.animationClip = animationClipAsset();
+    expect(
+        full_engine::validateLoadedAssetPayload(animationPayload) ==
+            full_engine::LoadedAssetPayloadValidationResult::Success,
+        "payload dispatch validates active animation clip slot only",
+        failures);
+
     full_engine::LoadedAssetPayload invalidPayload;
     invalidPayload.kind = full_engine::AssetKind::TerrainChunk;
     expect(
@@ -668,7 +839,14 @@ void testResultNames(std::vector<std::string>& failures)
         full_engine::LoadedAssetPayloadValidationResult::InvalidSkinnedMeshIndices,
         full_engine::LoadedAssetPayloadValidationResult::InvalidSkinnedMeshVertexData,
         full_engine::LoadedAssetPayloadValidationResult::InvalidSkinnedMeshWeights,
-        full_engine::LoadedAssetPayloadValidationResult::InvalidSkinnedMeshBounds};
+        full_engine::LoadedAssetPayloadValidationResult::InvalidSkinnedMeshBounds,
+        full_engine::LoadedAssetPayloadValidationResult::InvalidAnimationClipSkeletonRef,
+        full_engine::LoadedAssetPayloadValidationResult::InvalidAnimationClipDuration,
+        full_engine::LoadedAssetPayloadValidationResult::InvalidAnimationClipTicksPerSecond,
+        full_engine::LoadedAssetPayloadValidationResult::InvalidAnimationClipTracks,
+        full_engine::LoadedAssetPayloadValidationResult::InvalidAnimationClipJointTrack,
+        full_engine::LoadedAssetPayloadValidationResult::InvalidAnimationClipKeyTimes,
+        full_engine::LoadedAssetPayloadValidationResult::InvalidAnimationClipKeyData};
 
     for (const full_engine::LoadedAssetPayloadValidationResult result : results)
     {
@@ -691,6 +869,7 @@ int main()
     testInvalidMaterialPayloads(failures);
     testInvalidSkeletonPayloads(failures);
     testInvalidSkinnedMeshPayloads(failures);
+    testInvalidAnimationClipPayloads(failures);
     testPayloadDispatchAndInactiveSlots(failures);
     testResultNames(failures);
 

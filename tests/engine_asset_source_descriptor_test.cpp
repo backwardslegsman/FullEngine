@@ -81,6 +81,17 @@ full_engine::AssetSourceDescriptor skinnedMeshDescriptor()
     return descriptor;
 }
 
+full_engine::AssetSourceDescriptor animationClipDescriptor()
+{
+    full_engine::AssetSourceDescriptor descriptor;
+    descriptor.animationClip.skeletonAssetId = asset(200);
+    descriptor.animationClip.trackCount = 2;
+    descriptor.animationClip.durationSeconds = 1.0f;
+    descriptor.animationClip.ticksPerSecond = 30.0f;
+    descriptor.animationClip.metadataTolerance = 0.001f;
+    return descriptor;
+}
+
 void testValidDescriptors(std::vector<std::string>& failures)
 {
     expect(
@@ -107,6 +118,11 @@ void testValidDescriptors(std::vector<std::string>& failures)
         full_engine::validateAssetSourceDescriptor(full_engine::AssetKind::SkinnedMesh, skinnedMeshDescriptor()) ==
             full_engine::AssetSourceDescriptorValidationResult::Success,
         "valid skinned mesh descriptor validates",
+        failures);
+    expect(
+        full_engine::validateAssetSourceDescriptor(full_engine::AssetKind::AnimationClip, animationClipDescriptor()) ==
+            full_engine::AssetSourceDescriptorValidationResult::Success,
+        "valid animation clip descriptor validates",
         failures);
 }
 
@@ -277,6 +293,57 @@ void testInvalidSkinnedMeshDescriptors(std::vector<std::string>& failures)
         failures);
 }
 
+void testInvalidAnimationClipDescriptors(std::vector<std::string>& failures)
+{
+    full_engine::AssetSourceDescriptor descriptor = animationClipDescriptor();
+    descriptor.animationClip.skeletonAssetId = {};
+    expect(
+        full_engine::validateAssetSourceDescriptor(full_engine::AssetKind::AnimationClip, descriptor) ==
+            full_engine::AssetSourceDescriptorValidationResult::InvalidAnimationClipSkeletonRef,
+        "animation clip descriptor rejects default skeleton reference",
+        failures);
+
+    descriptor = animationClipDescriptor();
+    descriptor.animationClip.trackCount = 0;
+    expect(
+        full_engine::validateAssetSourceDescriptor(full_engine::AssetKind::AnimationClip, descriptor) ==
+            full_engine::AssetSourceDescriptorValidationResult::InvalidAnimationClipTrackCount,
+        "animation clip descriptor rejects zero track count",
+        failures);
+
+    descriptor = animationClipDescriptor();
+    descriptor.animationClip.durationSeconds = -1.0f;
+    expect(
+        full_engine::validateAssetSourceDescriptor(full_engine::AssetKind::AnimationClip, descriptor) ==
+            full_engine::AssetSourceDescriptorValidationResult::InvalidAnimationClipDuration,
+        "animation clip descriptor rejects negative duration",
+        failures);
+
+    descriptor = animationClipDescriptor();
+    descriptor.animationClip.durationSeconds = std::nanf("");
+    expect(
+        full_engine::validateAssetSourceDescriptor(full_engine::AssetKind::AnimationClip, descriptor) ==
+            full_engine::AssetSourceDescriptorValidationResult::InvalidAnimationClipDuration,
+        "animation clip descriptor rejects non-finite duration",
+        failures);
+
+    descriptor = animationClipDescriptor();
+    descriptor.animationClip.ticksPerSecond = 0.0f;
+    expect(
+        full_engine::validateAssetSourceDescriptor(full_engine::AssetKind::AnimationClip, descriptor) ==
+            full_engine::AssetSourceDescriptorValidationResult::InvalidAnimationClipTicksPerSecond,
+        "animation clip descriptor rejects zero ticks per second",
+        failures);
+
+    descriptor = animationClipDescriptor();
+    descriptor.animationClip.metadataTolerance = -1.0f;
+    expect(
+        full_engine::validateAssetSourceDescriptor(full_engine::AssetKind::AnimationClip, descriptor) ==
+            full_engine::AssetSourceDescriptorValidationResult::InvalidAnimationClipMetadataTolerance,
+        "animation clip descriptor rejects negative metadata tolerance",
+        failures);
+}
+
 void testInactiveDescriptorSlotsAreIgnored(std::vector<std::string>& failures)
 {
     full_engine::AssetSourceDescriptor mesh = meshDescriptor();
@@ -318,6 +385,18 @@ void testInactiveDescriptorSlotsAreIgnored(std::vector<std::string>& failures)
             full_engine::AssetSourceDescriptorValidationResult::Success,
         "skinned mesh validation ignores invalid inactive slots",
         failures);
+
+    full_engine::AssetSourceDescriptor animationClip = animationClipDescriptor();
+    animationClip.mesh = {};
+    animationClip.texture = {};
+    animationClip.material = {};
+    animationClip.skeleton = {};
+    animationClip.skinnedMesh = {};
+    expect(
+        full_engine::validateAssetSourceDescriptor(full_engine::AssetKind::AnimationClip, animationClip) ==
+            full_engine::AssetSourceDescriptorValidationResult::Success,
+        "animation clip validation ignores invalid inactive slots",
+        failures);
 }
 
 void testInvalidKind(std::vector<std::string>& failures)
@@ -350,7 +429,12 @@ void testResultNames(std::vector<std::string>& failures)
         full_engine::AssetSourceDescriptorValidationResult::InvalidSkeletonJointCount,
         full_engine::AssetSourceDescriptorValidationResult::InvalidSkinnedMeshCounts,
         full_engine::AssetSourceDescriptorValidationResult::InvalidSkinnedMeshSkeletonRef,
-        full_engine::AssetSourceDescriptorValidationResult::InvalidSkinnedMeshBounds};
+        full_engine::AssetSourceDescriptorValidationResult::InvalidSkinnedMeshBounds,
+        full_engine::AssetSourceDescriptorValidationResult::InvalidAnimationClipSkeletonRef,
+        full_engine::AssetSourceDescriptorValidationResult::InvalidAnimationClipTrackCount,
+        full_engine::AssetSourceDescriptorValidationResult::InvalidAnimationClipDuration,
+        full_engine::AssetSourceDescriptorValidationResult::InvalidAnimationClipTicksPerSecond,
+        full_engine::AssetSourceDescriptorValidationResult::InvalidAnimationClipMetadataTolerance};
 
     for (const full_engine::AssetSourceDescriptorValidationResult result : results)
     {
@@ -371,6 +455,7 @@ int main()
     testInvalidMaterialDescriptors(failures);
     testInvalidSkeletonDescriptors(failures);
     testInvalidSkinnedMeshDescriptors(failures);
+    testInvalidAnimationClipDescriptors(failures);
     testInactiveDescriptorSlotsAreIgnored(failures);
     testInvalidKind(failures);
     testResultNames(failures);

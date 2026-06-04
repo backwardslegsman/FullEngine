@@ -73,6 +73,36 @@ public:
     /** @brief Returns the number of mapped texture handles. */
     std::size_t textureHandleCount() const noexcept;
 
+    /** @brief Adds a skeleton handle for a previously unmapped engine asset ID. */
+    RendererAssetHandleCatalogResult addSkeletonHandle(AssetId id, full_renderer::SkeletonHandle handle);
+
+    /** @brief Replaces an existing skeleton handle mapping. */
+    RendererAssetHandleCatalogResult updateSkeletonHandle(AssetId id, full_renderer::SkeletonHandle handle);
+
+    /** @brief Removes a skeleton handle mapping. */
+    RendererAssetHandleCatalogResult removeSkeletonHandle(AssetId id);
+
+    /** @brief Returns the skeleton handle mapped to an asset ID, or null if missing. */
+    const full_renderer::SkeletonHandle* findSkeletonHandle(AssetId id) const;
+
+    /** @brief Returns the number of mapped skeleton handles. */
+    std::size_t skeletonHandleCount() const noexcept;
+
+    /** @brief Adds a skinned mesh handle for a previously unmapped engine asset ID. */
+    RendererAssetHandleCatalogResult addSkinnedMeshHandle(AssetId id, full_renderer::SkinnedMeshHandle handle);
+
+    /** @brief Replaces an existing skinned mesh handle mapping. */
+    RendererAssetHandleCatalogResult updateSkinnedMeshHandle(AssetId id, full_renderer::SkinnedMeshHandle handle);
+
+    /** @brief Removes a skinned mesh handle mapping. */
+    RendererAssetHandleCatalogResult removeSkinnedMeshHandle(AssetId id);
+
+    /** @brief Returns the skinned mesh handle mapped to an asset ID, or null if missing. */
+    const full_renderer::SkinnedMeshHandle* findSkinnedMeshHandle(AssetId id) const;
+
+    /** @brief Returns the number of mapped skinned mesh handles. */
+    std::size_t skinnedMeshHandleCount() const noexcept;
+
     /** @brief Removes all handle mappings without touching renderer resources. */
     void clear() noexcept;
 
@@ -80,6 +110,8 @@ private:
     std::map<AssetId, full_renderer::MeshHandle> meshes_;
     std::map<AssetId, full_renderer::MaterialHandle> materials_;
     std::map<AssetId, full_renderer::TextureHandle> textures_;
+    std::map<AssetId, full_renderer::SkeletonHandle> skeletons_;
+    std::map<AssetId, full_renderer::SkinnedMeshHandle> skinnedMeshes_;
 };
 
 /** @brief Result status for terrain asset ID to renderer handle resolution. */

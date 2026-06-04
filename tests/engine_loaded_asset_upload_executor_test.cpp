@@ -92,6 +92,84 @@ full_engine::LoadedAssetPayload materialPayload(const std::uint64_t id = 30)
     return payload;
 }
 
+void setIdentity(float (&matrix)[16]) noexcept
+{
+    for (float& value : matrix)
+    {
+        value = 0.0f;
+    }
+    matrix[0] = 1.0f;
+    matrix[5] = 1.0f;
+    matrix[10] = 1.0f;
+    matrix[15] = 1.0f;
+}
+
+full_engine::LoadedSkeletonJoint joint(const std::int32_t parentIndex)
+{
+    full_engine::LoadedSkeletonJoint result;
+    result.parentIndex = parentIndex;
+    setIdentity(result.inverseBindPose);
+    setIdentity(result.referenceTransform);
+    return result;
+}
+
+full_engine::LoadedAssetPayload skeletonPayload(const std::uint64_t id = 40)
+{
+    full_engine::LoadedSkeletonAsset skeleton;
+    skeleton.id = asset(id);
+    skeleton.joints = {joint(-1), joint(0)};
+
+    full_engine::LoadedAssetPayload payload;
+    payload.kind = full_engine::AssetKind::Skeleton;
+    payload.skeleton = skeleton;
+    return payload;
+}
+
+full_engine::LoadedSkinnedMeshVertex skinnedVertex(const float x, const float y, const float z) noexcept
+{
+    full_engine::LoadedSkinnedMeshVertex result;
+    result.position[0] = x;
+    result.position[1] = y;
+    result.position[2] = z;
+    result.normal[0] = 0.0f;
+    result.normal[1] = 1.0f;
+    result.normal[2] = 0.0f;
+    result.colorLinear[0] = 1.0f;
+    result.colorLinear[1] = 0.5f;
+    result.colorLinear[2] = 0.25f;
+    result.colorLinear[3] = 1.0f;
+    result.jointIndices[0] = 0;
+    result.jointIndices[1] = 1;
+    result.jointWeights[0] = 0.5f;
+    result.jointWeights[1] = 0.5f;
+    return result;
+}
+
+full_engine::LoadedAssetPayload skinnedMeshPayload(
+    const std::uint64_t id = 50,
+    const std::uint64_t skeletonId = 40)
+{
+    full_engine::LoadedSkinnedMeshAsset mesh;
+    mesh.id = asset(id);
+    mesh.skeletonAssetId = asset(skeletonId);
+    mesh.vertices = {
+        skinnedVertex(0.0f, 0.0f, 0.0f),
+        skinnedVertex(1.0f, 0.0f, 0.0f),
+        skinnedVertex(0.0f, 1.0f, 0.0f)};
+    mesh.indices = {0, 1, 2};
+    mesh.localBounds.min[0] = 0.0f;
+    mesh.localBounds.min[1] = 0.0f;
+    mesh.localBounds.min[2] = 0.0f;
+    mesh.localBounds.max[0] = 1.0f;
+    mesh.localBounds.max[1] = 1.0f;
+    mesh.localBounds.max[2] = 0.0f;
+
+    full_engine::LoadedAssetPayload payload;
+    payload.kind = full_engine::AssetKind::SkinnedMesh;
+    payload.skinnedMesh = mesh;
+    return payload;
+}
+
 full_engine::LoadedAssetUploadPlan uploadPlan(
     const std::vector<full_engine::LoadedAssetPayload>& payloads)
 {
@@ -104,11 +182,17 @@ public:
     full_renderer::MeshHandle nextMesh = {101};
     full_renderer::TextureHandle nextTexture = {201};
     full_renderer::MaterialHandle nextMaterial = {301};
+    full_renderer::SkeletonHandle nextSkeleton = {401};
+    full_renderer::SkinnedMeshHandle nextSkinnedMesh = {501};
     int meshCreateCalls = 0;
     int textureCreateCalls = 0;
     int materialCreateCalls = 0;
+    int skeletonCreateCalls = 0;
+    int skinnedMeshCreateCalls = 0;
     std::uint32_t lastMeshVertexCount = 0;
     std::uint32_t lastTextureWidth = 0;
+    std::uint32_t lastSkeletonJointCount = 0;
+    full_renderer::SkeletonHandle lastSkinnedMeshSkeleton = {};
     full_renderer::MaterialDesc lastMaterial = {};
 
     full_renderer::RendererResult initialize(const full_renderer::RendererInitDesc&) override
@@ -132,16 +216,20 @@ public:
 
     void destroyMesh(full_renderer::MeshHandle) noexcept override {}
 
-    full_renderer::SkeletonHandle createSkeleton(const full_renderer::SkeletonDesc&) override
+    full_renderer::SkeletonHandle createSkeleton(const full_renderer::SkeletonDesc& desc) override
     {
-        return {};
+        ++skeletonCreateCalls;
+        lastSkeletonJointCount = desc.jointCount;
+        return nextSkeleton;
     }
 
     void destroySkeleton(full_renderer::SkeletonHandle) noexcept override {}
 
-    full_renderer::SkinnedMeshHandle createSkinnedMesh(const full_renderer::SkinnedMeshDesc&) override
+    full_renderer::SkinnedMeshHandle createSkinnedMesh(const full_renderer::SkinnedMeshDesc& desc) override
     {
-        return {};
+        ++skinnedMeshCreateCalls;
+        lastSkinnedMeshSkeleton = desc.skeleton;
+        return nextSkinnedMesh;
     }
 
     void destroySkinnedMesh(full_renderer::SkinnedMeshHandle) noexcept override {}
@@ -286,11 +374,54 @@ void testMaterialMissingTextureIsRetryable(std::vector<std::string>& failures)
     expect(handles.materialHandleCount() == 0, "missing texture does not mutate material catalog", failures);
 }
 
+void testUploadsSkeletonAndSkinnedMesh(std::vector<std::string>& failures)
+{
+    const std::vector<full_engine::LoadedAssetPayload> payloads = {
+        skeletonPayload(),
+        skinnedMeshPayload()};
+    const full_engine::LoadedAssetUploadPlan plan = uploadPlan(payloads);
+
+    FakeRenderer renderer;
+    full_engine::RendererAssetHandleCatalog handles;
+    const full_engine::LoadedAssetUploadExecuteResult result =
+        full_engine::executeLoadedAssetUploadPlan(renderer, plan, handles);
+
+    expect(result.records.size() == 2, "skeleton executor returns one record per plan record", failures);
+    expect(result.records[0].status == full_engine::LoadedAssetUploadExecuteStatus::Uploaded, "skeleton upload reports uploaded", failures);
+    expect(result.records[1].status == full_engine::LoadedAssetUploadExecuteStatus::Uploaded, "skinned mesh upload reports uploaded", failures);
+    expect(result.summary.uploadedSkeletonCount == 1, "skeleton upload summary increments", failures);
+    expect(result.summary.uploadedSkinnedMeshCount == 1, "skinned mesh upload summary increments", failures);
+    expect(renderer.skeletonCreateCalls == 1, "skeleton upload calls renderer", failures);
+    expect(renderer.skinnedMeshCreateCalls == 1, "skinned mesh upload calls renderer", failures);
+    expect(renderer.lastSkeletonJointCount == 2, "skeleton upload passes descriptor", failures);
+    expect(renderer.lastSkinnedMeshSkeleton.id == 401, "skinned mesh upload resolves skeleton handle", failures);
+    expect(handles.findSkeletonHandle(asset(40)) != nullptr && handles.findSkeletonHandle(asset(40))->id == 401, "skeleton upload catalogs returned handle", failures);
+    expect(handles.findSkinnedMeshHandle(asset(50)) != nullptr && handles.findSkinnedMeshHandle(asset(50))->id == 501, "skinned mesh upload catalogs returned handle", failures);
+}
+
+void testSkinnedMeshMissingSkeletonIsRetryable(std::vector<std::string>& failures)
+{
+    const std::vector<full_engine::LoadedAssetPayload> payloads = {skinnedMeshPayload()};
+    const full_engine::LoadedAssetUploadPlan plan = uploadPlan(payloads);
+
+    FakeRenderer renderer;
+    full_engine::RendererAssetHandleCatalog handles;
+    const full_engine::LoadedAssetUploadExecuteResult result =
+        full_engine::executeLoadedAssetUploadPlan(renderer, plan, handles);
+
+    expect(result.records[0].status == full_engine::LoadedAssetUploadExecuteStatus::MissingSkeletonHandle, "missing skeleton reports retryable status", failures);
+    expect(result.summary.missingSkeletonHandleCount == 1, "missing skeleton summary increments", failures);
+    expect(renderer.skinnedMeshCreateCalls == 0, "missing skeleton does not call renderer", failures);
+    expect(handles.skinnedMeshHandleCount() == 0, "missing skeleton does not mutate skinned mesh catalog", failures);
+}
+
 void testExistingMappingsSkipUpload(std::vector<std::string>& failures)
 {
     const std::vector<full_engine::LoadedAssetPayload> payloads = {
         meshPayload(),
-        texturePayload()};
+        texturePayload(),
+        skeletonPayload(),
+        skinnedMeshPayload()};
     const full_engine::LoadedAssetUploadPlan plan = uploadPlan(payloads);
 
     FakeRenderer renderer;
@@ -298,36 +429,66 @@ void testExistingMappingsSkipUpload(std::vector<std::string>& failures)
     (void)handles.addMeshHandle(asset(10), {501});
     (void)handles.addTextureHandle(asset(20), {601});
     (void)handles.addMaterialHandle(asset(30), {701});
+    (void)handles.addSkeletonHandle(asset(40), {801});
+    (void)handles.addSkinnedMeshHandle(asset(50), {901});
 
     const full_engine::LoadedAssetUploadExecuteResult result =
         full_engine::executeLoadedAssetUploadPlan(renderer, plan, handles);
 
     expect(result.records[0].status == full_engine::LoadedAssetUploadExecuteStatus::AlreadyMapped, "existing mesh mapping skips upload", failures);
     expect(result.records[1].status == full_engine::LoadedAssetUploadExecuteStatus::AlreadyMapped, "existing texture mapping skips upload", failures);
-    expect(result.summary.alreadyMappedCount == 2, "already mapped summary increments", failures);
-    expect(renderer.meshCreateCalls == 0 && renderer.textureCreateCalls == 0, "existing mappings do not call renderer", failures);
+    expect(result.records[2].status == full_engine::LoadedAssetUploadExecuteStatus::AlreadyMapped, "existing skeleton mapping skips upload", failures);
+    expect(result.records[3].status == full_engine::LoadedAssetUploadExecuteStatus::AlreadyMapped, "existing skinned mesh mapping skips upload", failures);
+    expect(result.summary.alreadyMappedCount == 4, "already mapped summary increments", failures);
+    expect(renderer.meshCreateCalls == 0 && renderer.textureCreateCalls == 0, "existing mappings do not call mesh/texture renderer", failures);
+    expect(renderer.skeletonCreateCalls == 0 && renderer.skinnedMeshCreateCalls == 0, "existing mappings do not call skeleton renderer", failures);
     expect(handles.findMeshHandle(asset(10))->id == 501, "existing mesh mapping is preserved", failures);
     expect(handles.findTextureHandle(asset(20))->id == 601, "existing texture mapping is preserved", failures);
+    expect(handles.findSkeletonHandle(asset(40))->id == 801, "existing skeleton mapping is preserved", failures);
+    expect(handles.findSkinnedMeshHandle(asset(50))->id == 901, "existing skinned mesh mapping is preserved", failures);
 }
 
 void testRendererFailureDoesNotMutateCatalog(std::vector<std::string>& failures)
 {
     const std::vector<full_engine::LoadedAssetPayload> payloads = {
         meshPayload(),
-        texturePayload()};
+        texturePayload(),
+        skeletonPayload()};
     const full_engine::LoadedAssetUploadPlan plan = uploadPlan(payloads);
 
     FakeRenderer renderer;
     renderer.nextMesh = {};
     renderer.nextTexture = {};
+    renderer.nextSkeleton = {};
     full_engine::RendererAssetHandleCatalog handles;
     const full_engine::LoadedAssetUploadExecuteResult result =
         full_engine::executeLoadedAssetUploadPlan(renderer, plan, handles);
 
     expect(result.records[0].status == full_engine::LoadedAssetUploadExecuteStatus::RendererFailed, "invalid mesh handle reports renderer failure", failures);
     expect(result.records[1].status == full_engine::LoadedAssetUploadExecuteStatus::RendererFailed, "invalid texture handle reports renderer failure", failures);
-    expect(result.summary.rendererFailedCount == 2, "renderer failure summary increments", failures);
-    expect(handles.meshHandleCount() == 0 && handles.textureHandleCount() == 0, "renderer failure does not mutate catalog", failures);
+    expect(result.records[2].status == full_engine::LoadedAssetUploadExecuteStatus::RendererFailed, "invalid skeleton handle reports renderer failure", failures);
+    expect(result.summary.rendererFailedCount == 3, "renderer failure summary increments", failures);
+    expect(handles.meshHandleCount() == 0 && handles.textureHandleCount() == 0, "renderer failure does not mutate mesh/texture catalog", failures);
+    expect(handles.skeletonHandleCount() == 0, "renderer failure does not mutate skeleton catalog", failures);
+}
+
+void testSkinnedMeshRendererFailureDoesNotMutateCatalog(std::vector<std::string>& failures)
+{
+    const std::vector<full_engine::LoadedAssetPayload> payloads = {skinnedMeshPayload()};
+    const full_engine::LoadedAssetUploadPlan plan = uploadPlan(payloads);
+
+    FakeRenderer renderer;
+    renderer.nextSkinnedMesh = {};
+    full_engine::RendererAssetHandleCatalog handles;
+    (void)handles.addSkeletonHandle(asset(40), {808});
+    const full_engine::LoadedAssetUploadExecuteResult result =
+        full_engine::executeLoadedAssetUploadPlan(renderer, plan, handles);
+
+    expect(result.records[0].status == full_engine::LoadedAssetUploadExecuteStatus::RendererFailed, "invalid skinned mesh handle reports renderer failure", failures);
+    expect(result.summary.rendererFailedCount == 1, "skinned renderer failure summary increments", failures);
+    expect(renderer.skinnedMeshCreateCalls == 1, "skinned renderer failure still attempts upload", failures);
+    expect(handles.skinnedMeshHandleCount() == 0, "skinned renderer failure does not mutate skinned mesh catalog", failures);
+    expect(handles.findSkeletonHandle(asset(40)) != nullptr, "skinned renderer failure preserves skeleton mapping", failures);
 }
 
 void testCatalogRejectedPreservesExistingMappings(std::vector<std::string>& failures)
@@ -385,6 +546,8 @@ void testMixedOrderAndStatusNames(std::vector<std::string>& failures)
 {
     const std::vector<full_engine::LoadedAssetPayload> payloads = {
         texturePayload(1),
+        skeletonPayload(4),
+        skinnedMeshPayload(5, 4),
         materialPayload(2),
         meshPayload(3)};
     const full_engine::LoadedAssetUploadPlan plan = uploadPlan(payloads);
@@ -396,9 +559,13 @@ void testMixedOrderAndStatusNames(std::vector<std::string>& failures)
         full_engine::executeLoadedAssetUploadPlan(renderer, plan, handles);
 
     expect(result.records[0].id == asset(1), "mixed executor preserves first record order", failures);
-    expect(result.records[1].id == asset(2), "mixed executor preserves second record order", failures);
-    expect(result.records[2].id == asset(3), "mixed executor preserves third record order", failures);
+    expect(result.records[1].id == asset(4), "mixed executor preserves second record order", failures);
+    expect(result.records[2].id == asset(5), "mixed executor preserves third record order", failures);
+    expect(result.records[3].id == asset(2), "mixed executor preserves fourth record order", failures);
+    expect(result.records[4].id == asset(3), "mixed executor preserves fifth record order", failures);
     expect(result.summary.uploadedTextureCount == 1, "mixed executor counts texture upload", failures);
+    expect(result.summary.uploadedSkeletonCount == 1, "mixed executor counts skeleton upload", failures);
+    expect(result.summary.uploadedSkinnedMeshCount == 1, "mixed executor counts skinned mesh upload", failures);
     expect(result.summary.uploadedMaterialCount == 1, "mixed executor counts material upload", failures);
     expect(result.summary.uploadedMeshCount == 1, "mixed executor counts mesh upload", failures);
 
@@ -406,6 +573,7 @@ void testMixedOrderAndStatusNames(std::vector<std::string>& failures)
         full_engine::LoadedAssetUploadExecuteStatus::Uploaded,
         full_engine::LoadedAssetUploadExecuteStatus::AlreadyMapped,
         full_engine::LoadedAssetUploadExecuteStatus::MissingTextureHandle,
+        full_engine::LoadedAssetUploadExecuteStatus::MissingSkeletonHandle,
         full_engine::LoadedAssetUploadExecuteStatus::SkippedUnplanned,
         full_engine::LoadedAssetUploadExecuteStatus::RendererFailed,
         full_engine::LoadedAssetUploadExecuteStatus::CatalogRejected,
@@ -427,8 +595,11 @@ int main()
     testUploadsMeshAndTexture(failures);
     testMaterialUploadsAfterTextureResolution(failures);
     testMaterialMissingTextureIsRetryable(failures);
+    testUploadsSkeletonAndSkinnedMesh(failures);
+    testSkinnedMeshMissingSkeletonIsRetryable(failures);
     testExistingMappingsSkipUpload(failures);
     testRendererFailureDoesNotMutateCatalog(failures);
+    testSkinnedMeshRendererFailureDoesNotMutateCatalog(failures);
     testCatalogRejectedPreservesExistingMappings(failures);
     testSkippedUnplannedAndUnsupportedKind(failures);
     testMixedOrderAndStatusNames(failures);

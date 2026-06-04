@@ -1,0 +1,104 @@
+{
+  "asset": {
+    "version": "2.0",
+    "generator": "FullRenderer Assimp animation importer test"
+  },
+  "scene": 0,
+  "scenes": [
+    {
+      "nodes": [0]
+    }
+  ],
+  "nodes": [
+    {
+      "name": "Root",
+      "children": [1, 2]
+    },
+    {
+      "name": "Child"
+    },
+    {
+      "name": "SkinnedTriangle",
+      "mesh": 0,
+      "skin": 0
+    }
+  ],
+  "skins": [
+    {
+      "skeleton": 0,
+      "joints": [0, 1],
+      "inverseBindMatrices": 5
+    }
+  ],
+  "meshes": [
+    {
+      "primitives": [
+        {
+          "attributes": {
+            "POSITION": 0,
+            "NORMAL": 1,
+            "TEXCOORD_0": 2,
+            "JOINTS_0": 3,
+            "WEIGHTS_0": 4
+          },
+          "indices": 6,
+          "mode": 4
+        }
+      ]
+    }
+  ],
+  "animations": [
+    {
+      "name": "two_joint_clip",
+      "channels": [
+        { "sampler": 0, "target": { "node": 0, "path": "translation" } },
+        { "sampler": 1, "target": { "node": 0, "path": "rotation" } },
+        { "sampler": 2, "target": { "node": 0, "path": "scale" } },
+        { "sampler": 0, "target": { "node": 1, "path": "translation" } },
+        { "sampler": 1, "target": { "node": 1, "path": "rotation" } },
+        { "sampler": 2, "target": { "node": 1, "path": "scale" } }
+      ],
+      "samplers": [
+        { "input": 7, "interpolation": "LINEAR", "output": 8 },
+        { "input": 7, "interpolation": "LINEAR", "output": 9 },
+        { "input": 7, "interpolation": "LINEAR", "output": 10 }
+      ]
+    }
+  ],
+  "buffers": [
+    {
+      "uri": "data:application/octet-stream;base64,AAAAAAAAAAAAAAAAAACAPwAAAAAAAAAAAAAAAAAAgD8AAAAAAAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAABAAAAAAAAAAAAAQAAAAAAAACAPwAAAAAAAAAAAAAAAAAAgD8AAAAAAAAAAAAAAAAAAAA/AAAAPwAAAAAAAAAAAAABAAIAAAAAAIA/AAAAAAAAAAAAAAAAAAAAAAAAgD8AAAAAAAAAAAAAAAAAAAAAAACAPwAAAAAAAAAAAAAAAAAAAAAAAIA/AACAPwAAAAAAAAAAAAAAAAAAAAAAAIA/AAAAAAAAAAAAAAAAAAAAAAAAgD8AAAAAAAAAAAAAAAAAAAAAAACAPw==",
+      "byteLength": 304
+    },
+    {
+      "uri": "data:application/octet-stream;base64,AAAAAAAAgD8AAAAAAAAAAAAAAAAAAAAAAACAPwAAAAAAAAAAAAAAAAAAAAAAAIA/AAAAAAAAAADzBDU/8wQ1PwAAgD8AAIA/AACAPwAAgD8AAIA/AACAPw==",
+      "byteLength": 88
+    }
+  ],
+  "bufferViews": [
+    { "buffer": 0, "byteOffset": 0, "byteLength": 36, "target": 34962 },
+    { "buffer": 0, "byteOffset": 36, "byteLength": 36, "target": 34962 },
+    { "buffer": 0, "byteOffset": 72, "byteLength": 24, "target": 34962 },
+    { "buffer": 0, "byteOffset": 96, "byteLength": 24, "target": 34962 },
+    { "buffer": 0, "byteOffset": 120, "byteLength": 48, "target": 34962 },
+    { "buffer": 0, "byteOffset": 176, "byteLength": 128 },
+    { "buffer": 0, "byteOffset": 168, "byteLength": 6, "target": 34963 },
+    { "buffer": 1, "byteOffset": 0, "byteLength": 8 },
+    { "buffer": 1, "byteOffset": 8, "byteLength": 24 },
+    { "buffer": 1, "byteOffset": 32, "byteLength": 32 },
+    { "buffer": 1, "byteOffset": 64, "byteLength": 24 }
+  ],
+  "accessors": [
+    { "bufferView": 0, "byteOffset": 0, "componentType": 5126, "count": 3, "type": "VEC3", "min": [0.0, 0.0, 0.0], "max": [1.0, 1.0, 0.0] },
+    { "bufferView": 1, "byteOffset": 0, "componentType": 5126, "count": 3, "type": "VEC3" },
+    { "bufferView": 2, "byteOffset": 0, "componentType": 5126, "count": 3, "type": "VEC2" },
+    { "bufferView": 3, "byteOffset": 0, "componentType": 5123, "count": 3, "type": "VEC4" },
+    { "bufferView": 4, "byteOffset": 0, "componentType": 5126, "count": 3, "type": "VEC4" },
+    { "bufferView": 5, "byteOffset": 0, "componentType": 5126, "count": 2, "type": "MAT4" },
+    { "bufferView": 6, "byteOffset": 0, "componentType": 5123, "count": 3, "type": "SCALAR" },
+    { "bufferView": 7, "byteOffset": 0, "componentType": 5126, "count": 2, "type": "SCALAR", "min": [0.0], "max": [1.0] },
+    { "bufferView": 8, "byteOffset": 0, "componentType": 5126, "count": 2, "type": "VEC3" },
+    { "bufferView": 9, "byteOffset": 0, "componentType": 5126, "count": 2, "type": "VEC4" },
+    { "bufferView": 10, "byteOffset": 0, "componentType": 5126, "count": 2, "type": "VEC3" }
+  ]
+}

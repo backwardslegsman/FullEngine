@@ -10,7 +10,8 @@ bool isLoadableAssetSourceKind(const AssetKind kind) noexcept
         kind == AssetKind::Material ||
         kind == AssetKind::Texture ||
         kind == AssetKind::Skeleton ||
-        kind == AssetKind::SkinnedMesh;
+        kind == AssetKind::SkinnedMesh ||
+        kind == AssetKind::AnimationClip;
 }
 } // namespace
 

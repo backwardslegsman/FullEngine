@@ -23,12 +23,23 @@ void incrementSummary(
         {
             ++summary.uploadedMaterialCount;
         }
+        else if (record.kind == AssetKind::Skeleton)
+        {
+            ++summary.uploadedSkeletonCount;
+        }
+        else if (record.kind == AssetKind::SkinnedMesh)
+        {
+            ++summary.uploadedSkinnedMeshCount;
+        }
         break;
     case LoadedAssetUploadExecuteStatus::AlreadyMapped:
         ++summary.alreadyMappedCount;
         break;
     case LoadedAssetUploadExecuteStatus::MissingTextureHandle:
         ++summary.missingTextureHandleCount;
+        break;
+    case LoadedAssetUploadExecuteStatus::MissingSkeletonHandle:
+        ++summary.missingSkeletonHandleCount;
         break;
     case LoadedAssetUploadExecuteStatus::SkippedUnplanned:
         ++summary.skippedUnplannedCount;
@@ -112,6 +123,80 @@ LoadedAssetUploadExecuteRecord executeTextureUpload(
     }
 
     record.catalogResult = handles.addTextureHandle(source.id, created);
+    record.status =
+        record.catalogResult == RendererAssetHandleCatalogResult::Success ?
+        LoadedAssetUploadExecuteStatus::Uploaded :
+        LoadedAssetUploadExecuteStatus::CatalogRejected;
+    return record;
+}
+
+LoadedAssetUploadExecuteRecord executeSkeletonUpload(
+    full_renderer::IRenderer& renderer,
+    const LoadedAssetUploadRecord& source,
+    RendererAssetHandleCatalog& handles)
+{
+    LoadedAssetUploadExecuteRecord record = makeBaseRecord(source);
+
+    const full_renderer::SkeletonHandle* const existing = handles.findSkeletonHandle(source.id);
+    if (existing != nullptr)
+    {
+        record.status = LoadedAssetUploadExecuteStatus::AlreadyMapped;
+        record.skeleton = *existing;
+        record.catalogResult = RendererAssetHandleCatalogResult::AlreadyExists;
+        return record;
+    }
+
+    const full_renderer::SkeletonHandle created = renderer.createSkeleton(source.skeleton.desc);
+    record.skeleton = created;
+    if (!full_renderer::isValid(created))
+    {
+        record.status = LoadedAssetUploadExecuteStatus::RendererFailed;
+        return record;
+    }
+
+    record.catalogResult = handles.addSkeletonHandle(source.id, created);
+    record.status =
+        record.catalogResult == RendererAssetHandleCatalogResult::Success ?
+        LoadedAssetUploadExecuteStatus::Uploaded :
+        LoadedAssetUploadExecuteStatus::CatalogRejected;
+    return record;
+}
+
+LoadedAssetUploadExecuteRecord executeSkinnedMeshUpload(
+    full_renderer::IRenderer& renderer,
+    const LoadedAssetUploadRecord& source,
+    RendererAssetHandleCatalog& handles)
+{
+    LoadedAssetUploadExecuteRecord record = makeBaseRecord(source);
+
+    const full_renderer::SkinnedMeshHandle* const existing = handles.findSkinnedMeshHandle(source.id);
+    if (existing != nullptr)
+    {
+        record.status = LoadedAssetUploadExecuteStatus::AlreadyMapped;
+        record.skinnedMesh = *existing;
+        record.catalogResult = RendererAssetHandleCatalogResult::AlreadyExists;
+        return record;
+    }
+
+    const full_renderer::SkeletonHandle* const skeleton =
+        handles.findSkeletonHandle(source.skinnedMesh.skeletonAssetId);
+    if (skeleton == nullptr)
+    {
+        record.status = LoadedAssetUploadExecuteStatus::MissingSkeletonHandle;
+        return record;
+    }
+
+    full_renderer::SkinnedMeshDesc desc = source.skinnedMesh.desc;
+    desc.skeleton = *skeleton;
+    const full_renderer::SkinnedMeshHandle created = renderer.createSkinnedMesh(desc);
+    record.skinnedMesh = created;
+    if (!full_renderer::isValid(created))
+    {
+        record.status = LoadedAssetUploadExecuteStatus::RendererFailed;
+        return record;
+    }
+
+    record.catalogResult = handles.addSkinnedMeshHandle(source.id, created);
     record.status =
         record.catalogResult == RendererAssetHandleCatalogResult::Success ?
         LoadedAssetUploadExecuteStatus::Uploaded :
@@ -241,10 +326,13 @@ LoadedAssetUploadExecuteRecord executeRecord(
         return executeTextureUpload(renderer, source, handles);
     case AssetKind::Material:
         return executeMaterialUpload(renderer, source, handles);
+    case AssetKind::Skeleton:
+        return executeSkeletonUpload(renderer, source, handles);
+    case AssetKind::SkinnedMesh:
+        return executeSkinnedMeshUpload(renderer, source, handles);
     case AssetKind::Unknown:
     case AssetKind::TerrainChunk:
-    case AssetKind::Skeleton:
-    case AssetKind::SkinnedMesh:
+    case AssetKind::AnimationClip:
     case AssetKind::Shader:
         record.status = LoadedAssetUploadExecuteStatus::UnsupportedKind;
         return record;
@@ -266,6 +354,8 @@ const char* loadedAssetUploadExecuteStatusName(
         return "AlreadyMapped";
     case LoadedAssetUploadExecuteStatus::MissingTextureHandle:
         return "MissingTextureHandle";
+    case LoadedAssetUploadExecuteStatus::MissingSkeletonHandle:
+        return "MissingSkeletonHandle";
     case LoadedAssetUploadExecuteStatus::SkippedUnplanned:
         return "SkippedUnplanned";
     case LoadedAssetUploadExecuteStatus::RendererFailed:

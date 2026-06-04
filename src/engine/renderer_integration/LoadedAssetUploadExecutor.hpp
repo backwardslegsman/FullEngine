@@ -22,6 +22,9 @@ enum class LoadedAssetUploadExecuteStatus
     /** @brief A material texture asset reference did not have a renderer texture handle yet. */
     MissingTextureHandle,
 
+    /** @brief A skinned mesh skeleton asset reference did not have a renderer skeleton handle yet. */
+    MissingSkeletonHandle,
+
     /** @brief The source upload-plan record was not planned and no upload was attempted. */
     SkippedUnplanned,
 
@@ -69,6 +72,12 @@ struct LoadedAssetUploadExecuteRecord
     /** @brief Material handle produced or found when `kind` is Material. */
     full_renderer::MaterialHandle material = {};
 
+    /** @brief Skeleton handle produced or found when `kind` is Skeleton. */
+    full_renderer::SkeletonHandle skeleton = {};
+
+    /** @brief Skinned mesh handle produced or found when `kind` is SkinnedMesh. */
+    full_renderer::SkinnedMeshHandle skinnedMesh = {};
+
     /** @brief Result from inserting a produced handle into the renderer asset catalog. */
     RendererAssetHandleCatalogResult catalogResult = RendererAssetHandleCatalogResult::NotFound;
 };
@@ -85,11 +94,20 @@ struct LoadedAssetUploadExecuteSummary
     /** @brief Number of material uploads that produced and cataloged renderer handles. */
     std::size_t uploadedMaterialCount = 0;
 
+    /** @brief Number of skeleton uploads that produced and cataloged renderer handles. */
+    std::size_t uploadedSkeletonCount = 0;
+
+    /** @brief Number of skinned mesh uploads that produced and cataloged renderer handles. */
+    std::size_t uploadedSkinnedMeshCount = 0;
+
     /** @brief Number of records skipped because the catalog already had a mapping. */
     std::size_t alreadyMappedCount = 0;
 
     /** @brief Number of material records waiting for texture handles. */
     std::size_t missingTextureHandleCount = 0;
+
+    /** @brief Number of skinned mesh records waiting for skeleton handles. */
+    std::size_t missingSkeletonHandleCount = 0;
 
     /** @brief Number of records skipped because the source upload plan did not plan them. */
     std::size_t skippedUnplannedCount = 0;
@@ -115,14 +133,16 @@ struct LoadedAssetUploadExecuteResult
 };
 
 /**
- * @brief Executes planned loaded mesh, texture, and material uploads through public renderer APIs.
+ * @brief Executes planned loaded mesh, texture, material, skeleton, and skinned mesh uploads through public renderer APIs.
  *
  * The function is synchronous and must be called on the renderer owner thread
  * at a point where `IRenderer::createMesh`, `IRenderer::createTexture`, and
- * `IRenderer::createMaterial` are valid. Successful handles are copied into
+ * `IRenderer::createMaterial`, `IRenderer::createSkeleton`, and
+ * `IRenderer::createSkinnedMesh` are valid. Successful handles are copied into
  * `handles`. Existing mappings are preserved and are not replaced. Material
- * texture asset IDs are resolved against `handles`; missing texture mappings
- * are reported as retryable diagnostics and do not call `createMaterial`.
+ * texture asset IDs and skinned mesh skeleton asset IDs are resolved against
+ * `handles`; missing mappings are reported as retryable diagnostics and do not
+ * call the dependent renderer create function.
  *
  * This executor does not mutate load state, job queues, manifests, source
  * catalogs, or terrain runtime state. It also does not roll back renderer

@@ -6,12 +6,13 @@
 namespace full_engine
 {
 /**
- * @brief Options for importing static mesh payloads through Assimp.
+ * @brief Options for importing mesh payloads through Assimp.
  *
  * This importer is renderer-free and synchronous. Options select Assimp
- * post-processing used before converting supported static meshes into one
- * `LoadedAssetPayload`. The importer does not create renderer resources, own
- * async work, decode textures, import materials, or retain Assimp scene data.
+ * post-processing and animation conversion behavior used before converting
+ * supported Assimp scene data into one `LoadedAssetPayload`. The importer does
+ * not create renderer resources, own async work, decode textures, import
+ * materials, evaluate animation clips, or retain Assimp scene data.
  */
 struct AssimpLoadedAssetImportOptions
 {
@@ -29,6 +30,21 @@ struct AssimpLoadedAssetImportOptions
 
     /** @brief Accept missing UV set 0 and fill imported `uv0` with zero. */
     bool defaultMissingUv0ToZero = false;
+
+    /** @brief Zero-based animation index to import for `AssetKind::AnimationClip`. */
+    std::uint32_t animationIndex = 0;
+
+    /** @brief Ticks per second used when Assimp reports missing animation tick metadata. */
+    double defaultTicksPerSecond = 30.0;
+
+    /** @brief Accept missing translation keys and synthesize one identity translation key. */
+    bool allowMissingTranslationKeys = true;
+
+    /** @brief Accept missing rotation keys and synthesize one identity rotation key. */
+    bool allowMissingRotationKeys = false;
+
+    /** @brief Accept missing scale keys and synthesize one identity scale key. */
+    bool allowMissingScaleKeys = true;
 };
 
 /** @brief Result status for importing one asset source through Assimp. */
@@ -68,20 +84,23 @@ const char* assimpLoadedAssetImportStatusName(
     AssimpLoadedAssetImportStatus status) noexcept;
 
 /**
- * @brief Imports a renderer-free static mesh payload through Assimp.
+ * @brief Imports a renderer-free mesh, skeleton, skinned mesh, or animation clip payload through Assimp.
  *
- * `source.uri` is treated as a direct filesystem path. V1 supports
- * `AssetKind::Mesh` only and combines all supported static meshes in the scene
- * into one `LoadedMeshAsset` with positions, normals, UV set 0, optional
- * color set 0, and 16-bit triangle indices. Missing UV0 is rejected unless
+ * `source.uri` is treated as a direct filesystem path. Static mesh imports
+ * combine all supported static meshes in the scene into one `LoadedMeshAsset`.
+ * Skeletal imports produce one bind-pose `LoadedSkeletonAsset`, one
+ * `LoadedSkinnedMeshAsset`, or one `LoadedAnimationClipAsset` depending on
+ * `source.kind`; callers import the skeleton, skinned mesh, and animation clip
+ * as separate source records even when they share a glTF file. Missing UV0 is
+ * rejected unless
  * `AssimpLoadedAssetImportOptions::defaultMissingUv0ToZero` is explicitly set.
  * Mesh order and face order follow Assimp's post-processed scene order. Parsed
- * aggregate metadata is checked against `source.descriptor.mesh`, and the
+ * aggregate metadata is checked against the active source descriptor, and the
  * final payload is validated with `validateLoadedAssetPayload`.
  *
  * The function copies all payload data by value. It performs no renderer
  * calls, renderer handle lookup, renderer resource creation, texture decoding,
- * material import, tangent import, UV1+ import, skeletal import, animation import, async
+ * material import, tangent import, UV1+ import, animation evaluation, async
  * scheduling, or source catalog mutation.
  */
 AssimpLoadedAssetImportResult importLoadedAssetPayloadWithAssimp(

@@ -28,6 +28,9 @@ void incrementKindSummary(AssetKindSummary& summary, const AssetKind kind) noexc
     case AssetKind::SkinnedMesh:
         ++summary.skinnedMeshCount;
         break;
+    case AssetKind::AnimationClip:
+        ++summary.animationClipCount;
+        break;
     case AssetKind::Shader:
         ++summary.shaderCount;
         break;

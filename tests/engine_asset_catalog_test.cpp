@@ -80,6 +80,11 @@ void testValidRecords(std::vector<std::string>& failures)
             full_engine::AssetRecordValidationResult::Success,
         "record with multiple dependencies validates",
         failures);
+    expect(
+        full_engine::validateAssetRecord(makeRecord(asset(3), full_engine::AssetKind::AnimationClip)) ==
+            full_engine::AssetRecordValidationResult::Success,
+        "animation clip asset record validates",
+        failures);
 }
 
 void testInvalidRecords(std::vector<std::string>& failures)

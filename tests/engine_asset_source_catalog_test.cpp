@@ -62,6 +62,13 @@ full_engine::AssetSourceDescriptor descriptorForKind(const full_engine::AssetKin
         descriptor.skinnedMesh.localBounds.max[1] = 1.0f;
         descriptor.skinnedMesh.localBounds.max[2] = 1.0f;
         break;
+    case full_engine::AssetKind::AnimationClip:
+        descriptor.animationClip.skeletonAssetId = asset(40);
+        descriptor.animationClip.trackCount = 2;
+        descriptor.animationClip.durationSeconds = 1.0f;
+        descriptor.animationClip.ticksPerSecond = 30.0f;
+        descriptor.animationClip.metadataTolerance = 0.001f;
+        break;
     case full_engine::AssetKind::Unknown:
     case full_engine::AssetKind::TerrainChunk:
     case full_engine::AssetKind::Shader:
@@ -108,6 +115,11 @@ void testValidation(std::vector<std::string>& failures)
         full_engine::validateAssetSourceRecord(source(6, full_engine::AssetKind::SkinnedMesh, "skinned.mesh")) ==
             full_engine::AssetSourceRecordValidationResult::Success,
         "valid skinned mesh source validates",
+        failures);
+    expect(
+        full_engine::validateAssetSourceRecord(source(7, full_engine::AssetKind::AnimationClip, "walk.anim")) ==
+            full_engine::AssetSourceRecordValidationResult::Success,
+        "valid animation clip source validates",
         failures);
     expect(
         full_engine::validateAssetSourceRecord(source(0, full_engine::AssetKind::Mesh, "mesh.bin")) ==

@@ -62,6 +62,25 @@ struct AssetSourceSkinnedMeshDescriptor
     AssetSourceBounds localBounds = {};
 };
 
+/** @brief Renderer-free animation clip source metadata. */
+struct AssetSourceAnimationClipDescriptor
+{
+    /** @brief Skeleton asset ID whose joint order the clip targets. */
+    AssetId skeletonAssetId = {};
+
+    /** @brief Expected number of joint transform tracks. Zero is invalid. */
+    std::uint32_t trackCount = 0;
+
+    /** @brief Expected clip duration in seconds. Must be finite and positive. */
+    float durationSeconds = 0.0f;
+
+    /** @brief Expected source ticks-per-second metadata used during import. */
+    float ticksPerSecond = 0.0f;
+
+    /** @brief Absolute tolerance used when matching duration and tick-rate metadata. */
+    float metadataTolerance = 0.001f;
+};
+
 /** @brief Renderer-free texture source format contract. */
 enum class AssetSourceTextureFormat
 {
@@ -206,6 +225,9 @@ struct AssetSourceDescriptor
 
     /** @brief Skinned mesh metadata used when the source record kind is `SkinnedMesh`. */
     AssetSourceSkinnedMeshDescriptor skinnedMesh = {};
+
+    /** @brief Animation clip metadata used when the source record kind is `AnimationClip`. */
+    AssetSourceAnimationClipDescriptor animationClip = {};
 };
 
 /** @brief Validation result for one active source descriptor. */
@@ -230,6 +252,11 @@ enum class AssetSourceDescriptorValidationResult
     InvalidSkinnedMeshCounts,
     InvalidSkinnedMeshSkeletonRef,
     InvalidSkinnedMeshBounds,
+    InvalidAnimationClipSkeletonRef,
+    InvalidAnimationClipTrackCount,
+    InvalidAnimationClipDuration,
+    InvalidAnimationClipTicksPerSecond,
+    InvalidAnimationClipMetadataTolerance,
 };
 
 /** @brief Returns a stable diagnostic name for a descriptor validation result. */

@@ -29,6 +29,7 @@ bool isValidKind(const AssetKind kind) noexcept
     case AssetKind::TerrainChunk:
     case AssetKind::Skeleton:
     case AssetKind::SkinnedMesh:
+    case AssetKind::AnimationClip:
     case AssetKind::Shader:
         return true;
     case AssetKind::Unknown:

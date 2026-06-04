@@ -38,6 +38,7 @@ enum class AssetKind
     TerrainChunk,
     Skeleton,
     SkinnedMesh,
+    AnimationClip,
     Shader,
 };
 

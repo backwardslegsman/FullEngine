@@ -90,6 +90,50 @@ struct LoadedMaterialUploadWork
     std::vector<AssetSourceMaterialTextureRef> textureRefs;
 };
 
+/**
+ * @brief Owned skeleton upload work plus a renderer descriptor view.
+ *
+ * The joint vector owns the CPU data referenced by `desc.joints`. The
+ * descriptor pointer remains valid while this work item is alive and unmoved.
+ */
+struct LoadedSkeletonUploadWork
+{
+    /** @brief Asset ID copied from the loaded skeleton payload. */
+    AssetId id = {};
+
+    /** @brief Owned renderer-facing skeleton joint descriptors. */
+    std::vector<full_renderer::SkeletonJointDesc> joints;
+
+    /** @brief Descriptor view pointing into `joints`. */
+    full_renderer::SkeletonDesc desc = {};
+};
+
+/**
+ * @brief Owned skinned mesh upload work plus a renderer descriptor view.
+ *
+ * The vertex/index vectors own the CPU data referenced by `desc`. The
+ * descriptor pointer fields remain valid while this work item is alive and
+ * unmoved. `desc.skeleton` is filled by the executor after resolving
+ * `skeletonAssetId` in a renderer handle catalog.
+ */
+struct LoadedSkinnedMeshUploadWork
+{
+    /** @brief Asset ID copied from the loaded skinned mesh payload. */
+    AssetId id = {};
+
+    /** @brief Skeleton asset ID that must resolve to a renderer skeleton handle. */
+    AssetId skeletonAssetId = {};
+
+    /** @brief Owned renderer-facing skinned vertex data. */
+    std::vector<full_renderer::SkinnedMeshVertex> vertices;
+
+    /** @brief Owned renderer-facing 16-bit triangle indices. */
+    std::vector<std::uint16_t> indices;
+
+    /** @brief Descriptor view pointing into `vertices` and `indices`. */
+    full_renderer::SkinnedMeshDesc desc = {};
+};
+
 /** @brief Ordered upload planning record for one loaded asset payload. */
 struct LoadedAssetUploadRecord
 {
@@ -110,6 +154,12 @@ struct LoadedAssetUploadRecord
 
     /** @brief Material upload expectation when `kind` is Material and `status` is Planned. */
     LoadedMaterialUploadWork material = {};
+
+    /** @brief Skeleton upload work when `kind` is Skeleton and `status` is Planned. */
+    LoadedSkeletonUploadWork skeleton = {};
+
+    /** @brief Skinned mesh upload work when `kind` is SkinnedMesh and `status` is Planned. */
+    LoadedSkinnedMeshUploadWork skinnedMesh = {};
 };
 
 /** @brief Aggregate counters for loaded asset upload planning. */

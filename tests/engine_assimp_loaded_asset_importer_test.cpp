@@ -1,4 +1,5 @@
 #include "engine/assets/AssimpLoadedAssetImporter.hpp"
+#include "engine/renderer_integration/LoadedAssetUploadPlan.hpp"
 
 #include <cstdlib>
 #include <filesystem>
@@ -81,6 +82,78 @@ full_engine::AssetSourceRecord textureSource()
     record.descriptor.texture.format = full_engine::AssetSourceTextureFormat::Rgba8;
     record.descriptor.texture.semantic = full_engine::AssetSourceTextureSemantic::Color;
     record.descriptor.texture.colorSpace = full_engine::AssetSourceTextureColorSpace::Srgb;
+    return record;
+}
+
+full_engine::AssetSourceDescriptor skeletonDescriptor(const std::uint32_t jointCount = 2)
+{
+    full_engine::AssetSourceDescriptor descriptor;
+    descriptor.skeleton.jointCount = jointCount;
+    return descriptor;
+}
+
+full_engine::AssetSourceDescriptor skinnedMeshDescriptor(
+    const std::uint32_t vertexCount = 3,
+    const std::uint32_t indexCount = 3,
+    const std::uint64_t skeletonAssetId = 7,
+    const float maxX = 1.0f)
+{
+    full_engine::AssetSourceDescriptor descriptor;
+    descriptor.skinnedMesh.vertexCount = vertexCount;
+    descriptor.skinnedMesh.indexCount = indexCount;
+    descriptor.skinnedMesh.skeletonAssetId = asset(skeletonAssetId);
+    descriptor.skinnedMesh.localBounds.min[0] = 0.0f;
+    descriptor.skinnedMesh.localBounds.min[1] = 0.0f;
+    descriptor.skinnedMesh.localBounds.min[2] = 0.0f;
+    descriptor.skinnedMesh.localBounds.max[0] = maxX;
+    descriptor.skinnedMesh.localBounds.max[1] = 1.0f;
+    descriptor.skinnedMesh.localBounds.max[2] = 0.0f;
+    return descriptor;
+}
+
+full_engine::AssetSourceDescriptor animationClipDescriptor(
+    const std::uint32_t trackCount = 2,
+    const float durationSeconds = 1.0f,
+    const float ticksPerSecond = 1000.0f,
+    const std::uint64_t skeletonAssetId = 7,
+    const float metadataTolerance = 0.01f)
+{
+    full_engine::AssetSourceDescriptor descriptor;
+    descriptor.animationClip.skeletonAssetId = asset(skeletonAssetId);
+    descriptor.animationClip.trackCount = trackCount;
+    descriptor.animationClip.durationSeconds = durationSeconds;
+    descriptor.animationClip.ticksPerSecond = ticksPerSecond;
+    descriptor.animationClip.metadataTolerance = metadataTolerance;
+    return descriptor;
+}
+
+full_engine::AssetSourceRecord skeletonSource(const std::string& uri)
+{
+    full_engine::AssetSourceRecord record;
+    record.id = asset(7);
+    record.kind = full_engine::AssetKind::Skeleton;
+    record.uri = uri;
+    record.descriptor = skeletonDescriptor();
+    return record;
+}
+
+full_engine::AssetSourceRecord skinnedMeshSource(const std::string& uri)
+{
+    full_engine::AssetSourceRecord record;
+    record.id = asset(8);
+    record.kind = full_engine::AssetKind::SkinnedMesh;
+    record.uri = uri;
+    record.descriptor = skinnedMeshDescriptor();
+    return record;
+}
+
+full_engine::AssetSourceRecord animationClipSource(const std::string& uri)
+{
+    full_engine::AssetSourceRecord record;
+    record.id = asset(9);
+    record.kind = full_engine::AssetKind::AnimationClip;
+    record.uri = uri;
+    record.descriptor = animationClipDescriptor();
     return record;
 }
 
@@ -257,6 +330,105 @@ void testVertexColors(std::vector<std::string>& failures)
     expect(result.payload.mesh.vertices[2].colorLinear[2] == 1.0f && result.payload.mesh.vertices[2].colorLinear[3] == 0.5f, "third vertex color copied", failures);
 }
 
+void testSkeletalImport(std::vector<std::string>& failures)
+{
+    const std::string path = fixturePath("skinned_triangle.gltf");
+
+    const full_engine::AssimpLoadedAssetImportResult skeleton =
+        full_engine::importLoadedAssetPayloadWithAssimp(skeletonSource(path));
+    expect(skeleton.status == full_engine::AssimpLoadedAssetImportStatus::Success, "valid gltf skeleton imports", failures);
+    expect(skeleton.payload.kind == full_engine::AssetKind::Skeleton, "skeleton import sets payload kind", failures);
+    expect(skeleton.payload.skeleton.id == asset(7), "skeleton import preserves asset id", failures);
+    expect(skeleton.payload.skeleton.joints.size() == 2, "skeleton import copies joint count", failures);
+    expect(skeleton.payload.skeleton.joints[0].name == "Root", "skeleton import copies root name", failures);
+    expect(skeleton.payload.skeleton.joints[0].parentIndex == -1, "skeleton import preserves root parent", failures);
+    expect(skeleton.payload.skeleton.joints[1].name == "Child", "skeleton import copies child name", failures);
+    expect(skeleton.payload.skeleton.joints[1].parentIndex == 0, "skeleton import preserves child parent", failures);
+    expect(skeleton.payload.skeleton.joints[0].inverseBindPose[0] == 1.0f, "skeleton import copies inverse bind matrix", failures);
+    expect(
+        full_engine::validateLoadedAssetPayload(skeleton.payload) ==
+            full_engine::LoadedAssetPayloadValidationResult::Success,
+        "imported skeleton payload validates",
+        failures);
+
+    const full_engine::AssimpLoadedAssetImportResult skinned =
+        full_engine::importLoadedAssetPayloadWithAssimp(skinnedMeshSource(path));
+    expect(skinned.status == full_engine::AssimpLoadedAssetImportStatus::Success, "valid gltf skinned mesh imports", failures);
+    expect(skinned.payload.kind == full_engine::AssetKind::SkinnedMesh, "skinned import sets payload kind", failures);
+    expect(skinned.payload.skinnedMesh.id == asset(8), "skinned import preserves mesh asset id", failures);
+    expect(skinned.payload.skinnedMesh.skeletonAssetId == asset(7), "skinned import preserves skeleton asset id", failures);
+    expect(skinned.payload.skinnedMesh.vertices.size() == 3, "skinned import copies vertices", failures);
+    expect(skinned.payload.skinnedMesh.indices.size() == 3, "skinned import copies indices", failures);
+    expect(skinned.payload.skinnedMesh.vertices[1].jointIndices[0] == 1, "skinned import maps child joint index", failures);
+    expect(skinned.payload.skinnedMesh.vertices[2].jointWeights[0] == 0.5f, "skinned import copies first blended weight", failures);
+    expect(skinned.payload.skinnedMesh.vertices[2].jointWeights[1] == 0.5f, "skinned import copies second blended weight", failures);
+    expect(skinned.payload.skinnedMesh.vertices[1].uv0[0] == 1.0f, "skinned import copies uv0", failures);
+    expect(skinned.payload.skinnedMesh.localBounds.max[0] == 1.0f, "skinned import computes bounds", failures);
+    expect(
+        full_engine::validateLoadedAssetPayload(skinned.payload) ==
+            full_engine::LoadedAssetPayloadValidationResult::Success,
+        "imported skinned payload validates",
+        failures);
+
+    const full_engine::LoadedAssetPayload payloads[] = {skeleton.payload, skinned.payload};
+    const full_engine::LoadedAssetUploadPlan plan =
+        full_engine::buildLoadedAssetUploadPlan(payloads, 2);
+    expect(plan.summary.plannedCount == 2, "imported skeletal payloads plan upload work", failures);
+    expect(plan.records[0].kind == full_engine::AssetKind::Skeleton, "upload plan keeps skeleton record", failures);
+    expect(plan.records[1].kind == full_engine::AssetKind::SkinnedMesh, "upload plan keeps skinned mesh record", failures);
+}
+
+void testSkeletalUvPolicy(std::vector<std::string>& failures)
+{
+    const full_engine::AssimpLoadedAssetImportResult strict =
+        full_engine::importLoadedAssetPayloadWithAssimp(
+            skinnedMeshSource(fixturePath("skinned_triangle_missing_uv.gltf")));
+    expect(strict.status == full_engine::AssimpLoadedAssetImportStatus::UnsupportedScene, "missing skinned uv fails by default", failures);
+
+    const full_engine::AssimpLoadedAssetImportResult fallback =
+        full_engine::importLoadedAssetPayloadWithAssimp(
+            skinnedMeshSource(fixturePath("skinned_triangle_missing_uv.gltf")),
+            allowMissingUv0());
+    expect(fallback.status == full_engine::AssimpLoadedAssetImportStatus::Success, "missing skinned uv can default to zero", failures);
+    expect(fallback.payload.skinnedMesh.vertices[1].uv0[0] == 0.0f, "defaulted skinned uv0 is zero", failures);
+}
+
+void testAnimationImport(std::vector<std::string>& failures)
+{
+    const full_engine::AssimpLoadedAssetImportResult result =
+        full_engine::importLoadedAssetPayloadWithAssimp(
+            animationClipSource(fixturePath("skinned_triangle_animation.gltf")));
+
+    expect(result.status == full_engine::AssimpLoadedAssetImportStatus::Success, "valid gltf animation clip imports", failures);
+    expect(result.payload.kind == full_engine::AssetKind::AnimationClip, "animation import sets payload kind", failures);
+    expect(result.payload.animationClip.id == asset(9), "animation import preserves clip asset id", failures);
+    expect(result.payload.animationClip.skeletonAssetId == asset(7), "animation import preserves skeleton reference", failures);
+    expect(result.payload.animationClip.tracks.size() == 2, "animation import maps two joint tracks", failures);
+    expect(result.payload.animationClip.tracks[0].jointIndex == 0, "animation import sorts root track by joint index", failures);
+    expect(result.payload.animationClip.tracks[1].jointIndex == 1, "animation import sorts child track by joint index", failures);
+    expect(result.payload.animationClip.tracks[0].translations.size() == 2, "animation import copies translation keys", failures);
+    expect(result.payload.animationClip.tracks[0].rotations.size() == 2, "animation import copies rotation keys", failures);
+    expect(result.payload.animationClip.tracks[0].scales.size() == 2, "animation import copies scale keys", failures);
+    expect(result.payload.animationClip.tracks[0].translations[1].value[1] == 1.0f, "animation import copies translated value", failures);
+    expect(result.payload.animationClip.tracks[0].rotations[1].value[2] > 0.7f, "animation import stores xyzw quaternion", failures);
+    expect(
+        full_engine::validateLoadedAssetPayload(result.payload) ==
+            full_engine::LoadedAssetPayloadValidationResult::Success,
+        "imported animation payload validates",
+        failures);
+}
+
+void testAnimationSingleTrackImport(std::vector<std::string>& failures)
+{
+    full_engine::AssetSourceRecord source =
+        animationClipSource(fixturePath("skinned_triangle_animation_missing_rotation.gltf"));
+    source.descriptor = animationClipDescriptor(1, 1.0f, 1000.0f);
+    const full_engine::AssimpLoadedAssetImportResult fallback =
+        full_engine::importLoadedAssetPayloadWithAssimp(source);
+    expect(fallback.status == full_engine::AssimpLoadedAssetImportStatus::Success, "single-track gltf animation imports", failures);
+    expect(fallback.payload.animationClip.tracks.size() == 1, "single-track animation maps one joint track", failures);
+}
+
 void testFailures(std::vector<std::string>& failures)
 {
     full_engine::AssetSourceRecord invalid = meshSource(fixturePath("static_triangle.gltf"));
@@ -294,6 +466,37 @@ void testFailures(std::vector<std::string>& failures)
     const full_engine::AssimpLoadedAssetImportResult descriptorBoundsMismatch =
         full_engine::importLoadedAssetPayloadWithAssimp(boundsMismatch, allowMissingUv0());
     expect(descriptorBoundsMismatch.status == full_engine::AssimpLoadedAssetImportStatus::DescriptorMismatch, "descriptor bounds mismatch is reported", failures);
+
+    full_engine::AssetSourceRecord skeletonMismatch = skeletonSource(fixturePath("skinned_triangle.gltf"));
+    skeletonMismatch.descriptor = skeletonDescriptor(3);
+    const full_engine::AssimpLoadedAssetImportResult skeletonDescriptorMismatch =
+        full_engine::importLoadedAssetPayloadWithAssimp(skeletonMismatch);
+    expect(skeletonDescriptorMismatch.status == full_engine::AssimpLoadedAssetImportStatus::DescriptorMismatch, "skeleton joint-count mismatch is reported", failures);
+
+    full_engine::AssetSourceRecord skinnedVertexMismatch = skinnedMeshSource(fixturePath("skinned_triangle.gltf"));
+    skinnedVertexMismatch.descriptor = skinnedMeshDescriptor(4, 3, 7);
+    const full_engine::AssimpLoadedAssetImportResult skinnedVertexDescriptorMismatch =
+        full_engine::importLoadedAssetPayloadWithAssimp(skinnedVertexMismatch);
+    expect(skinnedVertexDescriptorMismatch.status == full_engine::AssimpLoadedAssetImportStatus::DescriptorMismatch, "skinned vertex-count mismatch is reported", failures);
+
+    full_engine::AssetSourceRecord skinnedBoundsMismatch = skinnedMeshSource(fixturePath("skinned_triangle.gltf"));
+    skinnedBoundsMismatch.descriptor = skinnedMeshDescriptor(3, 3, 7, 2.0f);
+    const full_engine::AssimpLoadedAssetImportResult skinnedBoundsDescriptorMismatch =
+        full_engine::importLoadedAssetPayloadWithAssimp(skinnedBoundsMismatch);
+    expect(skinnedBoundsDescriptorMismatch.status == full_engine::AssimpLoadedAssetImportStatus::DescriptorMismatch, "skinned bounds mismatch is reported", failures);
+
+    full_engine::AssetSourceRecord animationTrackMismatch = animationClipSource(fixturePath("skinned_triangle_animation.gltf"));
+    animationTrackMismatch.descriptor = animationClipDescriptor(1);
+    const full_engine::AssimpLoadedAssetImportResult animationTrackDescriptorMismatch =
+        full_engine::importLoadedAssetPayloadWithAssimp(animationTrackMismatch);
+    expect(animationTrackDescriptorMismatch.status == full_engine::AssimpLoadedAssetImportStatus::DescriptorMismatch, "animation track-count mismatch is reported", failures);
+
+    full_engine::AssetSourceRecord animationDurationMismatch = animationClipSource(fixturePath("skinned_triangle_animation.gltf"));
+    animationDurationMismatch.descriptor = animationClipDescriptor(2, 2.0f, 1000.0f, 7, 0.001f);
+    const full_engine::AssimpLoadedAssetImportResult animationDurationDescriptorMismatch =
+        full_engine::importLoadedAssetPayloadWithAssimp(animationDurationMismatch);
+    expect(animationDurationDescriptorMismatch.status == full_engine::AssimpLoadedAssetImportStatus::DescriptorMismatch, "animation duration mismatch is reported", failures);
+
 }
 
 void testUnsupportedScenes(std::vector<std::string>& failures)
@@ -314,6 +517,30 @@ void testUnsupportedScenes(std::vector<std::string>& failures)
     const full_engine::AssimpLoadedAssetImportResult tooManyVertices =
         full_engine::importLoadedAssetPayloadWithAssimp(tooMany);
     expect(tooManyVertices.status == full_engine::AssimpLoadedAssetImportStatus::UnsupportedScene, "too many aggregate vertices are unsupported", failures);
+
+    const full_engine::AssimpLoadedAssetImportResult missingWeights =
+        full_engine::importLoadedAssetPayloadWithAssimp(
+            skinnedMeshSource(fixturePath("skinned_triangle_missing_weights.gltf")));
+    expect(missingWeights.status == full_engine::AssimpLoadedAssetImportStatus::UnsupportedScene, "skinned mesh without weights is unsupported", failures);
+}
+
+void testWolfSkeletalAnimationSmoke(std::vector<std::string>& failures)
+{
+    const std::string path = std::string(FULL_RENDERER_TEST_GLTF_FIXTURE_DIR) +
+        "/../33-gltf-wolf/gltf/Wolf-Blender-2.82a.gltf";
+
+    full_engine::AssetSourceRecord skeleton = skeletonSource(path);
+    skeleton.descriptor = skeletonDescriptor(49);
+    const full_engine::AssimpLoadedAssetImportResult skeletonResult =
+        full_engine::importLoadedAssetPayloadWithAssimp(skeleton);
+    expect(skeletonResult.status == full_engine::AssimpLoadedAssetImportStatus::Success, "wolf gltf imports skeleton structurally", failures);
+
+    full_engine::AssetSourceRecord clip = animationClipSource(path);
+    clip.descriptor = animationClipDescriptor(49, 0.6666667f, 1000.0f, 7, 0.01f);
+    const full_engine::AssimpLoadedAssetImportResult clipResult =
+        full_engine::importLoadedAssetPayloadWithAssimp(clip);
+    expect(clipResult.status == full_engine::AssimpLoadedAssetImportStatus::Success, "wolf gltf imports first animation structurally", failures);
+    expect(clipResult.payload.animationClip.tracks.size() == 49, "wolf animation maps one track per joint", failures);
 }
 
 void testStatusNames(std::vector<std::string>& failures)
@@ -337,8 +564,13 @@ int main()
     testMultiMeshImport(failures);
     testGeneratedNormals(failures);
     testVertexColors(failures);
+    testSkeletalImport(failures);
+    testSkeletalUvPolicy(failures);
+    testAnimationImport(failures);
+    testAnimationSingleTrackImport(failures);
     testFailures(failures);
     testUnsupportedScenes(failures);
+    testWolfSkeletalAnimationSmoke(failures);
     testStatusNames(failures);
 
     if (!failures.empty())

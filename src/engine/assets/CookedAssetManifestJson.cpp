@@ -54,6 +54,11 @@ bool parseAssetKind(const std::string& value, AssetKind& kind) noexcept
         kind = AssetKind::SkinnedMesh;
         return true;
     }
+    if (value == "AnimationClip")
+    {
+        kind = AssetKind::AnimationClip;
+        return true;
+    }
     if (value == "Shader")
     {
         kind = AssetKind::Shader;
@@ -406,6 +411,8 @@ const char* assetKindName(const AssetKind kind) noexcept
         return "Skeleton";
     case AssetKind::SkinnedMesh:
         return "SkinnedMesh";
+    case AssetKind::AnimationClip:
+        return "AnimationClip";
     case AssetKind::Shader:
         return "Shader";
     }

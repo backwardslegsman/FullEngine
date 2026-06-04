@@ -168,6 +168,37 @@ AssetSourceDescriptorValidationResult validateSkinnedMeshDescriptor(
     return AssetSourceDescriptorValidationResult::Success;
 }
 
+AssetSourceDescriptorValidationResult validateAnimationClipDescriptor(
+    const AssetSourceAnimationClipDescriptor& descriptor) noexcept
+{
+    if (!isValid(descriptor.skeletonAssetId))
+    {
+        return AssetSourceDescriptorValidationResult::InvalidAnimationClipSkeletonRef;
+    }
+
+    if (descriptor.trackCount == 0)
+    {
+        return AssetSourceDescriptorValidationResult::InvalidAnimationClipTrackCount;
+    }
+
+    if (!std::isfinite(descriptor.durationSeconds) || descriptor.durationSeconds <= 0.0f)
+    {
+        return AssetSourceDescriptorValidationResult::InvalidAnimationClipDuration;
+    }
+
+    if (!std::isfinite(descriptor.ticksPerSecond) || descriptor.ticksPerSecond <= 0.0f)
+    {
+        return AssetSourceDescriptorValidationResult::InvalidAnimationClipTicksPerSecond;
+    }
+
+    if (!std::isfinite(descriptor.metadataTolerance) || descriptor.metadataTolerance < 0.0f)
+    {
+        return AssetSourceDescriptorValidationResult::InvalidAnimationClipMetadataTolerance;
+    }
+
+    return AssetSourceDescriptorValidationResult::Success;
+}
+
 AssetSourceDescriptorValidationResult validateMaterialDescriptor(
     const AssetSourceMaterialDescriptor& descriptor) noexcept
 {
@@ -251,6 +282,16 @@ const char* assetSourceDescriptorValidationResultName(
         return "InvalidSkinnedMeshSkeletonRef";
     case AssetSourceDescriptorValidationResult::InvalidSkinnedMeshBounds:
         return "InvalidSkinnedMeshBounds";
+    case AssetSourceDescriptorValidationResult::InvalidAnimationClipSkeletonRef:
+        return "InvalidAnimationClipSkeletonRef";
+    case AssetSourceDescriptorValidationResult::InvalidAnimationClipTrackCount:
+        return "InvalidAnimationClipTrackCount";
+    case AssetSourceDescriptorValidationResult::InvalidAnimationClipDuration:
+        return "InvalidAnimationClipDuration";
+    case AssetSourceDescriptorValidationResult::InvalidAnimationClipTicksPerSecond:
+        return "InvalidAnimationClipTicksPerSecond";
+    case AssetSourceDescriptorValidationResult::InvalidAnimationClipMetadataTolerance:
+        return "InvalidAnimationClipMetadataTolerance";
     }
 
     return "Unknown";
@@ -272,6 +313,8 @@ AssetSourceDescriptorValidationResult validateAssetSourceDescriptor(
         return validateSkeletonDescriptor(descriptor.skeleton);
     case AssetKind::SkinnedMesh:
         return validateSkinnedMeshDescriptor(descriptor.skinnedMesh);
+    case AssetKind::AnimationClip:
+        return validateAnimationClipDescriptor(descriptor.animationClip);
     case AssetKind::Unknown:
     case AssetKind::TerrainChunk:
     case AssetKind::Shader:

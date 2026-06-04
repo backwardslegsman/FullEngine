@@ -102,6 +102,130 @@ bool hasValidJointIndices(
     return true;
 }
 
+bool isValidJointIndex(const std::uint16_t index) noexcept
+{
+    return index < kMaxLoadedSkeletonJoints;
+}
+
+bool isNormalizedQuaternion(const float value[4]) noexcept
+{
+    constexpr float kQuaternionTolerance = 0.001f;
+    if (!isFinite4(value))
+    {
+        return false;
+    }
+    const float lengthSquared =
+        value[0] * value[0] +
+        value[1] * value[1] +
+        value[2] * value[2] +
+        value[3] * value[3];
+    return std::isfinite(lengthSquared) &&
+        std::fabs(lengthSquared - 1.0f) <= kQuaternionTolerance;
+}
+
+bool isValidAnimationKeyTime(
+    const float timeSeconds,
+    const float durationSeconds) noexcept
+{
+    constexpr float kAnimationTimeTolerance = 0.001f;
+    return std::isfinite(timeSeconds) &&
+        timeSeconds >= 0.0f &&
+        timeSeconds <= durationSeconds + kAnimationTimeTolerance;
+}
+
+bool hasDuplicateAnimationTrack(
+    const LoadedAnimationClipAsset& clip,
+    const std::uint32_t candidateIndex) noexcept
+{
+    const std::uint16_t jointIndex = clip.tracks[candidateIndex].jointIndex;
+    for (std::uint32_t index = 0; index < candidateIndex; ++index)
+    {
+        if (clip.tracks[index].jointIndex == jointIndex)
+        {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool hasValidTranslationKeys(
+    const std::vector<LoadedAnimationTranslationKey>& keys,
+    const float durationSeconds) noexcept
+{
+    if (keys.empty())
+    {
+        return false;
+    }
+
+    float previousTime = -1.0f;
+    for (const LoadedAnimationTranslationKey& key : keys)
+    {
+        if (!isValidAnimationKeyTime(key.timeSeconds, durationSeconds) ||
+            key.timeSeconds < previousTime)
+        {
+            return false;
+        }
+        if (!isFinite3(key.value))
+        {
+            return false;
+        }
+        previousTime = key.timeSeconds;
+    }
+    return true;
+}
+
+bool hasValidRotationKeys(
+    const std::vector<LoadedAnimationRotationKey>& keys,
+    const float durationSeconds) noexcept
+{
+    if (keys.empty())
+    {
+        return false;
+    }
+
+    float previousTime = -1.0f;
+    for (const LoadedAnimationRotationKey& key : keys)
+    {
+        if (!isValidAnimationKeyTime(key.timeSeconds, durationSeconds) ||
+            key.timeSeconds < previousTime)
+        {
+            return false;
+        }
+        if (!isNormalizedQuaternion(key.value))
+        {
+            return false;
+        }
+        previousTime = key.timeSeconds;
+    }
+    return true;
+}
+
+bool hasValidScaleKeys(
+    const std::vector<LoadedAnimationScaleKey>& keys,
+    const float durationSeconds) noexcept
+{
+    if (keys.empty())
+    {
+        return false;
+    }
+
+    float previousTime = -1.0f;
+    for (const LoadedAnimationScaleKey& key : keys)
+    {
+        if (!isValidAnimationKeyTime(key.timeSeconds, durationSeconds) ||
+            key.timeSeconds < previousTime)
+        {
+            return false;
+        }
+        if (!isFinite3(key.value))
+        {
+            return false;
+        }
+        previousTime = key.timeSeconds;
+    }
+    return true;
+}
+
 bool isValidTextureFormat(const AssetSourceTextureFormat format) noexcept
 {
     return format == AssetSourceTextureFormat::Rgba8;
@@ -244,6 +368,20 @@ const char* loadedAssetPayloadValidationResultName(
         return "InvalidSkinnedMeshWeights";
     case LoadedAssetPayloadValidationResult::InvalidSkinnedMeshBounds:
         return "InvalidSkinnedMeshBounds";
+    case LoadedAssetPayloadValidationResult::InvalidAnimationClipSkeletonRef:
+        return "InvalidAnimationClipSkeletonRef";
+    case LoadedAssetPayloadValidationResult::InvalidAnimationClipDuration:
+        return "InvalidAnimationClipDuration";
+    case LoadedAssetPayloadValidationResult::InvalidAnimationClipTicksPerSecond:
+        return "InvalidAnimationClipTicksPerSecond";
+    case LoadedAssetPayloadValidationResult::InvalidAnimationClipTracks:
+        return "InvalidAnimationClipTracks";
+    case LoadedAssetPayloadValidationResult::InvalidAnimationClipJointTrack:
+        return "InvalidAnimationClipJointTrack";
+    case LoadedAssetPayloadValidationResult::InvalidAnimationClipKeyTimes:
+        return "InvalidAnimationClipKeyTimes";
+    case LoadedAssetPayloadValidationResult::InvalidAnimationClipKeyData:
+        return "InvalidAnimationClipKeyData";
     }
 
     return "Unknown";
@@ -482,6 +620,54 @@ LoadedAssetPayloadValidationResult validateLoadedSkinnedMeshAsset(
     return LoadedAssetPayloadValidationResult::Success;
 }
 
+LoadedAssetPayloadValidationResult validateLoadedAnimationClipAsset(
+    const LoadedAnimationClipAsset& clip) noexcept
+{
+    if (!isValid(clip.id))
+    {
+        return LoadedAssetPayloadValidationResult::InvalidAssetId;
+    }
+
+    if (!isValid(clip.skeletonAssetId))
+    {
+        return LoadedAssetPayloadValidationResult::InvalidAnimationClipSkeletonRef;
+    }
+
+    if (!std::isfinite(clip.durationSeconds) || clip.durationSeconds <= 0.0f)
+    {
+        return LoadedAssetPayloadValidationResult::InvalidAnimationClipDuration;
+    }
+
+    if (!std::isfinite(clip.ticksPerSecond) || clip.ticksPerSecond <= 0.0f)
+    {
+        return LoadedAssetPayloadValidationResult::InvalidAnimationClipTicksPerSecond;
+    }
+
+    if (clip.tracks.empty() || clip.tracks.size() > kMaxLoadedSkeletonJoints)
+    {
+        return LoadedAssetPayloadValidationResult::InvalidAnimationClipTracks;
+    }
+
+    for (std::uint32_t index = 0; index < clip.tracks.size(); ++index)
+    {
+        const LoadedAnimationJointTrack& track = clip.tracks[index];
+        if (!isValidJointIndex(track.jointIndex) ||
+            hasDuplicateAnimationTrack(clip, index))
+        {
+            return LoadedAssetPayloadValidationResult::InvalidAnimationClipJointTrack;
+        }
+
+        if (!hasValidTranslationKeys(track.translations, clip.durationSeconds) ||
+            !hasValidRotationKeys(track.rotations, clip.durationSeconds) ||
+            !hasValidScaleKeys(track.scales, clip.durationSeconds))
+        {
+            return LoadedAssetPayloadValidationResult::InvalidAnimationClipKeyData;
+        }
+    }
+
+    return LoadedAssetPayloadValidationResult::Success;
+}
+
 LoadedAssetPayloadValidationResult validateLoadedAssetPayload(
     const LoadedAssetPayload& payload) noexcept
 {
@@ -497,6 +683,8 @@ LoadedAssetPayloadValidationResult validateLoadedAssetPayload(
         return validateLoadedSkeletonAsset(payload.skeleton);
     case AssetKind::SkinnedMesh:
         return validateLoadedSkinnedMeshAsset(payload.skinnedMesh);
+    case AssetKind::AnimationClip:
+        return validateLoadedAnimationClipAsset(payload.animationClip);
     case AssetKind::Unknown:
     case AssetKind::TerrainChunk:
     case AssetKind::Shader:

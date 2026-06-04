@@ -41,10 +41,14 @@ AssetId payloadId(const LoadedAssetPayload& payload) noexcept
         return payload.texture.id;
     case AssetKind::Material:
         return payload.material.id;
+    case AssetKind::Skeleton:
+        return payload.skeleton.id;
+    case AssetKind::SkinnedMesh:
+        return payload.skinnedMesh.id;
+    case AssetKind::AnimationClip:
+        return payload.animationClip.id;
     case AssetKind::Unknown:
     case AssetKind::TerrainChunk:
-    case AssetKind::Skeleton:
-    case AssetKind::SkinnedMesh:
     case AssetKind::Shader:
         break;
     }
@@ -155,6 +159,26 @@ full_renderer::MeshVertex toRendererVertex(const LoadedMeshVertex& vertex) noexc
     return result;
 }
 
+full_renderer::SkinnedMeshVertex toRendererVertex(const LoadedSkinnedMeshVertex& vertex) noexcept
+{
+    full_renderer::SkinnedMeshVertex result;
+    for (int axis = 0; axis < 3; ++axis)
+    {
+        result.position[axis] = vertex.position[axis];
+        result.normal[axis] = vertex.normal[axis];
+    }
+    for (int channel = 0; channel < 4; ++channel)
+    {
+        result.colorLinear[channel] = vertex.colorLinear[channel];
+    }
+    for (std::uint32_t influence = 0; influence < kMaxLoadedSkinningInfluences; ++influence)
+    {
+        result.jointIndices[influence] = static_cast<float>(vertex.jointIndices[influence]);
+        result.jointWeights[influence] = vertex.jointWeights[influence];
+    }
+    return result;
+}
+
 bool countFitsUint32(const std::size_t count) noexcept
 {
     return count <= std::numeric_limits<std::uint32_t>::max();
@@ -174,6 +198,20 @@ void bindTextureDesc(LoadedTextureUploadWork& work) noexcept
     work.desc.dataSizeBytes = static_cast<std::uint32_t>(work.bytes.size());
 }
 
+void bindSkeletonDesc(LoadedSkeletonUploadWork& work) noexcept
+{
+    work.desc.joints = work.joints.data();
+    work.desc.jointCount = static_cast<std::uint32_t>(work.joints.size());
+}
+
+void bindSkinnedMeshDesc(LoadedSkinnedMeshUploadWork& work) noexcept
+{
+    work.desc.vertices = work.vertices.data();
+    work.desc.vertexCount = static_cast<std::uint32_t>(work.vertices.size());
+    work.desc.indices = work.indices.data();
+    work.desc.indexCount = static_cast<std::uint32_t>(work.indices.size());
+}
+
 LoadedMeshUploadWork buildMeshWork(const LoadedMeshAsset& mesh)
 {
     LoadedMeshUploadWork work;
@@ -185,6 +223,40 @@ LoadedMeshUploadWork buildMeshWork(const LoadedMeshAsset& mesh)
     }
     work.indices = mesh.indices;
     bindMeshDesc(work);
+    return work;
+}
+
+LoadedSkeletonUploadWork buildSkeletonWork(const LoadedSkeletonAsset& skeleton)
+{
+    LoadedSkeletonUploadWork work;
+    work.id = skeleton.id;
+    work.joints.reserve(skeleton.joints.size());
+    for (const LoadedSkeletonJoint& joint : skeleton.joints)
+    {
+        full_renderer::SkeletonJointDesc desc;
+        desc.parentIndex = joint.parentIndex;
+        for (int element = 0; element < 16; ++element)
+        {
+            desc.inverseBindPose[element] = joint.inverseBindPose[element];
+        }
+        work.joints.push_back(desc);
+    }
+    bindSkeletonDesc(work);
+    return work;
+}
+
+LoadedSkinnedMeshUploadWork buildSkinnedMeshWork(const LoadedSkinnedMeshAsset& mesh)
+{
+    LoadedSkinnedMeshUploadWork work;
+    work.id = mesh.id;
+    work.skeletonAssetId = mesh.skeletonAssetId;
+    work.vertices.reserve(mesh.vertices.size());
+    for (const LoadedSkinnedMeshVertex& vertex : mesh.vertices)
+    {
+        work.vertices.push_back(toRendererVertex(vertex));
+    }
+    work.indices = mesh.indices;
+    bindSkinnedMeshDesc(work);
     return work;
 }
 
@@ -272,14 +344,25 @@ LoadedAssetUploadRecord buildRecord(const LoadedAssetPayload& payload)
         record.material = buildMaterialWork(payload.material);
         record.status = LoadedAssetUploadStatus::Planned;
         break;
+    case AssetKind::Skeleton:
+        record.skeleton = buildSkeletonWork(payload.skeleton);
+        record.status = LoadedAssetUploadStatus::Planned;
+        break;
+    case AssetKind::SkinnedMesh:
+        if (!countFitsUint32(payload.skinnedMesh.vertices.size()) ||
+            !countFitsUint32(payload.skinnedMesh.indices.size()))
+        {
+            record.status = LoadedAssetUploadStatus::UnsupportedRendererContract;
+            return record;
+        }
+        record.skinnedMesh = buildSkinnedMeshWork(payload.skinnedMesh);
+        record.status = LoadedAssetUploadStatus::Planned;
+        break;
     case AssetKind::Unknown:
     case AssetKind::TerrainChunk:
+    case AssetKind::AnimationClip:
     case AssetKind::Shader:
         record.status = LoadedAssetUploadStatus::UnsupportedKind;
-        break;
-    case AssetKind::Skeleton:
-    case AssetKind::SkinnedMesh:
-        record.status = LoadedAssetUploadStatus::UnsupportedRendererContract;
         break;
     }
 
@@ -303,11 +386,16 @@ void rebindDescriptorViews(LoadedAssetUploadPlan& plan) noexcept
         case AssetKind::Texture:
             bindTextureDesc(record.texture);
             break;
+        case AssetKind::Skeleton:
+            bindSkeletonDesc(record.skeleton);
+            break;
+        case AssetKind::SkinnedMesh:
+            bindSkinnedMeshDesc(record.skinnedMesh);
+            break;
         case AssetKind::Material:
+        case AssetKind::AnimationClip:
         case AssetKind::Unknown:
         case AssetKind::TerrainChunk:
-        case AssetKind::Skeleton:
-        case AssetKind::SkinnedMesh:
         case AssetKind::Shader:
             break;
         }

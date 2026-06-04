@@ -36,6 +36,16 @@ full_renderer::TextureHandle texture(const std::uint32_t id) noexcept
     return full_renderer::TextureHandle{id};
 }
 
+full_renderer::SkeletonHandle skeleton(const std::uint32_t id) noexcept
+{
+    return full_renderer::SkeletonHandle{id};
+}
+
+full_renderer::SkinnedMeshHandle skinnedMesh(const std::uint32_t id) noexcept
+{
+    return full_renderer::SkinnedMeshHandle{id};
+}
+
 full_engine::TerrainChunkAssetDesc makeAssetDesc(
     const full_engine::ChunkId& id,
     const std::uint32_t lodCount)
@@ -115,14 +125,51 @@ void testHandleCatalogMutations(std::vector<std::string>& failures)
         handles.removeTextureHandle({}) == full_engine::RendererAssetHandleCatalogResult::InvalidArgument,
         "invalid texture remove id is rejected",
         failures);
+    expect(
+        handles.addSkeletonHandle(asset(4), skeleton(40)) == full_engine::RendererAssetHandleCatalogResult::Success,
+        "skeleton handle add succeeds",
+        failures);
+    expect(
+        handles.addSkeletonHandle(asset(4), skeleton(41)) == full_engine::RendererAssetHandleCatalogResult::AlreadyExists,
+        "duplicate skeleton handle add is rejected",
+        failures);
+    expect(
+        handles.updateSkeletonHandle(asset(4), skeleton(42)) == full_engine::RendererAssetHandleCatalogResult::Success,
+        "skeleton handle update succeeds",
+        failures);
+    const full_renderer::SkeletonHandle* foundSkeleton = handles.findSkeletonHandle(asset(4));
+    expect(foundSkeleton != nullptr && foundSkeleton->id == 42, "updated skeleton handle can be found", failures);
+    expect(
+        handles.removeSkeletonHandle(asset(4)) == full_engine::RendererAssetHandleCatalogResult::Success,
+        "skeleton handle remove succeeds",
+        failures);
+    expect(handles.findSkeletonHandle(asset(4)) == nullptr, "removed skeleton handle is missing", failures);
+    expect(
+        handles.addSkinnedMeshHandle({}, skinnedMesh(50)) == full_engine::RendererAssetHandleCatalogResult::InvalidArgument,
+        "invalid skinned mesh asset id is rejected",
+        failures);
+    expect(
+        handles.addSkinnedMeshHandle(asset(5), {}) == full_engine::RendererAssetHandleCatalogResult::InvalidArgument,
+        "invalid skinned mesh handle is rejected",
+        failures);
+    expect(
+        handles.updateSkinnedMeshHandle(asset(5), skinnedMesh(51)) == full_engine::RendererAssetHandleCatalogResult::NotFound,
+        "missing skinned mesh update returns not found",
+        failures);
 
     handles.addMaterialHandle(asset(2), material(20));
     handles.addTextureHandle(asset(3), texture(30));
+    handles.addSkeletonHandle(asset(4), skeleton(40));
+    handles.addSkinnedMeshHandle(asset(5), skinnedMesh(50));
     expect(handles.materialHandleCount() == 1, "material handle count tracks add", failures);
     expect(handles.textureHandleCount() == 1, "texture handle count tracks add", failures);
+    expect(handles.skeletonHandleCount() == 1, "skeleton handle count tracks add", failures);
+    expect(handles.skinnedMeshHandleCount() == 1, "skinned mesh handle count tracks add", failures);
     handles.clear();
     expect(handles.materialHandleCount() == 0, "clear removes material handles", failures);
     expect(handles.textureHandleCount() == 0, "clear removes texture handles", failures);
+    expect(handles.skeletonHandleCount() == 0, "clear removes skeleton handles", failures);
+    expect(handles.skinnedMeshHandleCount() == 0, "clear removes skinned mesh handles", failures);
 }
 
 void testValidOneLodResolve(std::vector<std::string>& failures)

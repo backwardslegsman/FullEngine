@@ -153,21 +153,23 @@ Implemented pieces:
   mesh/material/texture source descriptors, plus request-order lookup
   diagnostics for mapping missing load intent to those source records
 - renderer-free loaded asset payloads for mesh, texture, material, skeleton,
-  and skinned mesh data, including mesh/skinned UV0, named material texture
-  slots, skeleton hierarchy/bind matrices, and four-influence skinning data,
-  giving future importers a copied CPU data contract before renderer upload,
-  handle creation, async IO, or renderer-resource ownership
+  skinned mesh, and animation clip data, including mesh/skinned UV0, named
+  material texture slots, skeleton hierarchy/bind matrices, four-influence
+  skinning data, and raw joint transform key tracks, giving future importers a
+  copied CPU data contract before renderer upload, handle creation, async IO,
+  runtime evaluation, or renderer-resource ownership
 - a dev-only loaded asset importer that reads tiny tracked ASCII mesh,
   texture, and material fixtures into `LoadedAssetPayload` values, proving the
   first real source-file-to-payload path without adopting a production asset
   format
-- an Assimp-backed loaded asset importer that reads static glTF mesh files into
-  the same renderer-free `LoadedAssetPayload` mesh contract, aggregating
-  multi-mesh scenes in deterministic order, optionally generating missing
-  normals, requiring or explicitly defaulting UV0, copying vertex colors, and
-  validating source descriptors and payload data while leaving tangents, UV1+,
-  skeletal meshes, animations, async IO, and renderer-resource creation to
-  later slices
+- an Assimp-backed loaded asset importer that reads static and skinned glTF
+  mesh files into renderer-free `LoadedAssetPayload` contracts, aggregating
+  static multi-mesh scenes in deterministic order, optionally generating
+  missing normals, requiring or explicitly defaulting UV0, copying vertex
+  colors, extracting bind-pose skeletons, skinned mesh weights, and raw
+  animation clip tracks, and validating source descriptors and payload data
+  while leaving tangents, UV1+, runtime animation evaluation, async IO, and
+  renderer-resource creation to later slices
 - an stb-backed direct texture image importer that reads image files into the
   renderer-free `LoadedTextureAsset` contract as tightly packed single-mip
   RGBA8 bytes, validating source descriptors and payload data while leaving
@@ -181,14 +183,15 @@ Implemented pieces:
 - upload-intent planning that translates mapped source descriptors into public
   renderer mesh/texture/material upload expectations without source bytes,
   renderer handles, renderer calls, or resource creation
-- loaded-payload upload planning that translates validated CPU mesh/texture
-  payloads into owned renderer descriptor work, including UV0, and material
-  payloads into named texture-slot upload expectations without invoking
-  renderer APIs or creating resources
-- loaded-payload upload execution that consumes planned mesh/texture/material
-  work through caller-owned public renderer `createMesh`, `createTexture`, and
-  `createMaterial` calls, resolving named material texture asset IDs through
-  `RendererAssetHandleCatalog` before recording successful handles
+- loaded-payload upload planning that translates validated CPU mesh, texture,
+  material, skeleton, and skinned mesh payloads into owned renderer descriptor
+  work. Static mesh UV0 is uploaded now; skinned mesh UV0 remains CPU-payload
+  data until the public skinned vertex/shader contract grows UV support.
+- loaded-payload upload execution that consumes planned mesh/texture/material/
+  skeleton/skinned mesh work through caller-owned public renderer creation
+  calls, resolving named material texture asset IDs and skinned mesh skeleton
+  asset IDs through `RendererAssetHandleCatalog` before recording successful
+  handles
 - a first material/UV rendering smoke in the bgfx mesh path: static and
   instanced mesh shaders pass UV0 to the forward fragment shader, basic
   materials sample an optional base-color texture with white fallback, and
@@ -405,8 +408,8 @@ Still future work:
 - a scheduler that consumes selected budget profiles or offline summary tooling
   for imported streaming tick traces
 - production cooked manifest formats, richer glTF material graph import,
-  Assimp skeleton/skinned mesh extraction, animation clips, packed assets, and
-  renderer-resource creation policy
+  runtime animation sampling/blending/compression, packed assets, and
+  engine-owned renderer-resource lifetime policy
 - production terrain streaming policy and editor-owned residency controls
 - real engine-owned mesh/material/texture creation and lifetime policy
 - production material import/rendering policy beyond the current basic

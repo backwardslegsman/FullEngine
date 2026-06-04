@@ -500,15 +500,18 @@ move gameplay, streaming policy, or editor concepts into renderer internals.
   and validated against `AssetSourceRecord` descriptors. This proves the first
   source-file-to-payload path while keeping production glTF/PNG/KTX or packed
   asset import deferred.
-- An Assimp-backed loaded asset importer is in place for static glTF mesh
-  payloads: validated mesh source descriptors can be read from tracked glTF
-  fixtures into the renderer-free `LoadedAssetPayload` mesh contract. It now
-  aggregates multi-mesh scenes deterministically, can request Assimp-generated
-  normals when source normals are absent, requires or explicitly defaults UV0,
-  copies vertex color set 0, and enforces the existing 16-bit indexable
-  aggregate vertex budget. This starts the real importer path with Assimp while
-  keeping tangents, UV1+, skeletal meshes, animation clips, packed assets,
-  async IO, and renderer-resource creation outside the asset layer.
+- An Assimp-backed loaded asset importer is in place for static/skinned glTF
+  mesh and animation clip payloads: validated source descriptors can be read
+  from tracked glTF fixtures into renderer-free `LoadedAssetPayload` mesh,
+  skeleton, skinned mesh, and animation clip contracts. It aggregates static multi-mesh scenes
+  deterministically, can request Assimp-generated normals when source normals
+  are absent, requires or explicitly defaults UV0, copies vertex color set 0,
+  extracts bind-pose skeleton hierarchy/inverse-bind matrices, imports
+  four-influence skinned vertex weights, imports raw joint transform animation
+  tracks, and enforces the existing 16-bit indexable aggregate vertex budget.
+  This extends the real importer path with Assimp while keeping tangents, UV1+,
+  runtime animation evaluation, packed assets, async IO, and renderer-resource
+  creation outside the asset layer.
 - Asset source upload-intent planning is in place: mapped source descriptors
   can be translated into public renderer mesh/texture/material upload
   expectations, including current renderer-contract limits, without source
@@ -804,12 +807,27 @@ move gameplay, streaming policy, or editor concepts into renderer internals.
   visibly affect mesh shading before richer PBR or tangent support exists.
 - Forty-sixth slice is implemented: renderer-free asset source descriptors and
   loaded payloads now cover skeleton hierarchy/bind-pose data and skinned mesh
-  vertex data with UV0 plus four joint influences. Upload and import planning
-  deliberately report these payloads as valid-but-unsupported until the
-  renderer-integration skeleton/skinned mesh upload bridge is added.
-- Next slice: add renderer-integration upload planning for `LoadedSkeletonAsset`
-  and `LoadedSkinnedMeshAsset`, then follow with Assimp skeletal glTF extraction
-  and animation clip payloads.
+  vertex data with UV0 plus four joint influences.
+- Forty-seventh slice is implemented: loaded skeleton and skinned mesh payloads
+  now plan into renderer-facing skeleton/skinned mesh upload work, execute
+  through caller-owned `createSkeleton` / `createSkinnedMesh`, and store
+  skeleton/skinned mesh handles in the renderer asset handle catalog. Skinned
+  mesh UV0 remains CPU-payload-only until the renderer skinned vertex/shader
+  contract grows UV support.
+- Forty-eighth slice is implemented: Assimp can now extract bind-pose glTF
+  skeletons and skinned meshes into `LoadedSkeletonAsset` and
+  `LoadedSkinnedMeshAsset` payloads, with strict UV0/bone-weight validation,
+  descriptor matching, and upload-plan coverage through the existing
+  skeleton/skinned bridge.
+- Forty-ninth slice is implemented: renderer-free animation clip descriptors
+  and payloads now store raw joint transform tracks keyed by skeleton joint
+  index, and Assimp glTF animation channels can import into
+  `LoadedAnimationClipAsset` with descriptor matching plus tiny deterministic
+  and wolf-asset smoke coverage.
+- Next slice: add a CPU animation clip sampler that evaluates one
+  `LoadedAnimationClipAsset` against a matching `LoadedSkeletonAsset` into
+  local/model joint matrices; blending, compression, ozz/ACL integration, and
+  renderer palette submission stay later.
 - Initial sample integration is in place: the debug UI can run the
   manifest-aware streaming coordinator once or continuously from camera
   position, display readiness/load/staging/streaming queue counters, and keep

@@ -181,6 +181,7 @@ AssetSourceUploadIntentRecord buildRecordForSource(const AssetSourceRecord& sour
         break;
     case AssetKind::Skeleton:
     case AssetKind::SkinnedMesh:
+    case AssetKind::AnimationClip:
         record.status = AssetSourceUploadIntentStatus::UnsupportedRendererContract;
         break;
     }

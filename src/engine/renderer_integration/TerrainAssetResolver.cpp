@@ -200,11 +200,71 @@ std::size_t RendererAssetHandleCatalog::textureHandleCount() const noexcept
     return textures_.size();
 }
 
+RendererAssetHandleCatalogResult RendererAssetHandleCatalog::addSkeletonHandle(
+    const AssetId id,
+    const full_renderer::SkeletonHandle handle)
+{
+    return addHandle(skeletons_, id, handle);
+}
+
+RendererAssetHandleCatalogResult RendererAssetHandleCatalog::updateSkeletonHandle(
+    const AssetId id,
+    const full_renderer::SkeletonHandle handle)
+{
+    return updateHandle(skeletons_, id, handle);
+}
+
+RendererAssetHandleCatalogResult RendererAssetHandleCatalog::removeSkeletonHandle(const AssetId id)
+{
+    return removeHandle(skeletons_, id);
+}
+
+const full_renderer::SkeletonHandle* RendererAssetHandleCatalog::findSkeletonHandle(const AssetId id) const
+{
+    return findHandle(skeletons_, id);
+}
+
+std::size_t RendererAssetHandleCatalog::skeletonHandleCount() const noexcept
+{
+    return skeletons_.size();
+}
+
+RendererAssetHandleCatalogResult RendererAssetHandleCatalog::addSkinnedMeshHandle(
+    const AssetId id,
+    const full_renderer::SkinnedMeshHandle handle)
+{
+    return addHandle(skinnedMeshes_, id, handle);
+}
+
+RendererAssetHandleCatalogResult RendererAssetHandleCatalog::updateSkinnedMeshHandle(
+    const AssetId id,
+    const full_renderer::SkinnedMeshHandle handle)
+{
+    return updateHandle(skinnedMeshes_, id, handle);
+}
+
+RendererAssetHandleCatalogResult RendererAssetHandleCatalog::removeSkinnedMeshHandle(const AssetId id)
+{
+    return removeHandle(skinnedMeshes_, id);
+}
+
+const full_renderer::SkinnedMeshHandle* RendererAssetHandleCatalog::findSkinnedMeshHandle(const AssetId id) const
+{
+    return findHandle(skinnedMeshes_, id);
+}
+
+std::size_t RendererAssetHandleCatalog::skinnedMeshHandleCount() const noexcept
+{
+    return skinnedMeshes_.size();
+}
+
 void RendererAssetHandleCatalog::clear() noexcept
 {
     meshes_.clear();
     materials_.clear();
     textures_.clear();
+    skeletons_.clear();
+    skinnedMeshes_.clear();
 }
 
 TerrainAssetResolveResult resolveTerrainChunkResources(

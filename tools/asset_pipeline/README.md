@@ -6,10 +6,12 @@ layer now has two importer seams behind the same
 
 - a tiny dev-only ASCII importer used by tests and sample debug assets; this
   format is not a shipping content contract
-- an Assimp-backed static glTF mesh importer that validates source descriptors,
-  aggregates multi-mesh scenes into one renderer-free mesh payload, optionally
-  generates missing normals, requires or explicitly defaults UV0, and copies
-  vertex colors without renderer headers or handles
+- an Assimp-backed static/skinned/animation glTF importer that validates source
+  descriptors, aggregates static multi-mesh scenes into one renderer-free mesh
+  payload, optionally generates missing normals, requires or explicitly
+  defaults UV0, copies vertex colors, and extracts bind-pose skeletons plus
+  skinned mesh weights and raw joint transform animation tracks without
+  renderer headers or handles
 - an stb-backed direct image importer that decodes texture files into tightly
   packed, single-mip RGBA8 `LoadedTextureAsset` payloads with caller-authored
   semantic/color-space metadata
@@ -18,14 +20,14 @@ layer now has two importer seams behind the same
   records and emits material payloads that refer to those textures by named
   engine asset slots
 
-Renderer integration can use loaded payloads to produce mesh/texture/material
-handles through caller-owned renderer uploads and the existing completion
-reconcile path. The asset layer also has renderer-free skeleton and skinned mesh
-payload contracts for hierarchy/bind-pose data and four-influence skinned
-vertices, but skeletal import and renderer upload planning are still future
-work. Embedded glTF images, tangent payloads, UV1+ sets, mip generation,
-compression/KTX, production material authoring, animation clips, packed assets,
-async IO, and production packaging are still future work.
+Renderer integration can use loaded payloads to produce mesh, texture,
+material, skeleton, and skinned mesh handles through caller-owned renderer
+uploads and the existing completion reconcile path. Bind-pose skeleton/skinned
+mesh import and raw animation clip import are available through Assimp.
+Runtime animation sampling/blending, animation compression, embedded glTF
+images, tangent payloads, UV1+ sets, mip generation, compression/KTX,
+production material authoring, packed assets, async IO, and production
+packaging are still future work.
 
 Future validation tools should consume authored assets, convert them to the
 renderer-facing contracts in `docs/assets.md`, and report actionable errors
