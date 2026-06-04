@@ -11,6 +11,16 @@
 
 namespace full_engine
 {
+/** @brief Policy for assigning engine material asset IDs to extracted glTF materials. */
+enum class GltfMaterialAssetIdMode
+{
+    /** @brief Assign material IDs in emitted output order, preserving existing extractor behavior. */
+    SequentialOutput,
+
+    /** @brief Assign material IDs as `firstMaterialId + glTF material index`. */
+    PreserveGltfMaterialIndex,
+};
+
 /**
  * @brief Options for extracting material and texture source metadata from glTF.
  *
@@ -26,6 +36,9 @@ struct GltfMaterialAssetImportOptions
 {
     /** @brief First material asset ID assigned to glTF material index zero. */
     AssetId firstMaterialId = {};
+
+    /** @brief Material ID assignment policy. */
+    GltfMaterialAssetIdMode materialIdMode = GltfMaterialAssetIdMode::SequentialOutput;
 
     /** @brief First texture asset ID assigned to the first unique referenced image. */
     AssetId firstTextureId = {};

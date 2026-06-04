@@ -60,8 +60,9 @@ struct SkeletonDesc
  * Positions and normals are mesh-local. `jointIndices` are stored as floats for
  * portable shader input and must be integer-valued indices into the owning
  * skeleton. `jointWeights` must be finite, non-negative, and sum to one within
- * renderer validation tolerance. Colors are linear RGBA values in `[0, 1]`;
- * normals must be finite and non-zero.
+ * renderer validation tolerance. `uv0` contains primary texture coordinates
+ * copied from source UV set 0. Colors are linear RGBA values in `[0, 1]`;
+ * normals and UV values must be finite, and normals must be non-zero.
  */
 struct SkinnedMeshVertex
 {
@@ -73,6 +74,9 @@ struct SkinnedMeshVertex
 
     /** @brief Linear RGBA vertex color multiplied by the material color. */
     float colorLinear[4] = {1.0f, 1.0f, 1.0f, 1.0f};
+
+    /** @brief Primary texture coordinates used by basic material texture sampling. */
+    float uv0[2] = {};
 
     /** @brief Up to four integer-valued joint indices encoded as floats. */
     float jointIndices[kMaxSkinningInfluences] = {};

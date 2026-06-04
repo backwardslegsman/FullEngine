@@ -4,6 +4,7 @@
 #include <cmath>
 #include <cstdint>
 #include <iostream>
+#include <limits>
 
 namespace
 {
@@ -153,6 +154,9 @@ void meshAndDrawValidation(int& failures)
     vertices[0].jointIndices[0] = 7.0f;
     expect(!system.validateSkinnedMeshDesc(meshDesc), "out-of-range joint index is rejected", failures);
     vertices[0].jointIndices[0] = 0.0f;
+    vertices[0].uv0[0] = std::numeric_limits<float>::infinity();
+    expect(!system.validateSkinnedMeshDesc(meshDesc), "non-finite skinned UV0 is rejected", failures);
+    vertices[0].uv0[0] = 0.0f;
     vertices[0].jointWeights[0] = 0.2f;
     vertices[0].jointWeights[1] = 0.2f;
     expect(!system.validateSkinnedMeshDesc(meshDesc), "bad weight sum is rejected", failures);

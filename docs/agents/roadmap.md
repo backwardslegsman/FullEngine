@@ -811,9 +811,7 @@ move gameplay, streaming policy, or editor concepts into renderer internals.
 - Forty-seventh slice is implemented: loaded skeleton and skinned mesh payloads
   now plan into renderer-facing skeleton/skinned mesh upload work, execute
   through caller-owned `createSkeleton` / `createSkinnedMesh`, and store
-  skeleton/skinned mesh handles in the renderer asset handle catalog. Skinned
-  mesh UV0 remains CPU-payload-only until the renderer skinned vertex/shader
-  contract grows UV support.
+  skeleton/skinned mesh handles in the renderer asset handle catalog.
 - Forty-eighth slice is implemented: Assimp can now extract bind-pose glTF
   skeletons and skinned meshes into `LoadedSkeletonAsset` and
   `LoadedSkinnedMeshAsset` payloads, with strict UV0/bone-weight validation,
@@ -856,6 +854,16 @@ move gameplay, streaming policy, or editor concepts into renderer internals.
   ranges from the mixed glTF scene and submits one animated draw per section
   with smoke-owned fallback materials while sharing one skinned mesh, skeleton,
   and palette.
+- Fifty-sixth slice is implemented: glTF material extraction can preserve glTF
+  material-index asset IDs, the wolf smoke decodes referenced texture images,
+  uploads texture/material payloads through the existing executor, resolves
+  each skinned section material asset ID to a renderer material handle, and
+  submits section draws with real extracted material handles instead of
+  generated fallback colors.
+- Fifty-seventh slice is implemented: public skinned mesh vertices now carry
+  UV0 through upload planning, renderer validation, the bgfx skinned vertex
+  layout, and the forward skinned shader, so wolf section materials can sample
+  imported base-color textures through the existing basic material path.
 - Initial sample integration is in place: the debug UI can run the
   manifest-aware streaming coordinator once or continuously from camera
   position, display readiness/load/staging/streaming queue counters, and keep

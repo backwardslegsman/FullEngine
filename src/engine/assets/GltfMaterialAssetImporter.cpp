@@ -76,9 +76,23 @@ bool isValidOptions(const GltfMaterialAssetImportOptions& options) noexcept
 {
     return isValid(options.firstMaterialId) &&
         isValid(options.firstTextureId) &&
+        (options.materialIdMode == GltfMaterialAssetIdMode::SequentialOutput ||
+            options.materialIdMode == GltfMaterialAssetIdMode::PreserveGltfMaterialIndex) &&
         options.materialModel != AssetSourceMaterialModel::Unknown &&
         options.baseColorTextureSemantic != AssetSourceTextureSemantic::Unknown &&
         options.baseColorTextureColorSpace != AssetSourceTextureColorSpace::Unknown;
+}
+
+AssetId materialAssetIdFor(
+    const GltfMaterialAssetImportOptions& options,
+    const unsigned int materialIndex,
+    const std::uint32_t outputIndex) noexcept
+{
+    return offsetAssetId(
+        options.firstMaterialId,
+        options.materialIdMode == GltfMaterialAssetIdMode::PreserveGltfMaterialIndex ?
+            static_cast<std::uint32_t>(materialIndex) :
+            outputIndex);
 }
 
 AssetSourceMaterialAlphaMode alphaModeForMaterial(const aiMaterial& material)
@@ -401,7 +415,7 @@ GltfMaterialAssetImportResult importGltfMaterialAssetSources(
     std::vector<unsigned int> materialIndices = referencedMaterialIndices(*scene);
     const bool declaresMaterials = sourceDeclaresMaterials(uri);
     bool hasExplicitTexturedMaterial = false;
-    if (declaresMaterials)
+    if (options.materialIdMode == GltfMaterialAssetIdMode::SequentialOutput && declaresMaterials)
     {
         const std::vector<unsigned int> texturedMaterialIndices = allMaterialIndices(*scene);
         hasExplicitTexturedMaterial = !texturedMaterialIndices.empty();
@@ -410,7 +424,10 @@ GltfMaterialAssetImportResult importGltfMaterialAssetSources(
             materialIndices = texturedMaterialIndices;
         }
     }
-    if (declaresMaterials && scene->mNumMaterials > 1U && materialIndices.size() > 1U)
+    if (options.materialIdMode == GltfMaterialAssetIdMode::SequentialOutput &&
+        declaresMaterials &&
+        scene->mNumMaterials > 1U &&
+        materialIndices.size() > 1U)
     {
         materialIndices.erase(
             std::remove(materialIndices.begin(), materialIndices.end(), 0U),
@@ -420,7 +437,10 @@ GltfMaterialAssetImportResult importGltfMaterialAssetSources(
     {
         materialIndices = allMaterialIndices(*scene);
     }
-    removeImplicitNoTextureMaterials(*scene, materialIndices);
+    if (options.materialIdMode == GltfMaterialAssetIdMode::SequentialOutput)
+    {
+        removeImplicitNoTextureMaterials(*scene, materialIndices);
+    }
     if (scene->mNumMaterials == 0 ||
         scene->mMaterials == nullptr ||
         materialIndices.empty())
@@ -438,7 +458,10 @@ GltfMaterialAssetImportResult importGltfMaterialAssetSources(
         const unsigned int materialIndex = materialIndices[outputIndex];
         GltfMaterialAssetImportRecord record;
         record.materialIndex = materialIndex;
-        record.materialId = offsetAssetId(options.firstMaterialId, static_cast<std::uint32_t>(outputIndex));
+        record.materialId = materialAssetIdFor(
+            options,
+            materialIndex,
+            static_cast<std::uint32_t>(outputIndex));
 
         const aiMaterial* const material = scene->mMaterials[materialIndex];
         if (material == nullptr)
@@ -523,7 +546,9 @@ GltfMaterialAssetImportResult importGltfMaterialAssetSources(
         if (textureRefCount == 0)
         {
             record.status = GltfMaterialAssetImportRecordStatus::NoBaseColorTexture;
-            if (hasExplicitTexturedMaterial && scene->mNumMaterials > 1U)
+            if (options.materialIdMode == GltfMaterialAssetIdMode::SequentialOutput &&
+                hasExplicitTexturedMaterial &&
+                scene->mNumMaterials > 1U)
             {
                 continue;
             }

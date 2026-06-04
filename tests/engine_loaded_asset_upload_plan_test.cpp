@@ -273,6 +273,7 @@ void testValidPayloadsPlanUploadWork(std::vector<std::string>& failures)
     expect(skinned.skinnedMesh.sections[0].firstIndex == 0 && skinned.skinnedMesh.sections[0].indexCount == 3, "skinned upload copies section range", failures);
     expect(skinned.skinnedMesh.vertices[0].jointIndices[1] == 1.0f, "skinned upload copies joint indices as renderer floats", failures);
     expect(skinned.skinnedMesh.vertices[0].jointWeights[1] == 0.25f, "skinned upload copies joint weights", failures);
+    expect(skinned.skinnedMesh.vertices[1].uv0[0] == 1.0f && skinned.skinnedMesh.vertices[1].uv0[1] == 0.0f, "skinned upload copies UV0", failures);
 }
 
 void testInvalidPayloadsReportInvalid(std::vector<std::string>& failures)

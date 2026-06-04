@@ -221,6 +221,7 @@ bool AnimationSystem::validateSkinnedMeshDesc(const SkinnedMeshDesc& desc) const
         if (!isFiniteArray(vertex.position, 3) ||
             !hasUsableNormal(vertex.normal) ||
             !isUnitRangeColor(vertex.colorLinear, 4) ||
+            !isFiniteArray(vertex.uv0, 2) ||
             !isFiniteArray(vertex.jointIndices, kMaxSkinningInfluences) ||
             !isFiniteArray(vertex.jointWeights, kMaxSkinningInfluences))
         {

@@ -9,6 +9,7 @@
 #include <cmath>
 #include <cstdint>
 #include <iostream>
+#include <limits>
 
 namespace
 {
@@ -275,6 +276,10 @@ void skeletonAndSkinnedContractValidation(int& failures)
     vertices[0].normal[1] = 0.0f;
     expect(!system.validateSkinnedMeshDesc(desc), "skinned zero normal is rejected", failures);
     vertices[0].normal[1] = 1.0f;
+
+    vertices[0].uv0[0] = std::numeric_limits<float>::infinity();
+    expect(!system.validateSkinnedMeshDesc(desc), "non-finite skinned UV0 is rejected", failures);
+    vertices[0].uv0[0] = 0.0f;
 
     vertices[0].jointIndices[0] = 0.25f;
     expect(!system.validateSkinnedMeshDesc(desc), "non-integer joint index is rejected", failures);

@@ -87,6 +87,22 @@ void testBaseColorMaterialExtraction(std::vector<std::string>& failures)
     expect(texture.status == full_engine::LoadedTextureImageImportStatus::Success, "extracted texture source imports through image importer", failures);
 }
 
+void testPreserveMaterialIndexIds(std::vector<std::string>& failures)
+{
+    full_engine::GltfMaterialAssetImportOptions preserve = options();
+    preserve.materialIdMode = full_engine::GltfMaterialAssetIdMode::PreserveGltfMaterialIndex;
+    const full_engine::GltfMaterialAssetImportResult result =
+        full_engine::importGltfMaterialAssetSources(
+            fixturePath("material_base_color.gltf"),
+            preserve);
+
+    expect(result.status == full_engine::GltfMaterialAssetImportStatus::Success, "preserve-index extraction succeeds", failures);
+    expect(result.records.size() == 1, "preserve-index extraction reports one record", failures);
+    expect(result.records[0].materialIndex == 0, "preserve-index test fixture uses material zero", failures);
+    expect(result.records[0].materialId == asset(1000), "preserve-index mode keeps material zero id", failures);
+    expect(!result.materialPayloads.empty() && result.materialPayloads[0].material.id == asset(1000), "preserve-index payload keeps material zero id", failures);
+}
+
 void testMaterialWithoutTexture(std::vector<std::string>& failures)
 {
     const full_engine::GltfMaterialAssetImportResult result =
@@ -171,6 +187,7 @@ int main()
 {
     std::vector<std::string> failures;
     testBaseColorMaterialExtraction(failures);
+    testPreserveMaterialIndexIds(failures);
     testMaterialWithoutTexture(failures);
     testTextureInfoFailureIsDiagnostic(failures);
     testTopLevelFailures(failures);

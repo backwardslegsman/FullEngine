@@ -171,6 +171,10 @@ full_renderer::SkinnedMeshVertex toRendererVertex(const LoadedSkinnedMeshVertex&
     {
         result.colorLinear[channel] = vertex.colorLinear[channel];
     }
+    for (int axis = 0; axis < 2; ++axis)
+    {
+        result.uv0[axis] = vertex.uv0[axis];
+    }
     for (std::uint32_t influence = 0; influence < kMaxLoadedSkinningInfluences; ++influence)
     {
         result.jointIndices[influence] = static_cast<float>(vertex.jointIndices[influence]);

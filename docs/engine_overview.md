@@ -177,9 +177,10 @@ Implemented pieces:
   `AnimatedDrawItem` with a frame-local borrowed palette
 - a wolf sample/debug animation smoke path that exercises a real mixed-scene
   glTF fixture by aggregating skinned meshes, skipping unskinned meshes in
-  skinned import mode, preserving imported material sections, uploading
-  fallback-material resources per section, and submitting multiple section
-  draws that share one skinned mesh, skeleton, and palette
+  skinned import mode, preserving imported material sections, extracting and
+  uploading referenced texture/material payloads, and submitting multiple
+  section draws that share one skinned mesh, skeleton, and palette while using
+  real resolved material handles
 - a dev-only loaded asset importer that reads tiny tracked ASCII mesh,
   texture, and material fixtures into `LoadedAssetPayload` values, proving the
   first real source-file-to-payload path without adopting a production asset
@@ -200,25 +201,26 @@ Implemented pieces:
 - a glTF material/image reference extractor that maps base-color, normal,
   metallic-roughness, occlusion, and emissive image references into texture
   `AssetSourceRecord`s, emits `LoadedMaterialAsset` payloads with named texture
-  asset slots, and leaves actual image decoding/upload to the existing stb and
-  renderer-integration paths
+  asset slots, and can preserve glTF material-index asset IDs for section
+  binding. Actual image decoding/upload is handled by the existing stb and
+  renderer-integration paths.
 - upload-intent planning that translates mapped source descriptors into public
   renderer mesh/texture/material upload expectations without source bytes,
   renderer handles, renderer calls, or resource creation
 - loaded-payload upload planning that translates validated CPU mesh, texture,
   material, skeleton, and skinned mesh payloads into owned renderer descriptor
-  work, including optional skinned mesh section ranges. Static mesh UV0 is
-  uploaded now; skinned mesh UV0 remains CPU-payload data until the public
-  skinned vertex/shader contract grows UV support.
+  work, including optional skinned mesh section ranges and UV0 for static and
+  skinned vertices.
 - loaded-payload upload execution that consumes planned mesh/texture/material/
   skeleton/skinned mesh work through caller-owned public renderer creation
   calls, resolving named material texture asset IDs and skinned mesh skeleton
   asset IDs through `RendererAssetHandleCatalog` before recording successful
   handles
 - a first material/UV rendering smoke in the bgfx mesh path: static and
-  instanced mesh shaders pass UV0 to the forward fragment shader, basic
-  materials sample an optional base-color texture with white fallback, and
-  dev-imported textured assets can now affect visible mesh shading
+  instanced mesh shaders pass UV0 to the forward fragment shader, the skinned
+  forward shader now passes imported UV0 as well, basic materials sample an
+  optional base-color texture with white fallback, and dev-imported textured
+  assets can now affect visible mesh and skinned mesh shading
 - a dev manifest asset-load callback that resolves retained source metadata,
   imports tiny dev mesh/texture/material files, executes caller-owned renderer
   uploads, and publishes handle completions through the existing retained

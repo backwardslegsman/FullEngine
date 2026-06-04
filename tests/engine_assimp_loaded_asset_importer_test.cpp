@@ -1,4 +1,6 @@
 #include "engine/assets/AssimpLoadedAssetImporter.hpp"
+#include "engine/assets/GltfMaterialAssetImporter.hpp"
+#include "engine/assets/LoadedTextureImageImporter.hpp"
 #include "engine/renderer_integration/AnimationPlaybackState.hpp"
 #include "engine/renderer_integration/LoadedAssetUploadExecutor.hpp"
 #include "engine/renderer_integration/LoadedAssetUploadPlan.hpp"
@@ -696,13 +698,41 @@ void testWolfSkeletalAnimationSmoke(std::vector<std::string>& failures)
     expect(clipResult.status == full_engine::AssimpLoadedAssetImportStatus::Success, "wolf gltf imports first animation structurally", failures);
     expect(clipResult.payload.animationClip.tracks.size() == 49, "wolf animation maps one track per joint", failures);
 
-    const full_engine::LoadedAssetPayload payloads[] = {
-        skeletonResult.payload,
-        skinnedResult.payload,
-    };
+    full_engine::GltfMaterialAssetImportOptions materialOptions;
+    materialOptions.firstMaterialId = asset(710010);
+    materialOptions.firstTextureId = asset(720000);
+    materialOptions.materialIdMode = full_engine::GltfMaterialAssetIdMode::PreserveGltfMaterialIndex;
+    const full_engine::GltfMaterialAssetImportResult materials =
+        full_engine::importGltfMaterialAssetSources(path, materialOptions);
+    expect(materials.status == full_engine::GltfMaterialAssetImportStatus::Success, "wolf gltf material extraction succeeds", failures);
+    expect(materials.materialPayloads.size() >= 5, "wolf extracts material payloads for skinned sections", failures);
+    expect(!materials.materialPayloads.empty() && materials.materialPayloads[0].material.id == asset(710010), "wolf material zero preserves section material id", failures);
+
+    std::vector<full_engine::LoadedAssetPayload> payloads;
+    payloads.push_back(skeletonResult.payload);
+    payloads.push_back(skinnedResult.payload);
+    std::size_t importedTextureCount = 0;
+    for (const full_engine::AssetSourceRecord& source : materials.sourceRecords)
+    {
+        if (source.kind != full_engine::AssetKind::Texture)
+        {
+            continue;
+        }
+
+        const full_engine::LoadedTextureImageImportResult texture =
+            full_engine::importLoadedTexturePayloadFromImageFile(source);
+        expect(texture.status == full_engine::LoadedTextureImageImportStatus::Success, "wolf texture source imports through image importer", failures);
+        if (texture.status == full_engine::LoadedTextureImageImportStatus::Success)
+        {
+            payloads.push_back(texture.payload);
+            ++importedTextureCount;
+        }
+    }
+    expect(importedTextureCount > 0, "wolf imports at least one material texture payload", failures);
+    payloads.insert(payloads.end(), materials.materialPayloads.begin(), materials.materialPayloads.end());
     const full_engine::LoadedAssetUploadPlan plan =
-        full_engine::buildLoadedAssetUploadPlan(payloads, 2);
-    expect(plan.summary.plannedCount == 2, "wolf skeletal payloads plan upload work", failures);
+        full_engine::buildLoadedAssetUploadPlan(payloads.data(), payloads.size());
+    expect(plan.summary.plannedCount == payloads.size(), "wolf skeletal/material payloads plan upload work", failures);
 
     FakeRenderer renderer;
     full_engine::RendererAssetHandleCatalog handles;
@@ -710,8 +740,15 @@ void testWolfSkeletalAnimationSmoke(std::vector<std::string>& failures)
         full_engine::executeLoadedAssetUploadPlan(renderer, plan, handles);
     expect(upload.summary.uploadedSkeletonCount == 1, "wolf skeleton uploads through fake renderer", failures);
     expect(upload.summary.uploadedSkinnedMeshCount == 1, "wolf skinned mesh uploads through fake renderer", failures);
+    expect(upload.summary.uploadedTextureCount == importedTextureCount, "wolf material textures upload through fake renderer", failures);
+    expect(upload.summary.uploadedMaterialCount >= 5, "wolf materials upload through fake renderer", failures);
+    expect(upload.summary.missingTextureHandleCount == 0, "wolf material uploads resolve texture handles", failures);
     expect(handles.findSkeletonHandle(asset(7)) != nullptr, "wolf skeleton handle is cataloged", failures);
     expect(handles.findSkinnedMeshHandle(asset(8)) != nullptr, "wolf skinned mesh handle is cataloged", failures);
+    for (const full_engine::LoadedSkinnedMeshSection& section : skinnedResult.payload.skinnedMesh.sections)
+    {
+        expect(handles.findMaterialHandle(section.materialAssetId) != nullptr, "wolf section material id resolves to uploaded material handle", failures);
+    }
 
     full_engine::AnimationPlaybackState playback;
     full_engine::AnimationPlaybackInstanceDesc instance;
