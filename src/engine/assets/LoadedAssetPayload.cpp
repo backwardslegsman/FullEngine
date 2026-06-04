@@ -25,6 +25,18 @@ bool isFinite4(const float values[4]) noexcept
         std::isfinite(values[3]);
 }
 
+bool isFinite16(const float values[16]) noexcept
+{
+    for (int index = 0; index < 16; ++index)
+    {
+        if (!std::isfinite(values[index]))
+        {
+            return false;
+        }
+    }
+    return true;
+}
+
 bool isFiniteBounds(const AssetSourceBounds& bounds) noexcept
 {
     return isFinite3(bounds.min) && isFinite3(bounds.max);
@@ -55,6 +67,34 @@ bool isColorInRange(const float color[4]) noexcept
     for (int channel = 0; channel < 4; ++channel)
     {
         if (color[channel] < 0.0f || color[channel] > 1.0f)
+        {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool isValidWeightSum(const float weights[kMaxLoadedSkinningInfluences]) noexcept
+{
+    constexpr float kWeightSumTolerance = 0.001f;
+    float sum = 0.0f;
+    for (std::uint32_t index = 0; index < kMaxLoadedSkinningInfluences; ++index)
+    {
+        if (!std::isfinite(weights[index]) || weights[index] < 0.0f)
+        {
+            return false;
+        }
+        sum += weights[index];
+    }
+    return std::isfinite(sum) && std::fabs(sum - 1.0f) <= kWeightSumTolerance;
+}
+
+bool hasValidJointIndices(
+    const std::uint16_t indices[kMaxLoadedSkinningInfluences]) noexcept
+{
+    for (std::uint32_t index = 0; index < kMaxLoadedSkinningInfluences; ++index)
+    {
+        if (indices[index] >= kMaxLoadedSkeletonJoints)
         {
             return false;
         }
@@ -186,6 +226,24 @@ const char* loadedAssetPayloadValidationResultName(
         return "InvalidMaterialTextureRef";
     case LoadedAssetPayloadValidationResult::DuplicateMaterialTextureSlot:
         return "DuplicateMaterialTextureSlot";
+    case LoadedAssetPayloadValidationResult::InvalidSkeletonJointCount:
+        return "InvalidSkeletonJointCount";
+    case LoadedAssetPayloadValidationResult::InvalidSkeletonHierarchy:
+        return "InvalidSkeletonHierarchy";
+    case LoadedAssetPayloadValidationResult::InvalidSkeletonJointData:
+        return "InvalidSkeletonJointData";
+    case LoadedAssetPayloadValidationResult::InvalidSkinnedMeshSkeletonRef:
+        return "InvalidSkinnedMeshSkeletonRef";
+    case LoadedAssetPayloadValidationResult::InvalidSkinnedMeshVertices:
+        return "InvalidSkinnedMeshVertices";
+    case LoadedAssetPayloadValidationResult::InvalidSkinnedMeshIndices:
+        return "InvalidSkinnedMeshIndices";
+    case LoadedAssetPayloadValidationResult::InvalidSkinnedMeshVertexData:
+        return "InvalidSkinnedMeshVertexData";
+    case LoadedAssetPayloadValidationResult::InvalidSkinnedMeshWeights:
+        return "InvalidSkinnedMeshWeights";
+    case LoadedAssetPayloadValidationResult::InvalidSkinnedMeshBounds:
+        return "InvalidSkinnedMeshBounds";
     }
 
     return "Unknown";
@@ -325,6 +383,105 @@ LoadedAssetPayloadValidationResult validateLoadedMaterialAsset(
     return LoadedAssetPayloadValidationResult::Success;
 }
 
+LoadedAssetPayloadValidationResult validateLoadedSkeletonAsset(
+    const LoadedSkeletonAsset& skeleton) noexcept
+{
+    if (!isValid(skeleton.id))
+    {
+        return LoadedAssetPayloadValidationResult::InvalidAssetId;
+    }
+
+    if (skeleton.joints.empty() || skeleton.joints.size() > kMaxLoadedSkeletonJoints)
+    {
+        return LoadedAssetPayloadValidationResult::InvalidSkeletonJointCount;
+    }
+
+    std::uint32_t rootCount = 0;
+    for (std::size_t index = 0; index < skeleton.joints.size(); ++index)
+    {
+        const LoadedSkeletonJoint& joint = skeleton.joints[index];
+        if (!isFinite16(joint.inverseBindPose) || !isFinite16(joint.referenceTransform))
+        {
+            return LoadedAssetPayloadValidationResult::InvalidSkeletonJointData;
+        }
+
+        if (joint.parentIndex == -1)
+        {
+            ++rootCount;
+            continue;
+        }
+
+        if (joint.parentIndex < 0 ||
+            static_cast<std::size_t>(joint.parentIndex) >= index)
+        {
+            return LoadedAssetPayloadValidationResult::InvalidSkeletonHierarchy;
+        }
+    }
+
+    return rootCount == 1U ?
+        LoadedAssetPayloadValidationResult::Success :
+        LoadedAssetPayloadValidationResult::InvalidSkeletonHierarchy;
+}
+
+LoadedAssetPayloadValidationResult validateLoadedSkinnedMeshAsset(
+    const LoadedSkinnedMeshAsset& mesh) noexcept
+{
+    if (!isValid(mesh.id))
+    {
+        return LoadedAssetPayloadValidationResult::InvalidAssetId;
+    }
+
+    if (!isValid(mesh.skeletonAssetId))
+    {
+        return LoadedAssetPayloadValidationResult::InvalidSkinnedMeshSkeletonRef;
+    }
+
+    if (mesh.vertices.empty())
+    {
+        return LoadedAssetPayloadValidationResult::InvalidSkinnedMeshVertices;
+    }
+
+    if (mesh.indices.empty() || mesh.indices.size() % 3 != 0)
+    {
+        return LoadedAssetPayloadValidationResult::InvalidSkinnedMeshIndices;
+    }
+
+    if (!isFiniteBounds(mesh.localBounds) || !isOrderedBounds(mesh.localBounds))
+    {
+        return LoadedAssetPayloadValidationResult::InvalidSkinnedMeshBounds;
+    }
+
+    for (const LoadedSkinnedMeshVertex& vertex : mesh.vertices)
+    {
+        if (!isFinite3(vertex.position) ||
+            !isFinite3(vertex.normal) ||
+            !isNonZeroNormal(vertex.normal) ||
+            !isFinite2(vertex.uv0) ||
+            !isFinite4(vertex.colorLinear) ||
+            !isColorInRange(vertex.colorLinear) ||
+            !hasValidJointIndices(vertex.jointIndices))
+        {
+            return LoadedAssetPayloadValidationResult::InvalidSkinnedMeshVertexData;
+        }
+
+        if (!isValidWeightSum(vertex.jointWeights))
+        {
+            return LoadedAssetPayloadValidationResult::InvalidSkinnedMeshWeights;
+        }
+    }
+
+    const std::size_t vertexCount = mesh.vertices.size();
+    for (const std::uint16_t index : mesh.indices)
+    {
+        if (static_cast<std::size_t>(index) >= vertexCount)
+        {
+            return LoadedAssetPayloadValidationResult::InvalidSkinnedMeshIndices;
+        }
+    }
+
+    return LoadedAssetPayloadValidationResult::Success;
+}
+
 LoadedAssetPayloadValidationResult validateLoadedAssetPayload(
     const LoadedAssetPayload& payload) noexcept
 {
@@ -336,10 +493,12 @@ LoadedAssetPayloadValidationResult validateLoadedAssetPayload(
         return validateLoadedTextureAsset(payload.texture);
     case AssetKind::Material:
         return validateLoadedMaterialAsset(payload.material);
+    case AssetKind::Skeleton:
+        return validateLoadedSkeletonAsset(payload.skeleton);
+    case AssetKind::SkinnedMesh:
+        return validateLoadedSkinnedMeshAsset(payload.skinnedMesh);
     case AssetKind::Unknown:
     case AssetKind::TerrainChunk:
-    case AssetKind::Skeleton:
-    case AssetKind::SkinnedMesh:
     case AssetKind::Shader:
         break;
     }

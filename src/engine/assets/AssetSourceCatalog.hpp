@@ -23,7 +23,7 @@ struct AssetSourceRecord
     /** @brief Engine asset ID whose source is described. A default ID is invalid. */
     AssetId id = {};
 
-    /** @brief Expected loadable asset kind. Only Mesh, Material, and Texture are valid. */
+    /** @brief Expected loadable asset kind. Mesh, Material, Texture, Skeleton, and SkinnedMesh are valid. */
     AssetKind kind = AssetKind::Unknown;
 
     /** @brief Opaque source URI copied by value. Empty URIs are invalid. */
@@ -62,10 +62,10 @@ const char* assetSourceRecordValidationResultName(AssetSourceRecordValidationRes
  * @brief Validates renderer-free source metadata for a loadable asset.
  *
  * Valid records use a non-default asset ID, a loadable kind (`Mesh`,
- * `Material`, or `Texture`), a non-empty URI, and valid descriptor metadata for
- * the active kind. The URI is not normalized, opened, parsed, or interpreted by
- * this helper. Descriptor metadata is declarative and is not checked against
- * source bytes.
+ * `Material`, `Texture`, `Skeleton`, or `SkinnedMesh`), a non-empty URI, and
+ * valid descriptor metadata for the active kind. The URI is not normalized,
+ * opened, parsed, or interpreted by this helper. Descriptor metadata is
+ * declarative and is not checked against source bytes.
  */
 AssetSourceRecordValidationResult validateAssetSourceRecord(const AssetSourceRecord& record);
 

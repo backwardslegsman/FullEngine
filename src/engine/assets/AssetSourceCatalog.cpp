@@ -8,7 +8,9 @@ bool isLoadableAssetSourceKind(const AssetKind kind) noexcept
 {
     return kind == AssetKind::Mesh ||
         kind == AssetKind::Material ||
-        kind == AssetKind::Texture;
+        kind == AssetKind::Texture ||
+        kind == AssetKind::Skeleton ||
+        kind == AssetKind::SkinnedMesh;
 }
 } // namespace
 

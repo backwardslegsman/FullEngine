@@ -274,10 +274,12 @@ LoadedAssetUploadRecord buildRecord(const LoadedAssetPayload& payload)
         break;
     case AssetKind::Unknown:
     case AssetKind::TerrainChunk:
-    case AssetKind::Skeleton:
-    case AssetKind::SkinnedMesh:
     case AssetKind::Shader:
         record.status = LoadedAssetUploadStatus::UnsupportedKind;
+        break;
+    case AssetKind::Skeleton:
+    case AssetKind::SkinnedMesh:
+        record.status = LoadedAssetUploadStatus::UnsupportedRendererContract;
         break;
     }
 

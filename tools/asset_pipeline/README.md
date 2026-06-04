@@ -20,10 +20,12 @@ layer now has two importer seams behind the same
 
 Renderer integration can use loaded payloads to produce mesh/texture/material
 handles through caller-owned renderer uploads and the existing completion
-reconcile path. Embedded glTF images, tangent payloads, UV1+ sets, mip
-generation, compression/KTX, production material authoring, skeletal meshes,
-animation clips, packed assets, async IO, and production packaging are still
-future work.
+reconcile path. The asset layer also has renderer-free skeleton and skinned mesh
+payload contracts for hierarchy/bind-pose data and four-influence skinned
+vertices, but skeletal import and renderer upload planning are still future
+work. Embedded glTF images, tangent payloads, UV1+ sets, mip generation,
+compression/KTX, production material authoring, animation clips, packed assets,
+async IO, and production packaging are still future work.
 
 Future validation tools should consume authored assets, convert them to the
 renderer-facing contracts in `docs/assets.md`, and report actionable errors

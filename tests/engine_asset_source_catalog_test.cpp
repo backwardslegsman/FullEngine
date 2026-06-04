@@ -48,10 +48,22 @@ full_engine::AssetSourceDescriptor descriptorForKind(const full_engine::AssetKin
         descriptor.texture.semantic = full_engine::AssetSourceTextureSemantic::Color;
         descriptor.texture.colorSpace = full_engine::AssetSourceTextureColorSpace::Srgb;
         break;
+    case full_engine::AssetKind::Skeleton:
+        descriptor.skeleton.jointCount = 2;
+        break;
+    case full_engine::AssetKind::SkinnedMesh:
+        descriptor.skinnedMesh.vertexCount = 4;
+        descriptor.skinnedMesh.indexCount = 6;
+        descriptor.skinnedMesh.skeletonAssetId = asset(40);
+        descriptor.skinnedMesh.localBounds.min[0] = -1.0f;
+        descriptor.skinnedMesh.localBounds.min[1] = 0.0f;
+        descriptor.skinnedMesh.localBounds.min[2] = -1.0f;
+        descriptor.skinnedMesh.localBounds.max[0] = 1.0f;
+        descriptor.skinnedMesh.localBounds.max[1] = 1.0f;
+        descriptor.skinnedMesh.localBounds.max[2] = 1.0f;
+        break;
     case full_engine::AssetKind::Unknown:
     case full_engine::AssetKind::TerrainChunk:
-    case full_engine::AssetKind::Skeleton:
-    case full_engine::AssetKind::SkinnedMesh:
     case full_engine::AssetKind::Shader:
         break;
     }
@@ -88,6 +100,16 @@ void testValidation(std::vector<std::string>& failures)
         "valid mesh source validates",
         failures);
     expect(
+        full_engine::validateAssetSourceRecord(source(5, full_engine::AssetKind::Skeleton, "skeleton.bin")) ==
+            full_engine::AssetSourceRecordValidationResult::Success,
+        "valid skeleton source validates",
+        failures);
+    expect(
+        full_engine::validateAssetSourceRecord(source(6, full_engine::AssetKind::SkinnedMesh, "skinned.mesh")) ==
+            full_engine::AssetSourceRecordValidationResult::Success,
+        "valid skinned mesh source validates",
+        failures);
+    expect(
         full_engine::validateAssetSourceRecord(source(0, full_engine::AssetKind::Mesh, "mesh.bin")) ==
             full_engine::AssetSourceRecordValidationResult::InvalidAssetId,
         "source validation rejects default asset id",
@@ -121,12 +143,19 @@ void testAddFindUpdateRemoveAndClear(std::vector<std::string>& failures)
         source(2, full_engine::AssetKind::Material, "materials/tree.mat");
     const full_engine::AssetSourceRecord texture =
         source(3, full_engine::AssetKind::Texture, "textures/tree.dds");
+    const full_engine::AssetSourceRecord skeleton =
+        source(4, full_engine::AssetKind::Skeleton, "skeletons/character.skel");
+    const full_engine::AssetSourceRecord skinnedMesh =
+        source(5, full_engine::AssetKind::SkinnedMesh, "meshes/character.mesh");
 
     expect(catalog.addSource(mesh) == full_engine::AssetSourceCatalogResult::Success, "mesh source add succeeds", failures);
     expect(catalog.addSource(material) == full_engine::AssetSourceCatalogResult::Success, "material source add succeeds", failures);
     expect(catalog.addSource(texture) == full_engine::AssetSourceCatalogResult::Success, "texture source add succeeds", failures);
-    expect(catalog.sourceCount() == 3, "source catalog stores three records", failures);
+    expect(catalog.addSource(skeleton) == full_engine::AssetSourceCatalogResult::Success, "skeleton source add succeeds", failures);
+    expect(catalog.addSource(skinnedMesh) == full_engine::AssetSourceCatalogResult::Success, "skinned mesh source add succeeds", failures);
+    expect(catalog.sourceCount() == 5, "source catalog stores five records", failures);
     expect(catalog.contains(asset(2)), "source catalog contains material id", failures);
+    expect(catalog.contains(asset(5)), "source catalog contains skinned mesh id", failures);
 
     const full_engine::AssetSourceRecord* found = catalog.findSource(asset(1));
     expect(found != nullptr, "source catalog finds mesh source", failures);
@@ -145,7 +174,7 @@ void testAddFindUpdateRemoveAndClear(std::vector<std::string>& failures)
 
     expect(catalog.removeSource(asset(1)) == full_engine::AssetSourceCatalogResult::Success, "source remove succeeds", failures);
     expect(!catalog.contains(asset(1)), "source remove clears id", failures);
-    expect(catalog.sourceCount() == 2, "source remove decrements count", failures);
+    expect(catalog.sourceCount() == 4, "source remove decrements count", failures);
 
     catalog.clear();
     expect(catalog.sourceCount() == 0, "source clear empties catalog", failures);

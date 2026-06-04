@@ -82,6 +82,83 @@ full_engine::LoadedMaterialAsset materialAsset()
     return material;
 }
 
+void setIdentity(float values[16]) noexcept
+{
+    for (int index = 0; index < 16; ++index)
+    {
+        values[index] = 0.0f;
+    }
+    values[0] = 1.0f;
+    values[5] = 1.0f;
+    values[10] = 1.0f;
+    values[15] = 1.0f;
+}
+
+full_engine::LoadedSkeletonJoint joint(const std::int32_t parentIndex, const char* const name)
+{
+    full_engine::LoadedSkeletonJoint result;
+    result.name = name;
+    result.parentIndex = parentIndex;
+    setIdentity(result.inverseBindPose);
+    setIdentity(result.referenceTransform);
+    return result;
+}
+
+full_engine::LoadedSkeletonAsset skeletonAsset()
+{
+    full_engine::LoadedSkeletonAsset skeleton;
+    skeleton.id = asset(40);
+    skeleton.joints = {
+        joint(-1, "root"),
+        joint(0, "spine")};
+    return skeleton;
+}
+
+full_engine::LoadedSkinnedMeshVertex skinnedVertex(const float x, const float y, const float z) noexcept
+{
+    full_engine::LoadedSkinnedMeshVertex result;
+    result.position[0] = x;
+    result.position[1] = y;
+    result.position[2] = z;
+    result.normal[0] = 0.0f;
+    result.normal[1] = 1.0f;
+    result.normal[2] = 0.0f;
+    result.uv0[0] = x;
+    result.uv0[1] = y;
+    result.colorLinear[0] = 1.0f;
+    result.colorLinear[1] = 0.75f;
+    result.colorLinear[2] = 0.5f;
+    result.colorLinear[3] = 1.0f;
+    result.jointIndices[0] = 0;
+    result.jointIndices[1] = 1;
+    result.jointIndices[2] = 0;
+    result.jointIndices[3] = 0;
+    result.jointWeights[0] = 0.5f;
+    result.jointWeights[1] = 0.5f;
+    result.jointWeights[2] = 0.0f;
+    result.jointWeights[3] = 0.0f;
+    return result;
+}
+
+full_engine::LoadedSkinnedMeshAsset skinnedMeshAsset()
+{
+    full_engine::LoadedSkinnedMeshAsset mesh;
+    mesh.id = asset(50);
+    mesh.skeletonAssetId = asset(40);
+    mesh.vertices = {
+        skinnedVertex(0.0f, 0.0f, 0.0f),
+        skinnedVertex(1.0f, 0.0f, 0.0f),
+        skinnedVertex(0.0f, 1.0f, 0.0f)};
+    mesh.indices = {0, 1, 2};
+    mesh.localBounds.min[0] = 0.0f;
+    mesh.localBounds.min[1] = 0.0f;
+    mesh.localBounds.min[2] = 0.0f;
+    mesh.localBounds.max[0] = 1.0f;
+    mesh.localBounds.max[1] = 1.0f;
+    mesh.localBounds.max[2] = 0.0f;
+    return mesh;
+}
+
 void testValidPayloads(std::vector<std::string>& failures)
 {
     expect(
@@ -98,6 +175,16 @@ void testValidPayloads(std::vector<std::string>& failures)
         full_engine::validateLoadedMaterialAsset(materialAsset()) ==
             full_engine::LoadedAssetPayloadValidationResult::Success,
         "valid material payload passes",
+        failures);
+    expect(
+        full_engine::validateLoadedSkeletonAsset(skeletonAsset()) ==
+            full_engine::LoadedAssetPayloadValidationResult::Success,
+        "valid skeleton payload passes",
+        failures);
+    expect(
+        full_engine::validateLoadedSkinnedMeshAsset(skinnedMeshAsset()) ==
+            full_engine::LoadedAssetPayloadValidationResult::Success,
+        "valid skinned mesh payload passes",
         failures);
 }
 
@@ -125,6 +212,22 @@ void testDefaultIdsFail(std::vector<std::string>& failures)
         full_engine::validateLoadedMaterialAsset(material) ==
             full_engine::LoadedAssetPayloadValidationResult::InvalidAssetId,
         "material payload rejects default id",
+        failures);
+
+    full_engine::LoadedSkeletonAsset skeleton = skeletonAsset();
+    skeleton.id = {};
+    expect(
+        full_engine::validateLoadedSkeletonAsset(skeleton) ==
+            full_engine::LoadedAssetPayloadValidationResult::InvalidAssetId,
+        "skeleton payload rejects default id",
+        failures);
+
+    full_engine::LoadedSkinnedMeshAsset skinnedMesh = skinnedMeshAsset();
+    skinnedMesh.id = {};
+    expect(
+        full_engine::validateLoadedSkinnedMeshAsset(skinnedMesh) ==
+            full_engine::LoadedAssetPayloadValidationResult::InvalidAssetId,
+        "skinned mesh payload rejects default id",
         failures);
 }
 
@@ -297,6 +400,174 @@ void testInvalidMaterialPayloads(std::vector<std::string>& failures)
         failures);
 }
 
+void testInvalidSkeletonPayloads(std::vector<std::string>& failures)
+{
+    full_engine::LoadedSkeletonAsset skeleton = skeletonAsset();
+    skeleton.joints.clear();
+    expect(
+        full_engine::validateLoadedSkeletonAsset(skeleton) ==
+            full_engine::LoadedAssetPayloadValidationResult::InvalidSkeletonJointCount,
+        "skeleton payload rejects zero joints",
+        failures);
+
+    skeleton = skeletonAsset();
+    skeleton.joints.assign(full_engine::kMaxLoadedSkeletonJoints + 1, joint(-1, "extra"));
+    expect(
+        full_engine::validateLoadedSkeletonAsset(skeleton) ==
+            full_engine::LoadedAssetPayloadValidationResult::InvalidSkeletonJointCount,
+        "skeleton payload rejects too many joints",
+        failures);
+
+    skeleton = skeletonAsset();
+    skeleton.joints[1].parentIndex = -1;
+    expect(
+        full_engine::validateLoadedSkeletonAsset(skeleton) ==
+            full_engine::LoadedAssetPayloadValidationResult::InvalidSkeletonHierarchy,
+        "skeleton payload rejects multiple roots",
+        failures);
+
+    skeleton = skeletonAsset();
+    skeleton.joints[0].parentIndex = 1;
+    skeleton.joints[1].parentIndex = 0;
+    expect(
+        full_engine::validateLoadedSkeletonAsset(skeleton) ==
+            full_engine::LoadedAssetPayloadValidationResult::InvalidSkeletonHierarchy,
+        "skeleton payload rejects no root and parent after child",
+        failures);
+
+    skeleton = skeletonAsset();
+    skeleton.joints[1].parentIndex = 9;
+    expect(
+        full_engine::validateLoadedSkeletonAsset(skeleton) ==
+            full_engine::LoadedAssetPayloadValidationResult::InvalidSkeletonHierarchy,
+        "skeleton payload rejects parent out of range",
+        failures);
+
+    skeleton = skeletonAsset();
+    skeleton.joints[1].inverseBindPose[3] = std::nanf("");
+    expect(
+        full_engine::validateLoadedSkeletonAsset(skeleton) ==
+            full_engine::LoadedAssetPayloadValidationResult::InvalidSkeletonJointData,
+        "skeleton payload rejects non-finite inverse bind matrix",
+        failures);
+}
+
+void testInvalidSkinnedMeshPayloads(std::vector<std::string>& failures)
+{
+    full_engine::LoadedSkinnedMeshAsset mesh = skinnedMeshAsset();
+    mesh.skeletonAssetId = {};
+    expect(
+        full_engine::validateLoadedSkinnedMeshAsset(mesh) ==
+            full_engine::LoadedAssetPayloadValidationResult::InvalidSkinnedMeshSkeletonRef,
+        "skinned mesh payload rejects default skeleton reference",
+        failures);
+
+    mesh = skinnedMeshAsset();
+    mesh.vertices.clear();
+    expect(
+        full_engine::validateLoadedSkinnedMeshAsset(mesh) ==
+            full_engine::LoadedAssetPayloadValidationResult::InvalidSkinnedMeshVertices,
+        "skinned mesh payload rejects empty vertices",
+        failures);
+
+    mesh = skinnedMeshAsset();
+    mesh.indices.clear();
+    expect(
+        full_engine::validateLoadedSkinnedMeshAsset(mesh) ==
+            full_engine::LoadedAssetPayloadValidationResult::InvalidSkinnedMeshIndices,
+        "skinned mesh payload rejects empty indices",
+        failures);
+
+    mesh = skinnedMeshAsset();
+    mesh.indices.push_back(0);
+    expect(
+        full_engine::validateLoadedSkinnedMeshAsset(mesh) ==
+            full_engine::LoadedAssetPayloadValidationResult::InvalidSkinnedMeshIndices,
+        "skinned mesh payload rejects non-triangle indices",
+        failures);
+
+    mesh = skinnedMeshAsset();
+    mesh.indices[2] = 9;
+    expect(
+        full_engine::validateLoadedSkinnedMeshAsset(mesh) ==
+            full_engine::LoadedAssetPayloadValidationResult::InvalidSkinnedMeshIndices,
+        "skinned mesh payload rejects out-of-range index",
+        failures);
+
+    mesh = skinnedMeshAsset();
+    mesh.vertices[0].position[0] = std::nanf("");
+    expect(
+        full_engine::validateLoadedSkinnedMeshAsset(mesh) ==
+            full_engine::LoadedAssetPayloadValidationResult::InvalidSkinnedMeshVertexData,
+        "skinned mesh payload rejects non-finite position",
+        failures);
+
+    mesh = skinnedMeshAsset();
+    mesh.vertices[0].normal[1] = 0.0f;
+    expect(
+        full_engine::validateLoadedSkinnedMeshAsset(mesh) ==
+            full_engine::LoadedAssetPayloadValidationResult::InvalidSkinnedMeshVertexData,
+        "skinned mesh payload rejects zero normal",
+        failures);
+
+    mesh = skinnedMeshAsset();
+    mesh.vertices[0].uv0[0] = std::nanf("");
+    expect(
+        full_engine::validateLoadedSkinnedMeshAsset(mesh) ==
+            full_engine::LoadedAssetPayloadValidationResult::InvalidSkinnedMeshVertexData,
+        "skinned mesh payload rejects non-finite uv0",
+        failures);
+
+    mesh = skinnedMeshAsset();
+    mesh.vertices[0].colorLinear[2] = 2.0f;
+    expect(
+        full_engine::validateLoadedSkinnedMeshAsset(mesh) ==
+            full_engine::LoadedAssetPayloadValidationResult::InvalidSkinnedMeshVertexData,
+        "skinned mesh payload rejects out-of-range color",
+        failures);
+
+    mesh = skinnedMeshAsset();
+    mesh.vertices[0].jointIndices[0] = full_engine::kMaxLoadedSkeletonJoints;
+    expect(
+        full_engine::validateLoadedSkinnedMeshAsset(mesh) ==
+            full_engine::LoadedAssetPayloadValidationResult::InvalidSkinnedMeshVertexData,
+        "skinned mesh payload rejects out-of-range joint index",
+        failures);
+
+    mesh = skinnedMeshAsset();
+    mesh.vertices[0].jointWeights[0] = -0.1f;
+    expect(
+        full_engine::validateLoadedSkinnedMeshAsset(mesh) ==
+            full_engine::LoadedAssetPayloadValidationResult::InvalidSkinnedMeshWeights,
+        "skinned mesh payload rejects negative weight",
+        failures);
+
+    mesh = skinnedMeshAsset();
+    mesh.vertices[0].jointWeights[0] = std::nanf("");
+    expect(
+        full_engine::validateLoadedSkinnedMeshAsset(mesh) ==
+            full_engine::LoadedAssetPayloadValidationResult::InvalidSkinnedMeshWeights,
+        "skinned mesh payload rejects non-finite weight",
+        failures);
+
+    mesh = skinnedMeshAsset();
+    mesh.vertices[0].jointWeights[0] = 1.0f;
+    mesh.vertices[0].jointWeights[1] = 1.0f;
+    expect(
+        full_engine::validateLoadedSkinnedMeshAsset(mesh) ==
+            full_engine::LoadedAssetPayloadValidationResult::InvalidSkinnedMeshWeights,
+        "skinned mesh payload rejects weights not summing to one",
+        failures);
+
+    mesh = skinnedMeshAsset();
+    mesh.localBounds.min[0] = 2.0f;
+    expect(
+        full_engine::validateLoadedSkinnedMeshAsset(mesh) ==
+            full_engine::LoadedAssetPayloadValidationResult::InvalidSkinnedMeshBounds,
+        "skinned mesh payload rejects inverted bounds",
+        failures);
+}
+
 void testPayloadDispatchAndInactiveSlots(std::vector<std::string>& failures)
 {
     full_engine::LoadedAssetPayload meshPayload;
@@ -332,6 +603,32 @@ void testPayloadDispatchAndInactiveSlots(std::vector<std::string>& failures)
         "payload dispatch validates active material slot only",
         failures);
 
+    full_engine::LoadedAssetPayload skeletonPayload;
+    skeletonPayload.kind = full_engine::AssetKind::Skeleton;
+    skeletonPayload.mesh = {};
+    skeletonPayload.texture = {};
+    skeletonPayload.material = {};
+    skeletonPayload.skeleton = skeletonAsset();
+    skeletonPayload.skinnedMesh = {};
+    expect(
+        full_engine::validateLoadedAssetPayload(skeletonPayload) ==
+            full_engine::LoadedAssetPayloadValidationResult::Success,
+        "payload dispatch validates active skeleton slot only",
+        failures);
+
+    full_engine::LoadedAssetPayload skinnedMeshPayload;
+    skinnedMeshPayload.kind = full_engine::AssetKind::SkinnedMesh;
+    skinnedMeshPayload.mesh = {};
+    skinnedMeshPayload.texture = {};
+    skinnedMeshPayload.material = {};
+    skinnedMeshPayload.skeleton = {};
+    skinnedMeshPayload.skinnedMesh = skinnedMeshAsset();
+    expect(
+        full_engine::validateLoadedAssetPayload(skinnedMeshPayload) ==
+            full_engine::LoadedAssetPayloadValidationResult::Success,
+        "payload dispatch validates active skinned mesh slot only",
+        failures);
+
     full_engine::LoadedAssetPayload invalidPayload;
     invalidPayload.kind = full_engine::AssetKind::TerrainChunk;
     expect(
@@ -360,7 +657,18 @@ void testResultNames(std::vector<std::string>& failures)
         full_engine::LoadedAssetPayloadValidationResult::InvalidMaterialModel,
         full_engine::LoadedAssetPayloadValidationResult::InvalidMaterialAlphaMode,
         full_engine::LoadedAssetPayloadValidationResult::InvalidMaterialTextureCount,
-        full_engine::LoadedAssetPayloadValidationResult::InvalidMaterialTextureRef};
+        full_engine::LoadedAssetPayloadValidationResult::InvalidMaterialTextureSlot,
+        full_engine::LoadedAssetPayloadValidationResult::InvalidMaterialTextureRef,
+        full_engine::LoadedAssetPayloadValidationResult::DuplicateMaterialTextureSlot,
+        full_engine::LoadedAssetPayloadValidationResult::InvalidSkeletonJointCount,
+        full_engine::LoadedAssetPayloadValidationResult::InvalidSkeletonHierarchy,
+        full_engine::LoadedAssetPayloadValidationResult::InvalidSkeletonJointData,
+        full_engine::LoadedAssetPayloadValidationResult::InvalidSkinnedMeshSkeletonRef,
+        full_engine::LoadedAssetPayloadValidationResult::InvalidSkinnedMeshVertices,
+        full_engine::LoadedAssetPayloadValidationResult::InvalidSkinnedMeshIndices,
+        full_engine::LoadedAssetPayloadValidationResult::InvalidSkinnedMeshVertexData,
+        full_engine::LoadedAssetPayloadValidationResult::InvalidSkinnedMeshWeights,
+        full_engine::LoadedAssetPayloadValidationResult::InvalidSkinnedMeshBounds};
 
     for (const full_engine::LoadedAssetPayloadValidationResult result : results)
     {
@@ -381,6 +689,8 @@ int main()
     testInvalidMeshPayloads(failures);
     testInvalidTexturePayloads(failures);
     testInvalidMaterialPayloads(failures);
+    testInvalidSkeletonPayloads(failures);
+    testInvalidSkinnedMeshPayloads(failures);
     testPayloadDispatchAndInactiveSlots(failures);
     testResultNames(failures);
 

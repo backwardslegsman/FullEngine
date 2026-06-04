@@ -152,10 +152,11 @@ Implemented pieces:
   asset IDs to opaque caller-supplied source URIs and typed renderer-free
   mesh/material/texture source descriptors, plus request-order lookup
   diagnostics for mapping missing load intent to those source records
-- renderer-free loaded asset payloads for mesh, texture, and material data,
-  including mesh UV0 and named material texture slots, giving future importers
-  a copied CPU data contract before renderer upload, handle creation, async IO,
-  or renderer-resource ownership
+- renderer-free loaded asset payloads for mesh, texture, material, skeleton,
+  and skinned mesh data, including mesh/skinned UV0, named material texture
+  slots, skeleton hierarchy/bind matrices, and four-influence skinning data,
+  giving future importers a copied CPU data contract before renderer upload,
+  handle creation, async IO, or renderer-resource ownership
 - a dev-only loaded asset importer that reads tiny tracked ASCII mesh,
   texture, and material fixtures into `LoadedAssetPayload` values, proving the
   first real source-file-to-payload path without adopting a production asset
@@ -404,8 +405,8 @@ Still future work:
 - a scheduler that consumes selected budget profiles or offline summary tooling
   for imported streaming tick traces
 - production cooked manifest formats, richer glTF material graph import,
-  skeletal/animated mesh import, packed assets, and renderer-resource creation
-  policy
+  Assimp skeleton/skinned mesh extraction, animation clips, packed assets, and
+  renderer-resource creation policy
 - production terrain streaming policy and editor-owned residency controls
 - real engine-owned mesh/material/texture creation and lifetime policy
 - production material import/rendering policy beyond the current basic

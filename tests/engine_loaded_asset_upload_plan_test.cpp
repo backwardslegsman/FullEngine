@@ -85,11 +85,48 @@ full_engine::LoadedMaterialAsset materialAsset()
     return material;
 }
 
+void setIdentity(float (&matrix)[16]) noexcept
+{
+    for (float& value : matrix)
+    {
+        value = 0.0f;
+    }
+    matrix[0] = 1.0f;
+    matrix[5] = 1.0f;
+    matrix[10] = 1.0f;
+    matrix[15] = 1.0f;
+}
+
+full_engine::LoadedSkeletonJoint joint(const std::int32_t parentIndex)
+{
+    full_engine::LoadedSkeletonJoint result;
+    result.parentIndex = parentIndex;
+    setIdentity(result.inverseBindPose);
+    setIdentity(result.referenceTransform);
+    return result;
+}
+
+full_engine::LoadedSkeletonAsset skeletonAsset()
+{
+    full_engine::LoadedSkeletonAsset skeleton;
+    skeleton.id = asset(40);
+    skeleton.joints = {joint(-1), joint(0)};
+    return skeleton;
+}
+
 full_engine::LoadedAssetPayload meshPayload()
 {
     full_engine::LoadedAssetPayload payload;
     payload.kind = full_engine::AssetKind::Mesh;
     payload.mesh = meshAsset();
+    return payload;
+}
+
+full_engine::LoadedAssetPayload skeletonPayload()
+{
+    full_engine::LoadedAssetPayload payload;
+    payload.kind = full_engine::AssetKind::Skeleton;
+    payload.skeleton = skeletonAsset();
     return payload;
 }
 
@@ -192,24 +229,36 @@ void testUnsupportedKindReportsUnsupported(std::vector<std::string>& failures)
 
 void testUnsupportedRendererContract(std::vector<std::string>& failures)
 {
-    full_engine::LoadedAssetPayload payload = texturePayload(
+    full_engine::LoadedAssetPayload texture = texturePayload(
         full_engine::AssetSourceTextureSemantic::Color,
         full_engine::AssetSourceTextureColorSpace::Linear);
+    full_engine::LoadedAssetPayload skeleton = skeletonPayload();
 
     expect(
-        full_engine::validateLoadedAssetPayload(payload) ==
+        full_engine::validateLoadedAssetPayload(texture) ==
             full_engine::LoadedAssetPayloadValidationResult::Success,
         "renderer-contract test payload is asset-valid",
         failures);
+    expect(
+        full_engine::validateLoadedAssetPayload(skeleton) ==
+            full_engine::LoadedAssetPayloadValidationResult::Success,
+        "skeleton renderer-contract test payload is asset-valid",
+        failures);
 
+    const full_engine::LoadedAssetPayload payloads[] = {texture, skeleton};
     const full_engine::LoadedAssetUploadPlan plan =
-        full_engine::buildLoadedAssetUploadPlan(&payload, 1);
+        full_engine::buildLoadedAssetUploadPlan(payloads, 2);
 
+    expect(plan.records.size() == 2, "unsupported renderer contract payloads produce records", failures);
     expect(
         plan.records[0].status == full_engine::LoadedAssetUploadStatus::UnsupportedRendererContract,
         "asset-valid but renderer-invalid texture reports unsupported contract",
         failures);
-    expect(plan.summary.unsupportedRendererContractCount == 1, "unsupported renderer contract summary is counted", failures);
+    expect(
+        plan.records[1].status == full_engine::LoadedAssetUploadStatus::UnsupportedRendererContract,
+        "asset-valid skeleton payload reports unsupported contract",
+        failures);
+    expect(plan.summary.unsupportedRendererContractCount == 2, "unsupported renderer contract summary is counted", failures);
 }
 
 void testOrderAndInactiveSlots(std::vector<std::string>& failures)

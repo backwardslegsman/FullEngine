@@ -63,6 +63,28 @@ full_engine::AssetSourceDescriptor materialDescriptor()
     return descriptor;
 }
 
+full_engine::AssetSourceDescriptor skeletonDescriptor()
+{
+    full_engine::AssetSourceDescriptor descriptor;
+    descriptor.skeleton.jointCount = 3;
+    return descriptor;
+}
+
+full_engine::AssetSourceDescriptor skinnedMeshDescriptor()
+{
+    full_engine::AssetSourceDescriptor descriptor;
+    descriptor.skinnedMesh.vertexCount = 6;
+    descriptor.skinnedMesh.indexCount = 6;
+    descriptor.skinnedMesh.skeletonAssetId = asset(40);
+    descriptor.skinnedMesh.localBounds.min[0] = -1.0f;
+    descriptor.skinnedMesh.localBounds.min[1] = 0.0f;
+    descriptor.skinnedMesh.localBounds.min[2] = -1.0f;
+    descriptor.skinnedMesh.localBounds.max[0] = 1.0f;
+    descriptor.skinnedMesh.localBounds.max[1] = 2.0f;
+    descriptor.skinnedMesh.localBounds.max[2] = 1.0f;
+    return descriptor;
+}
+
 full_engine::AssetSourceRecord source(
     const std::uint64_t id,
     const full_engine::AssetKind kind,
@@ -162,19 +184,31 @@ void testInvalidAndUnsupportedSources(std::vector<std::string>& failures)
             full_engine::AssetSourceTextureSemantic::Color,
             full_engine::AssetSourceTextureColorSpace::Srgb,
             2));
-    const std::vector<full_engine::AssetSourceRecord> sources = {invalid, multiMip};
+    const full_engine::AssetSourceRecord skeleton =
+        source(22, full_engine::AssetKind::Skeleton, "character.skel", skeletonDescriptor());
+    const full_engine::AssetSourceRecord skinnedMesh =
+        source(23, full_engine::AssetKind::SkinnedMesh, "character.gltf", skinnedMeshDescriptor());
+    const std::vector<full_engine::AssetSourceRecord> sources = {invalid, multiMip, skeleton, skinnedMesh};
 
     const full_engine::AssetSourceUploadIntentPlan plan =
         full_engine::buildAssetSourceUploadIntentPlan(sources.data(), sources.size());
 
     expect(plan.summary.invalidSourceCount == 1, "upload intent counts invalid source", failures);
-    expect(plan.summary.unsupportedRendererContractCount == 1, "upload intent counts unsupported renderer contract", failures);
+    expect(plan.summary.unsupportedRendererContractCount == 3, "upload intent counts unsupported renderer contract", failures);
     expect(plan.records[0].status == full_engine::AssetSourceUploadIntentStatus::InvalidSource, "invalid descriptor reports invalid source", failures);
     expect(
         plan.records[1].status == full_engine::AssetSourceUploadIntentStatus::UnsupportedRendererContract,
         "multi-mip texture reports unsupported renderer contract",
         failures);
     expect(plan.records[1].texture.mipCount == 2, "unsupported texture still copies metadata", failures);
+    expect(
+        plan.records[2].status == full_engine::AssetSourceUploadIntentStatus::UnsupportedRendererContract,
+        "valid skeleton source reports unsupported renderer contract",
+        failures);
+    expect(
+        plan.records[3].status == full_engine::AssetSourceUploadIntentStatus::UnsupportedRendererContract,
+        "valid skinned mesh source reports unsupported renderer contract",
+        failures);
 }
 
 void testSourceRequestPlanOverload(std::vector<std::string>& failures)

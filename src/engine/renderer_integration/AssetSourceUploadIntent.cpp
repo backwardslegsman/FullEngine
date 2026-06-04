@@ -176,10 +176,12 @@ AssetSourceUploadIntentRecord buildRecordForSource(const AssetSourceRecord& sour
         break;
     case AssetKind::Unknown:
     case AssetKind::TerrainChunk:
-    case AssetKind::Skeleton:
-    case AssetKind::SkinnedMesh:
     case AssetKind::Shader:
         record.status = AssetSourceUploadIntentStatus::InvalidSource;
+        break;
+    case AssetKind::Skeleton:
+    case AssetKind::SkinnedMesh:
+        record.status = AssetSourceUploadIntentStatus::UnsupportedRendererContract;
         break;
     }
 

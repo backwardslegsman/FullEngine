@@ -39,6 +39,29 @@ struct AssetSourceMeshDescriptor
     AssetSourceBounds localBounds = {};
 };
 
+/** @brief Renderer-free skeleton source metadata. */
+struct AssetSourceSkeletonDescriptor
+{
+    /** @brief Expected joint count. Zero is invalid. */
+    std::uint32_t jointCount = 0;
+};
+
+/** @brief Renderer-free skinned mesh source metadata. */
+struct AssetSourceSkinnedMeshDescriptor
+{
+    /** @brief Expected vertex count. Zero is invalid. */
+    std::uint32_t vertexCount = 0;
+
+    /** @brief Expected index count. Zero is invalid. */
+    std::uint32_t indexCount = 0;
+
+    /** @brief Skeleton asset ID referenced by this skinned mesh. */
+    AssetId skeletonAssetId = {};
+
+    /** @brief Expected mesh-local bounds in meters. */
+    AssetSourceBounds localBounds = {};
+};
+
 /** @brief Renderer-free texture source format contract. */
 enum class AssetSourceTextureFormat
 {
@@ -177,6 +200,12 @@ struct AssetSourceDescriptor
 
     /** @brief Material metadata used when the source record kind is `Material`. */
     AssetSourceMaterialDescriptor material = {};
+
+    /** @brief Skeleton metadata used when the source record kind is `Skeleton`. */
+    AssetSourceSkeletonDescriptor skeleton = {};
+
+    /** @brief Skinned mesh metadata used when the source record kind is `SkinnedMesh`. */
+    AssetSourceSkinnedMeshDescriptor skinnedMesh = {};
 };
 
 /** @brief Validation result for one active source descriptor. */
@@ -197,6 +226,10 @@ enum class AssetSourceDescriptorValidationResult
     InvalidMaterialTextureSlot,
     InvalidMaterialTextureRef,
     DuplicateMaterialTextureSlot,
+    InvalidSkeletonJointCount,
+    InvalidSkinnedMeshCounts,
+    InvalidSkinnedMeshSkeletonRef,
+    InvalidSkinnedMeshBounds,
 };
 
 /** @brief Returns a stable diagnostic name for a descriptor validation result. */

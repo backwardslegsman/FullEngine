@@ -5,10 +5,17 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <string>
 #include <vector>
 
 namespace full_engine
 {
+/** @brief Maximum joints accepted by the first renderer-free skeleton payload contract. */
+constexpr std::uint32_t kMaxLoadedSkeletonJoints = 64;
+
+/** @brief Fixed number of joint influences carried by one loaded skinned vertex. */
+constexpr std::uint32_t kMaxLoadedSkinningInfluences = 4;
+
 /**
  * @brief Fixed renderer-free vertex shape for loaded mesh asset data.
  *
@@ -47,6 +54,95 @@ struct LoadedMeshAsset
 
     /** @brief Copied mesh vertices. */
     std::vector<LoadedMeshVertex> vertices;
+
+    /** @brief Copied 16-bit triangle indices. Count must be a non-zero multiple of three. */
+    std::vector<std::uint16_t> indices;
+
+    /** @brief Mesh-local bounds in meters. */
+    AssetSourceBounds localBounds = {};
+};
+
+/**
+ * @brief One renderer-free loaded skeleton joint.
+ *
+ * Joints are validated by index; `name` is optional copied metadata for
+ * diagnostics and future importer tooling. Matrices are column-major floats.
+ */
+struct LoadedSkeletonJoint
+{
+    /** @brief Optional copied source joint name. Empty is valid. */
+    std::string name;
+
+    /** @brief Parent joint index, or `-1` for the single root joint. */
+    std::int32_t parentIndex = -1;
+
+    /** @brief Column-major inverse bind-pose matrix. Values must be finite. */
+    float inverseBindPose[16] = {};
+
+    /** @brief Column-major bind/local reference transform for future pose/debug tooling. */
+    float referenceTransform[16] = {};
+};
+
+/**
+ * @brief Renderer-free loaded skeleton payload.
+ *
+ * The skeleton stores copied hierarchy metadata and bind-pose matrices only.
+ * It performs no animation evaluation and owns no renderer resources.
+ */
+struct LoadedSkeletonAsset
+{
+    /** @brief Engine asset identity for this loaded skeleton. */
+    AssetId id = {};
+
+    /** @brief Ordered joints. Parents must appear before children. */
+    std::vector<LoadedSkeletonJoint> joints;
+};
+
+/**
+ * @brief Renderer-free skinned mesh vertex payload.
+ *
+ * Positions and normals are mesh-local meters in the engine/renderer Y-up
+ * convention. UV0 is copied from source texture coordinate set 0. Joint
+ * indices and weights mirror the current four-influence renderer contract.
+ */
+struct LoadedSkinnedMeshVertex
+{
+    /** @brief Mesh-local position in meters. */
+    float position[3] = {};
+
+    /** @brief Mesh-local normal direction. */
+    float normal[3] = {0.0f, 1.0f, 0.0f};
+
+    /** @brief Primary texture coordinates copied from source UV set 0. */
+    float uv0[2] = {};
+
+    /** @brief Linear RGBA vertex color. */
+    float colorLinear[4] = {1.0f, 1.0f, 1.0f, 1.0f};
+
+    /** @brief Up to four joint indices. Values must be less than `kMaxLoadedSkeletonJoints`. */
+    std::uint16_t jointIndices[kMaxLoadedSkinningInfluences] = {};
+
+    /** @brief Corresponding non-negative skinning weights. Values must sum to one. */
+    float jointWeights[kMaxLoadedSkinningInfluences] = {1.0f, 0.0f, 0.0f, 0.0f};
+};
+
+/**
+ * @brief Renderer-free loaded skinned mesh payload.
+ *
+ * The mesh stores copied vertices and indices plus the skeleton asset ID that
+ * upload code must resolve before creating renderer-owned skinned mesh
+ * resources.
+ */
+struct LoadedSkinnedMeshAsset
+{
+    /** @brief Engine asset identity for this loaded skinned mesh. */
+    AssetId id = {};
+
+    /** @brief Skeleton asset ID referenced by this skinned mesh. */
+    AssetId skeletonAssetId = {};
+
+    /** @brief Copied skinned mesh vertices. */
+    std::vector<LoadedSkinnedMeshVertex> vertices;
 
     /** @brief Copied 16-bit triangle indices. Count must be a non-zero multiple of three. */
     std::vector<std::uint16_t> indices;
@@ -124,7 +220,7 @@ struct LoadedMaterialAsset
  */
 struct LoadedAssetPayload
 {
-    /** @brief Active payload kind. Only Mesh, Texture, and Material are supported. */
+    /** @brief Active payload kind. Mesh, Texture, Material, Skeleton, and SkinnedMesh are supported. */
     AssetKind kind = AssetKind::Unknown;
 
     /** @brief Active when `kind` is `Mesh`. */
@@ -135,6 +231,12 @@ struct LoadedAssetPayload
 
     /** @brief Active when `kind` is `Material`. */
     LoadedMaterialAsset material = {};
+
+    /** @brief Active when `kind` is `Skeleton`. */
+    LoadedSkeletonAsset skeleton = {};
+
+    /** @brief Active when `kind` is `SkinnedMesh`. */
+    LoadedSkinnedMeshAsset skinnedMesh = {};
 };
 
 /** @brief Validation result for renderer-free loaded asset payloads. */
@@ -159,6 +261,15 @@ enum class LoadedAssetPayloadValidationResult
     InvalidMaterialTextureSlot,
     InvalidMaterialTextureRef,
     DuplicateMaterialTextureSlot,
+    InvalidSkeletonJointCount,
+    InvalidSkeletonHierarchy,
+    InvalidSkeletonJointData,
+    InvalidSkinnedMeshSkeletonRef,
+    InvalidSkinnedMeshVertices,
+    InvalidSkinnedMeshIndices,
+    InvalidSkinnedMeshVertexData,
+    InvalidSkinnedMeshWeights,
+    InvalidSkinnedMeshBounds,
 };
 
 /** @brief Returns a stable diagnostic name for a loaded payload validation result. */
@@ -193,10 +304,28 @@ LoadedAssetPayloadValidationResult validateLoadedMaterialAsset(
     const LoadedMaterialAsset& material) noexcept;
 
 /**
+ * @brief Validates a renderer-free loaded skeleton payload.
+ *
+ * The helper checks hierarchy order and finite matrices only. It performs no
+ * animation import, renderer handle lookup, or renderer resource creation.
+ */
+LoadedAssetPayloadValidationResult validateLoadedSkeletonAsset(
+    const LoadedSkeletonAsset& skeleton) noexcept;
+
+/**
+ * @brief Validates a renderer-free loaded skinned mesh payload.
+ *
+ * The helper validates copied CPU value shape, four-influence skinning data,
+ * 16-bit triangle indices, and local bounds only.
+ */
+LoadedAssetPayloadValidationResult validateLoadedSkinnedMeshAsset(
+    const LoadedSkinnedMeshAsset& mesh) noexcept;
+
+/**
  * @brief Validates the active slot of a loaded asset payload.
  *
- * Inactive slots are ignored. Supported active kinds are Mesh, Texture, and
- * Material.
+ * Inactive slots are ignored. Supported active kinds are Mesh, Texture,
+ * Material, Skeleton, and SkinnedMesh.
  */
 LoadedAssetPayloadValidationResult validateLoadedAssetPayload(
     const LoadedAssetPayload& payload) noexcept;

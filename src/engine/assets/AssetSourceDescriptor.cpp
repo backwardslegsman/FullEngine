@@ -136,6 +136,38 @@ AssetSourceDescriptorValidationResult validateTextureDescriptor(
     return AssetSourceDescriptorValidationResult::Success;
 }
 
+AssetSourceDescriptorValidationResult validateSkeletonDescriptor(
+    const AssetSourceSkeletonDescriptor& descriptor) noexcept
+{
+    if (descriptor.jointCount == 0)
+    {
+        return AssetSourceDescriptorValidationResult::InvalidSkeletonJointCount;
+    }
+
+    return AssetSourceDescriptorValidationResult::Success;
+}
+
+AssetSourceDescriptorValidationResult validateSkinnedMeshDescriptor(
+    const AssetSourceSkinnedMeshDescriptor& descriptor) noexcept
+{
+    if (descriptor.vertexCount == 0 || descriptor.indexCount == 0)
+    {
+        return AssetSourceDescriptorValidationResult::InvalidSkinnedMeshCounts;
+    }
+
+    if (!isValid(descriptor.skeletonAssetId))
+    {
+        return AssetSourceDescriptorValidationResult::InvalidSkinnedMeshSkeletonRef;
+    }
+
+    if (!isFiniteBounds(descriptor.localBounds) || !isOrderedBounds(descriptor.localBounds))
+    {
+        return AssetSourceDescriptorValidationResult::InvalidSkinnedMeshBounds;
+    }
+
+    return AssetSourceDescriptorValidationResult::Success;
+}
+
 AssetSourceDescriptorValidationResult validateMaterialDescriptor(
     const AssetSourceMaterialDescriptor& descriptor) noexcept
 {
@@ -211,6 +243,14 @@ const char* assetSourceDescriptorValidationResultName(
         return "InvalidMaterialTextureRef";
     case AssetSourceDescriptorValidationResult::DuplicateMaterialTextureSlot:
         return "DuplicateMaterialTextureSlot";
+    case AssetSourceDescriptorValidationResult::InvalidSkeletonJointCount:
+        return "InvalidSkeletonJointCount";
+    case AssetSourceDescriptorValidationResult::InvalidSkinnedMeshCounts:
+        return "InvalidSkinnedMeshCounts";
+    case AssetSourceDescriptorValidationResult::InvalidSkinnedMeshSkeletonRef:
+        return "InvalidSkinnedMeshSkeletonRef";
+    case AssetSourceDescriptorValidationResult::InvalidSkinnedMeshBounds:
+        return "InvalidSkinnedMeshBounds";
     }
 
     return "Unknown";
@@ -228,10 +268,12 @@ AssetSourceDescriptorValidationResult validateAssetSourceDescriptor(
         return validateMaterialDescriptor(descriptor.material);
     case AssetKind::Texture:
         return validateTextureDescriptor(descriptor.texture);
+    case AssetKind::Skeleton:
+        return validateSkeletonDescriptor(descriptor.skeleton);
+    case AssetKind::SkinnedMesh:
+        return validateSkinnedMeshDescriptor(descriptor.skinnedMesh);
     case AssetKind::Unknown:
     case AssetKind::TerrainChunk:
-    case AssetKind::Skeleton:
-    case AssetKind::SkinnedMesh:
     case AssetKind::Shader:
         break;
     }

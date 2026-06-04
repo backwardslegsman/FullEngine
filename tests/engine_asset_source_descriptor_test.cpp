@@ -59,6 +59,28 @@ full_engine::AssetSourceDescriptor materialDescriptor()
     return descriptor;
 }
 
+full_engine::AssetSourceDescriptor skeletonDescriptor()
+{
+    full_engine::AssetSourceDescriptor descriptor;
+    descriptor.skeleton.jointCount = 2;
+    return descriptor;
+}
+
+full_engine::AssetSourceDescriptor skinnedMeshDescriptor()
+{
+    full_engine::AssetSourceDescriptor descriptor;
+    descriptor.skinnedMesh.vertexCount = 4;
+    descriptor.skinnedMesh.indexCount = 6;
+    descriptor.skinnedMesh.skeletonAssetId = asset(200);
+    descriptor.skinnedMesh.localBounds.min[0] = -1.0f;
+    descriptor.skinnedMesh.localBounds.min[1] = 0.0f;
+    descriptor.skinnedMesh.localBounds.min[2] = -1.0f;
+    descriptor.skinnedMesh.localBounds.max[0] = 1.0f;
+    descriptor.skinnedMesh.localBounds.max[1] = 2.0f;
+    descriptor.skinnedMesh.localBounds.max[2] = 1.0f;
+    return descriptor;
+}
+
 void testValidDescriptors(std::vector<std::string>& failures)
 {
     expect(
@@ -75,6 +97,16 @@ void testValidDescriptors(std::vector<std::string>& failures)
         full_engine::validateAssetSourceDescriptor(full_engine::AssetKind::Material, materialDescriptor()) ==
             full_engine::AssetSourceDescriptorValidationResult::Success,
         "valid material descriptor validates",
+        failures);
+    expect(
+        full_engine::validateAssetSourceDescriptor(full_engine::AssetKind::Skeleton, skeletonDescriptor()) ==
+            full_engine::AssetSourceDescriptorValidationResult::Success,
+        "valid skeleton descriptor validates",
+        failures);
+    expect(
+        full_engine::validateAssetSourceDescriptor(full_engine::AssetKind::SkinnedMesh, skinnedMeshDescriptor()) ==
+            full_engine::AssetSourceDescriptorValidationResult::Success,
+        "valid skinned mesh descriptor validates",
         failures);
 }
 
@@ -199,6 +231,52 @@ void testInvalidMaterialDescriptors(std::vector<std::string>& failures)
         failures);
 }
 
+void testInvalidSkeletonDescriptors(std::vector<std::string>& failures)
+{
+    full_engine::AssetSourceDescriptor descriptor = skeletonDescriptor();
+    descriptor.skeleton.jointCount = 0;
+    expect(
+        full_engine::validateAssetSourceDescriptor(full_engine::AssetKind::Skeleton, descriptor) ==
+            full_engine::AssetSourceDescriptorValidationResult::InvalidSkeletonJointCount,
+        "skeleton descriptor rejects zero joint count",
+        failures);
+}
+
+void testInvalidSkinnedMeshDescriptors(std::vector<std::string>& failures)
+{
+    full_engine::AssetSourceDescriptor descriptor = skinnedMeshDescriptor();
+    descriptor.skinnedMesh.vertexCount = 0;
+    expect(
+        full_engine::validateAssetSourceDescriptor(full_engine::AssetKind::SkinnedMesh, descriptor) ==
+            full_engine::AssetSourceDescriptorValidationResult::InvalidSkinnedMeshCounts,
+        "skinned mesh descriptor rejects zero vertex count",
+        failures);
+
+    descriptor = skinnedMeshDescriptor();
+    descriptor.skinnedMesh.indexCount = 0;
+    expect(
+        full_engine::validateAssetSourceDescriptor(full_engine::AssetKind::SkinnedMesh, descriptor) ==
+            full_engine::AssetSourceDescriptorValidationResult::InvalidSkinnedMeshCounts,
+        "skinned mesh descriptor rejects zero index count",
+        failures);
+
+    descriptor = skinnedMeshDescriptor();
+    descriptor.skinnedMesh.skeletonAssetId = {};
+    expect(
+        full_engine::validateAssetSourceDescriptor(full_engine::AssetKind::SkinnedMesh, descriptor) ==
+            full_engine::AssetSourceDescriptorValidationResult::InvalidSkinnedMeshSkeletonRef,
+        "skinned mesh descriptor rejects default skeleton reference",
+        failures);
+
+    descriptor = skinnedMeshDescriptor();
+    descriptor.skinnedMesh.localBounds.min[0] = 2.0f;
+    expect(
+        full_engine::validateAssetSourceDescriptor(full_engine::AssetKind::SkinnedMesh, descriptor) ==
+            full_engine::AssetSourceDescriptorValidationResult::InvalidSkinnedMeshBounds,
+        "skinned mesh descriptor rejects inverted bounds",
+        failures);
+}
+
 void testInactiveDescriptorSlotsAreIgnored(std::vector<std::string>& failures)
 {
     full_engine::AssetSourceDescriptor mesh = meshDescriptor();
@@ -218,6 +296,28 @@ void testInactiveDescriptorSlotsAreIgnored(std::vector<std::string>& failures)
             full_engine::AssetSourceDescriptorValidationResult::Success,
         "texture validation ignores invalid inactive mesh/material slots",
         failures);
+
+    full_engine::AssetSourceDescriptor skeleton = skeletonDescriptor();
+    skeleton.mesh = {};
+    skeleton.texture = {};
+    skeleton.material = {};
+    skeleton.skinnedMesh = {};
+    expect(
+        full_engine::validateAssetSourceDescriptor(full_engine::AssetKind::Skeleton, skeleton) ==
+            full_engine::AssetSourceDescriptorValidationResult::Success,
+        "skeleton validation ignores invalid inactive slots",
+        failures);
+
+    full_engine::AssetSourceDescriptor skinnedMesh = skinnedMeshDescriptor();
+    skinnedMesh.mesh = {};
+    skinnedMesh.texture = {};
+    skinnedMesh.material = {};
+    skinnedMesh.skeleton = {};
+    expect(
+        full_engine::validateAssetSourceDescriptor(full_engine::AssetKind::SkinnedMesh, skinnedMesh) ==
+            full_engine::AssetSourceDescriptorValidationResult::Success,
+        "skinned mesh validation ignores invalid inactive slots",
+        failures);
 }
 
 void testInvalidKind(std::vector<std::string>& failures)
@@ -228,6 +328,38 @@ void testInvalidKind(std::vector<std::string>& failures)
         "descriptor validation rejects unsupported kind",
         failures);
 }
+
+void testResultNames(std::vector<std::string>& failures)
+{
+    const full_engine::AssetSourceDescriptorValidationResult results[] = {
+        full_engine::AssetSourceDescriptorValidationResult::Success,
+        full_engine::AssetSourceDescriptorValidationResult::InvalidKind,
+        full_engine::AssetSourceDescriptorValidationResult::InvalidMeshCounts,
+        full_engine::AssetSourceDescriptorValidationResult::InvalidMeshBounds,
+        full_engine::AssetSourceDescriptorValidationResult::InvalidTextureDimensions,
+        full_engine::AssetSourceDescriptorValidationResult::InvalidTextureMipCount,
+        full_engine::AssetSourceDescriptorValidationResult::InvalidTextureFormat,
+        full_engine::AssetSourceDescriptorValidationResult::InvalidTextureSemantic,
+        full_engine::AssetSourceDescriptorValidationResult::InvalidTextureColorSpace,
+        full_engine::AssetSourceDescriptorValidationResult::InvalidMaterialModel,
+        full_engine::AssetSourceDescriptorValidationResult::InvalidMaterialAlphaMode,
+        full_engine::AssetSourceDescriptorValidationResult::InvalidMaterialTextureCount,
+        full_engine::AssetSourceDescriptorValidationResult::InvalidMaterialTextureSlot,
+        full_engine::AssetSourceDescriptorValidationResult::InvalidMaterialTextureRef,
+        full_engine::AssetSourceDescriptorValidationResult::DuplicateMaterialTextureSlot,
+        full_engine::AssetSourceDescriptorValidationResult::InvalidSkeletonJointCount,
+        full_engine::AssetSourceDescriptorValidationResult::InvalidSkinnedMeshCounts,
+        full_engine::AssetSourceDescriptorValidationResult::InvalidSkinnedMeshSkeletonRef,
+        full_engine::AssetSourceDescriptorValidationResult::InvalidSkinnedMeshBounds};
+
+    for (const full_engine::AssetSourceDescriptorValidationResult result : results)
+    {
+        expect(
+            std::string(full_engine::assetSourceDescriptorValidationResultName(result)) != "Unknown",
+            "asset source descriptor validation result has stable name",
+            failures);
+    }
+}
 } // namespace
 
 int main()
@@ -237,8 +369,11 @@ int main()
     testInvalidMeshDescriptors(failures);
     testInvalidTextureDescriptors(failures);
     testInvalidMaterialDescriptors(failures);
+    testInvalidSkeletonDescriptors(failures);
+    testInvalidSkinnedMeshDescriptors(failures);
     testInactiveDescriptorSlotsAreIgnored(failures);
     testInvalidKind(failures);
+    testResultNames(failures);
 
     if (!failures.empty())
     {
