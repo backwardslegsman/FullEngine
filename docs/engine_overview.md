@@ -188,6 +188,10 @@ Implemented pieces:
   work through caller-owned public renderer `createMesh`, `createTexture`, and
   `createMaterial` calls, resolving named material texture asset IDs through
   `RendererAssetHandleCatalog` before recording successful handles
+- a first material/UV rendering smoke in the bgfx mesh path: static and
+  instanced mesh shaders pass UV0 to the forward fragment shader, basic
+  materials sample an optional base-color texture with white fallback, and
+  dev-imported textured assets can now affect visible mesh shading
 - a dev manifest asset-load callback that resolves retained source metadata,
   imports tiny dev mesh/texture/material files, executes caller-owned renderer
   uploads, and publishes handle completions through the existing retained
@@ -404,8 +408,8 @@ Still future work:
   policy
 - production terrain streaming policy and editor-owned residency controls
 - real engine-owned mesh/material/texture creation and lifetime policy
-- production material import/rendering policy beyond the current basic and
-  terrain-splat descriptor bridge
+- production material import/rendering policy beyond the current basic
+  base-color texture smoke and terrain-splat descriptor bridge
 - renderer descriptor conversion for non-terrain draws and cameras
 - scene/entity ownership, gameplay simulation, persistence, and editor tooling
 

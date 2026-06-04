@@ -1798,6 +1798,7 @@ RendererResult BgfxRenderDevice::initialize(const RendererInitDesc& desc)
     lightDirIntensityUniform_ = bgfx::createUniform("u_lightDirIntensity", bgfx::UniformType::Vec4);
     lightColorUniform_ = bgfx::createUniform("u_lightColor", bgfx::UniformType::Vec4);
     materialColorUniform_ = bgfx::createUniform("u_materialColor", bgfx::UniformType::Vec4);
+    basicBaseColorSampler_ = bgfx::createUniform("s_basicBaseColor", bgfx::UniformType::Sampler);
     terrainLayerColorUniform_ = bgfx::createUniform("u_terrainLayerColors", bgfx::UniformType::Vec4, kMaxTerrainMaterialLayers);
     terrainParamsUniform_ = bgfx::createUniform("u_terrainParams", bgfx::UniformType::Vec4);
     shadowViewProjUniform_ = bgfx::createUniform("u_shadowViewProj", bgfx::UniformType::Mat4, kMaxDirectionalShadowCascades);
@@ -1887,6 +1888,7 @@ RendererResult BgfxRenderDevice::initialize(const RendererInitDesc& desc)
     if (!isValidUniform(lightDirIntensityUniform_) ||
         !isValidUniform(lightColorUniform_) ||
         !isValidUniform(materialColorUniform_) ||
+        !isValidUniform(basicBaseColorSampler_) ||
         !isValidUniform(terrainLayerColorUniform_) ||
         !isValidUniform(terrainParamsUniform_) ||
         !isValidUniform(shadowViewProjUniform_) ||
@@ -2609,6 +2611,12 @@ void BgfxRenderDevice::shutdown() noexcept
             materialColorUniform_ = BGFX_INVALID_HANDLE;
         }
 
+        if (bgfx::isValid(basicBaseColorSampler_))
+        {
+            bgfx::destroy(basicBaseColorSampler_);
+            basicBaseColorSampler_ = BGFX_INVALID_HANDLE;
+        }
+
         if (bgfx::isValid(lightColorUniform_))
         {
             bgfx::destroy(lightColorUniform_);
@@ -3057,6 +3065,26 @@ void BgfxRenderDevice::bindFadeState(
     float params[4] = {};
     setFadeAndMaterialParams(fadeState, material, params);
     bgfx::setUniform(fadeParamsUniform_, params);
+}
+
+void BgfxRenderDevice::bindBasicMaterialTextureState(const MaterialDesc& material) noexcept
+{
+#if FULL_RENDERER_ENABLE_BGFX
+    const TextureResource* baseColorTexture = isValid(material.basicTextures.baseColor) ?
+        resolveTexture(material.basicTextures.baseColor, true) :
+        nullptr;
+    if (baseColorTexture == nullptr)
+    {
+        ++stats_.fallbackMaterialTextureCount;
+    }
+
+    bgfx::setTexture(
+        0,
+        basicBaseColorSampler_,
+        baseColorTexture != nullptr ? baseColorTexture->texture : fallbackWhiteTexture_);
+#else
+    (void)material;
+#endif
 }
 
 void BgfxRenderDevice::applyWeatherStats(const scene::WeatherRenderPlan& weatherPlan) noexcept
@@ -4995,6 +5023,7 @@ RendererResult BgfxRenderDevice::submit(const RenderPacket& packet)
         bindEnvironmentState(effectiveEnvironment);
         bindWeatherState(weatherPlan);
         bindFadeState(fadeState, material->desc);
+        bindBasicMaterialTextureState(material->desc);
         bindCsmForwardState(
             packet,
             shadowViewProjMatrices,
@@ -5451,6 +5480,7 @@ RendererResult BgfxRenderDevice::submitInstanced(
         bindEnvironmentState(effectiveEnvironment);
         bindWeatherState(weatherPlan);
         bindFadeState(fadeState, material->desc);
+        bindBasicMaterialTextureState(material->desc);
         bindCsmForwardState(
             packet,
             shadowViewProjMatrices,
@@ -5704,6 +5734,7 @@ RendererResult BgfxRenderDevice::submitInstanced(
             bindEnvironmentState(effectiveEnvironment);
             bindWeatherState(weatherPlan);
             bindFadeState(fadeState, material->desc);
+            bindBasicMaterialTextureState(material->desc);
             bindCsmForwardState(
                 packet,
                 shadowViewProjMatrices,

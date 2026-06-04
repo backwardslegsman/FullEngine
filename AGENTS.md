@@ -119,6 +119,13 @@ When debugging:
 - Prefer root-cause fixes over suppressing symptoms.
 - Add regression coverage when practical.
 
+Runner note:
+
+- On the current Windows workspace, ordinary shell invocations can intermittently
+  fail before process launch with `spawn setup refresh`. When an important
+  read/build/test command hits that harness failure, retry the same command with
+  elevated execution instead of treating it as a project failure.
+
 ## Minimum definition of done
 
 See `docs/agents/definition_of_done.md` for the full checklist.

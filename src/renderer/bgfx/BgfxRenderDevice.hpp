@@ -239,6 +239,7 @@ private:
     void bindEnvironmentState(const EnvironmentDesc& environment) const noexcept;
     void bindWeatherState(const scene::WeatherRenderPlan& weatherPlan) const noexcept;
     void bindFadeState(const scene::FadeRenderState& fadeState, const MaterialDesc& material) const noexcept;
+    void bindBasicMaterialTextureState(const MaterialDesc& material) noexcept;
     void applyWeatherStats(const scene::WeatherRenderPlan& weatherPlan) noexcept;
     void applyColorGradingStats(const scene::ColorGradingRenderPlan& plan) noexcept;
     scene::PostPassPlan makePostPassPlanForPacket(
@@ -318,6 +319,7 @@ private:
     bgfx::UniformHandle lightDirIntensityUniform_ = BGFX_INVALID_HANDLE;
     bgfx::UniformHandle lightColorUniform_ = BGFX_INVALID_HANDLE;
     bgfx::UniformHandle materialColorUniform_ = BGFX_INVALID_HANDLE;
+    bgfx::UniformHandle basicBaseColorSampler_ = BGFX_INVALID_HANDLE;
     bgfx::UniformHandle terrainLayerColorUniform_ = BGFX_INVALID_HANDLE;
     bgfx::UniformHandle terrainParamsUniform_ = BGFX_INVALID_HANDLE;
     bgfx::UniformHandle shadowViewProjUniform_ = BGFX_INVALID_HANDLE;

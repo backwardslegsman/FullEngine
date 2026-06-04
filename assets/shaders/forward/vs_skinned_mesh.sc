@@ -1,5 +1,5 @@
 $input a_position, a_normal, a_color0, a_texcoord1, a_texcoord2
-$output v_normal, v_color0, v_shadowcoord, v_shadowcoord1, v_shadowcoord2, v_shadowcoord3, v_viewdepth
+$output v_normal, v_color0, v_texcoord0, v_shadowcoord, v_shadowcoord1, v_shadowcoord2, v_shadowcoord3, v_viewdepth
 
 #include <bgfx_shader.sh>
 
@@ -37,6 +37,7 @@ void main()
     gl_Position = mul(u_viewProj, worldPosition);
     v_normal = normalize(mul(u_model[0], vec4(normalize(skinnedNormal), 0.0)).xyz);
     v_color0 = a_color0;
+    v_texcoord0 = vec2_splat(0.0);
     v_shadowcoord = mul(u_shadowViewProj[0], worldPosition);
     v_shadowcoord1 = mul(u_shadowViewProj[1], worldPosition);
     v_shadowcoord2 = mul(u_shadowViewProj[2], worldPosition);

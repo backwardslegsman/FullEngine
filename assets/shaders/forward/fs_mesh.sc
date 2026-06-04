@@ -1,7 +1,8 @@
-$input v_normal, v_color0, v_shadowcoord, v_shadowcoord1, v_shadowcoord2, v_shadowcoord3, v_viewdepth
+$input v_normal, v_color0, v_texcoord0, v_shadowcoord, v_shadowcoord1, v_shadowcoord2, v_shadowcoord3, v_viewdepth
 
 #include <bgfx_shader.sh>
 
+SAMPLER2D(s_basicBaseColor, 0);
 SAMPLER2D(s_shadowMap0, 5);
 SAMPLER2D(s_shadowMap1, 6);
 SAMPLER2D(s_shadowMap2, 7);
@@ -347,6 +348,7 @@ void main()
     float litFlag = step(0.0, u_materialColor.w);
     float alpha = abs(u_materialColor.w);
     float diffuse = max(dot(normal, lightDirection), 0.0) * u_lightDirIntensity.w;
+    vec4 baseColorTexture = texture2D(s_basicBaseColor, v_texcoord0);
     float shadowFactor = sampleMeshShadow(
         normal,
         lightDirection,
@@ -355,8 +357,9 @@ void main()
         v_shadowcoord2,
         v_shadowcoord3,
         v_viewdepth);
-    vec3 litColor = v_color0.rgb * u_materialColor.rgb * u_lightColor.rgb * max(diffuse * shadowFactor, 0.15);
-    vec3 unlitColor = v_color0.rgb * u_materialColor.rgb;
+    vec3 materialColor = v_color0.rgb * u_materialColor.rgb * baseColorTexture.rgb;
+    vec3 litColor = materialColor * u_lightColor.rgb * max(diffuse * shadowFactor, 0.15);
+    vec3 unlitColor = materialColor;
     vec3 finalColor = mix(unlitColor, litColor, litFlag);
     finalColor = applyWeatherWetness(finalColor);
     finalColor = applyDistanceFog(finalColor, v_viewdepth);
@@ -364,7 +367,7 @@ void main()
     float fadeMode = u_fadeParams.y;
     float materialAlphaMode = u_fadeParams.z;
     float alphaCutoff = clamp(u_fadeParams.w, 0.0, 1.0);
-    float finalAlpha = v_color0.a * alpha;
+    float finalAlpha = v_color0.a * alpha * baseColorTexture.a;
     if (materialAlphaMode > 0.5 && materialAlphaMode < 1.5 && finalAlpha < alphaCutoff)
     {
         discard;
@@ -378,7 +381,7 @@ void main()
     }
     if (fadeMode > 0.5 && fadeMode < 1.5)
     {
-        alpha *= fadeVisibility;
+        finalAlpha *= fadeVisibility;
     }
-    gl_FragColor = vec4(linearToGamma(finalColor), v_color0.a * alpha);
+    gl_FragColor = vec4(linearToGamma(finalColor), finalAlpha);
 }

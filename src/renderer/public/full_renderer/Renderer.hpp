@@ -339,9 +339,9 @@ struct TerrainMaterialDesc
  *
  * Zero texture handles are valid deterministic fallbacks. Non-zero handles
  * must refer to live renderer-owned textures when `createMaterial` is called
- * and while the material can be submitted. The current shaders do not sample
- * these slots yet; the handles are copied so asset upload and future shader
- * work can share one material contract.
+ * and while the material can be submitted. The first basic mesh shader path
+ * samples `baseColor` with mesh UV0; the other slots are copied for future
+ * shader work.
  */
 struct BasicMaterialTextureDesc
 {
@@ -366,9 +366,9 @@ struct BasicMaterialTextureDesc
  *
  * Colors are linear RGBA values in `[0, 1]`. The current material model is a
  * deliberately small Phase 1 surface color plus an optional directional-light
- * response. Basic texture slots are copied for future shader sampling but are
- * not sampled by the current shaders. Descriptor data is copied during
- * `createMaterial`.
+ * response. The basic mesh shader multiplies vertex color, base color, and the
+ * optional base-color texture sampled with UV0. Descriptor data is copied
+ * during `createMaterial`.
  */
 struct MaterialDesc
 {
