@@ -824,10 +824,17 @@ move gameplay, streaming policy, or editor concepts into renderer internals.
   index, and Assimp glTF animation channels can import into
   `LoadedAnimationClipAsset` with descriptor matching plus tiny deterministic
   and wolf-asset smoke coverage.
-- Next slice: add a CPU animation clip sampler that evaluates one
-  `LoadedAnimationClipAsset` against a matching `LoadedSkeletonAsset` into
-  local/model joint matrices; blending, compression, ozz/ACL integration, and
+- Fiftieth slice is implemented: renderer-free CPU animation clip sampling now
+  evaluates one `LoadedAnimationClipAsset` against a matching
+  `LoadedSkeletonAsset` into owned local joint matrices, model joint matrices,
+  and final skinning palette matrices with deterministic clamp/loop playback.
+  Blending, playback controllers, compression, ozz/ACL integration, and
   renderer palette submission stay later.
+- Fifty-first slice is implemented: renderer integration can now expose a
+  sampled `LoadedAnimationPose` as a borrowed, validated
+  `SkinningPaletteDesc` view for frame-local animated draw submission while
+  keeping mesh/material handles, bounds, playback state, and draw construction
+  caller-owned.
 - Initial sample integration is in place: the debug UI can run the
   manifest-aware streaming coordinator once or continuously from camera
   position, display readiness/load/staging/streaming queue counters, and keep

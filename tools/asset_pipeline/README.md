@@ -23,8 +23,12 @@ layer now has two importer seams behind the same
 Renderer integration can use loaded payloads to produce mesh, texture,
 material, skeleton, and skinned mesh handles through caller-owned renderer
 uploads and the existing completion reconcile path. Bind-pose skeleton/skinned
-mesh import and raw animation clip import are available through Assimp.
-Runtime animation sampling/blending, animation compression, embedded glTF
+mesh import and raw animation clip import are available through Assimp. The
+engine asset layer can sample one loaded animation clip against a matching
+skeleton into CPU local/model/skinning palette matrices for later renderer
+submission, and renderer integration can expose those sampled matrices as a
+borrowed frame-local `SkinningPaletteDesc` view.
+Runtime playback controllers, blending, animation compression, embedded glTF
 images, tangent payloads, UV1+ sets, mip generation, compression/KTX,
 production material authoring, packed assets, async IO, and production
 packaging are still future work.

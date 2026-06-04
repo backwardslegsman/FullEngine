@@ -157,7 +157,16 @@ Implemented pieces:
   material texture slots, skeleton hierarchy/bind matrices, four-influence
   skinning data, and raw joint transform key tracks, giving future importers a
   copied CPU data contract before renderer upload, handle creation, async IO,
-  runtime evaluation, or renderer-resource ownership
+  playback state, or renderer-resource ownership
+- renderer-free CPU animation clip sampling that evaluates one
+  `LoadedAnimationClipAsset` against a matching `LoadedSkeletonAsset` into
+  owned local joint matrices, model joint matrices, and final skinning palette
+  matrices using deterministic clamp/loop playback and simple local transform
+  interpolation
+- a renderer-integration animation pose palette adapter that exposes sampled
+  CPU skinning/model matrices as a borrowed `SkinningPaletteDesc` view for
+  frame-local animated draw submission without creating draw items or owning
+  playback state
 - a dev-only loaded asset importer that reads tiny tracked ASCII mesh,
   texture, and material fixtures into `LoadedAssetPayload` values, proving the
   first real source-file-to-payload path without adopting a production asset
@@ -168,7 +177,7 @@ Implemented pieces:
   missing normals, requiring or explicitly defaulting UV0, copying vertex
   colors, extracting bind-pose skeletons, skinned mesh weights, and raw
   animation clip tracks, and validating source descriptors and payload data
-  while leaving tangents, UV1+, runtime animation evaluation, async IO, and
+  while leaving tangents, UV1+, runtime animation playback/blending, async IO, and
   renderer-resource creation to later slices
 - an stb-backed direct texture image importer that reads image files into the
   renderer-free `LoadedTextureAsset` contract as tightly packed single-mip
@@ -408,7 +417,7 @@ Still future work:
 - a scheduler that consumes selected budget profiles or offline summary tooling
   for imported streaming tick traces
 - production cooked manifest formats, richer glTF material graph import,
-  runtime animation sampling/blending/compression, packed assets, and
+  runtime animation playback controllers/blending/compression, packed assets, and
   engine-owned renderer-resource lifetime policy
 - production terrain streaming policy and editor-owned residency controls
 - real engine-owned mesh/material/texture creation and lifetime policy

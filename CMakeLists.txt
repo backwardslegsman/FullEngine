@@ -126,6 +126,8 @@ add_library(full_engine STATIC
     src/engine/assets/CookedAssetManifestSummary.hpp
     src/engine/assets/LoadedAssetPayload.cpp
     src/engine/assets/LoadedAssetPayload.hpp
+    src/engine/assets/LoadedAnimationSampler.cpp
+    src/engine/assets/LoadedAnimationSampler.hpp
     src/engine/assets/LoadedAssetImporter.cpp
     src/engine/assets/LoadedAssetImporter.hpp
     src/engine/assets/AssimpLoadedAssetImporter.cpp
@@ -142,6 +144,8 @@ add_library(full_engine STATIC
     src/engine/core/Engine.hpp
     src/engine/jobs/JobQueue.cpp
     src/engine/jobs/JobQueue.hpp
+    src/engine/renderer_integration/AnimationPosePalette.cpp
+    src/engine/renderer_integration/AnimationPosePalette.hpp
     src/engine/renderer_integration/ChunkTerrainHandleMap.cpp
     src/engine/renderer_integration/ChunkTerrainHandleMap.hpp
     src/engine/renderer_integration/AssetSourceUploadIntent.cpp
