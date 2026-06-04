@@ -787,10 +787,13 @@ move gameplay, streaming policy, or editor concepts into renderer internals.
   single-mip RGBA8 `LoadedTextureAsset` payloads, then passed through the
   existing upload planner/executor path without exposing stb or renderer
   handles through asset-layer public APIs.
-- Next slice: map glTF material/image references onto `AssetSourceCatalog`
-  texture sources and `LoadedMaterialAsset` records. Tangents/UVs, skeletal
-  meshes, and animation clips should follow only after their payload contracts
-  are explicit.
+- Forty-third slice is implemented: glTF material/image references can now be
+  extracted through Assimp into texture source records and material payloads,
+  with direct image metadata inspected for the existing stb texture importer
+  path and texture dependencies represented as engine asset IDs.
+- Next slice: extend material/mesh payload contracts for UVs and imported
+  material texture slots beyond base color. Tangents, skeletal meshes, and
+  animation clips should follow only after their payload contracts are explicit.
 - Initial sample integration is in place: the debug UI can run the
   manifest-aware streaming coordinator once or continuously from camera
   position, display readiness/load/staging/streaming queue counters, and keep

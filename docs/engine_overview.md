@@ -170,6 +170,10 @@ Implemented pieces:
   RGBA8 bytes, validating source descriptors and payload data while leaving
   glTF image references, embedded images, mip generation, compression, async
   IO, and renderer-resource creation to later slices
+- a glTF material/image reference extractor that maps referenced base-color
+  images into texture `AssetSourceRecord`s, emits `LoadedMaterialAsset`
+  payloads with texture asset IDs, and leaves actual image decoding/upload to
+  the existing stb and renderer-integration paths
 - upload-intent planning that translates mapped source descriptors into public
   renderer mesh/texture/material upload expectations without source bytes,
   renderer handles, renderer calls, or resource creation
@@ -392,7 +396,7 @@ Still future work:
 - async loading, streaming jobs, and IO
 - a scheduler that consumes selected budget profiles or offline summary tooling
   for imported streaming tick traces
-- production cooked manifest formats, glTF material/image reference import,
+- production cooked manifest formats, richer glTF material graph import,
   skeletal/animated mesh import, packed assets, and renderer-resource creation
   policy
 - production terrain streaming policy and editor-owned residency controls

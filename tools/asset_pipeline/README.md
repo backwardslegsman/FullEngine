@@ -13,11 +13,14 @@ layer now has two importer seams behind the same
 - an stb-backed direct image importer that decodes texture files into tightly
   packed, single-mip RGBA8 `LoadedTextureAsset` payloads with caller-authored
   semantic/color-space metadata
+- a glTF material/image reference extractor that maps referenced base-color
+  images into texture source records and emits material payloads that refer to
+  those textures by engine asset ID
 
 Renderer integration can use loaded payloads to produce mesh/texture/material
 handles through caller-owned renderer uploads and the existing completion
-reconcile path. glTF material image reference extraction, embedded images,
-mip generation, compression/KTX, production material authoring, tangents/UVs,
+reconcile path. Embedded glTF images, richer PBR material slots, UV/tangent
+payloads, mip generation, compression/KTX, production material authoring,
 skeletal meshes, animation clips, packed assets, async IO, and production
 packaging are still future work.
 

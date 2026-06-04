@@ -130,6 +130,8 @@ add_library(full_engine STATIC
     src/engine/assets/LoadedAssetImporter.hpp
     src/engine/assets/AssimpLoadedAssetImporter.cpp
     src/engine/assets/AssimpLoadedAssetImporter.hpp
+    src/engine/assets/GltfMaterialAssetImporter.cpp
+    src/engine/assets/GltfMaterialAssetImporter.hpp
     src/engine/assets/LoadedTextureImageImporter.cpp
     src/engine/assets/LoadedTextureImageImporter.hpp
     src/engine/assets/TerrainAssetCatalog.cpp
