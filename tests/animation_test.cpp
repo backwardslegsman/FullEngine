@@ -145,6 +145,11 @@ void meshAndDrawValidation(int& failures)
     full_renderer::SkinnedMeshDesc meshDesc = makeSkinnedMesh(skeleton, vertices, indices);
     expect(system.validateSkinnedMeshDesc(meshDesc), "valid skinned mesh is accepted", failures);
 
+    full_renderer::SkinnedMeshSectionDesc sections[1] = {{0, 3}};
+    meshDesc.sections = sections;
+    meshDesc.sectionCount = 1;
+    expect(system.validateSkinnedMeshDesc(meshDesc), "valid sectioned skinned mesh is accepted", failures);
+
     vertices[0].jointIndices[0] = 7.0f;
     expect(!system.validateSkinnedMeshDesc(meshDesc), "out-of-range joint index is rejected", failures);
     vertices[0].jointIndices[0] = 0.0f;
@@ -179,6 +184,10 @@ void meshAndDrawValidation(int& failures)
     draw.palette.skinningMatrices = &paletteMatrices[0][0];
     draw.palette.matrixCount = 2;
     expect(system.validateAnimatedDraws(&draw, 1), "valid animated draw is accepted", failures);
+
+    draw.sectionIndex = 1;
+    expect(!system.validateAnimatedDraws(&draw, 1), "animated draw rejects out-of-range section", failures);
+    draw.sectionIndex = 0;
 
     draw.palette.matrixCount = 1;
     expect(!system.validateAnimatedDraws(&draw, 1), "animated draw rejects short palette", failures);

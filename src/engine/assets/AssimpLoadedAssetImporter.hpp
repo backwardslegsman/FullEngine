@@ -91,7 +91,9 @@ const char* assimpLoadedAssetImportStatusName(
  * Skeletal imports produce one bind-pose `LoadedSkeletonAsset`, one
  * `LoadedSkinnedMeshAsset`, or one `LoadedAnimationClipAsset` depending on
  * `source.kind`; callers import the skeleton, skinned mesh, and animation clip
- * as separate source records even when they share a glTF file. Missing UV0 is
+ * as separate source records even when they share a glTF file. Skinned mesh
+ * imports aggregate convertible skinned meshes and skip unskinned meshes in
+ * mixed scenes. Missing UV0 is
  * rejected unless
  * `AssimpLoadedAssetImportOptions::defaultMissingUv0ToZero` is explicitly set.
  * Mesh order and face order follow Assimp's post-processed scene order. Parsed

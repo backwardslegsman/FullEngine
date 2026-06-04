@@ -165,6 +165,28 @@ AssetSourceDescriptorValidationResult validateSkinnedMeshDescriptor(
         return AssetSourceDescriptorValidationResult::InvalidSkinnedMeshBounds;
     }
 
+    if (descriptor.sectionCount > kMaxAssetSourceSkinnedMeshSections)
+    {
+        return AssetSourceDescriptorValidationResult::InvalidSkinnedMeshSectionCount;
+    }
+
+    for (std::uint32_t index = 0; index < descriptor.sectionCount; ++index)
+    {
+        const AssetSourceSkinnedMeshSectionDescriptor& section = descriptor.sections[index];
+        if (!isValid(section.materialAssetId))
+        {
+            return AssetSourceDescriptorValidationResult::InvalidSkinnedMeshSectionMaterialRef;
+        }
+        if (section.indexCount == 0 ||
+            (section.firstIndex % 3U) != 0U ||
+            (section.indexCount % 3U) != 0U ||
+            section.firstIndex > descriptor.indexCount ||
+            section.indexCount > descriptor.indexCount - section.firstIndex)
+        {
+            return AssetSourceDescriptorValidationResult::InvalidSkinnedMeshSectionRange;
+        }
+    }
+
     return AssetSourceDescriptorValidationResult::Success;
 }
 
@@ -282,6 +304,12 @@ const char* assetSourceDescriptorValidationResultName(
         return "InvalidSkinnedMeshSkeletonRef";
     case AssetSourceDescriptorValidationResult::InvalidSkinnedMeshBounds:
         return "InvalidSkinnedMeshBounds";
+    case AssetSourceDescriptorValidationResult::InvalidSkinnedMeshSectionCount:
+        return "InvalidSkinnedMeshSectionCount";
+    case AssetSourceDescriptorValidationResult::InvalidSkinnedMeshSectionMaterialRef:
+        return "InvalidSkinnedMeshSectionMaterialRef";
+    case AssetSourceDescriptorValidationResult::InvalidSkinnedMeshSectionRange:
+        return "InvalidSkinnedMeshSectionRange";
     case AssetSourceDescriptorValidationResult::InvalidAnimationClipSkeletonRef:
         return "InvalidAnimationClipSkeletonRef";
     case AssetSourceDescriptorValidationResult::InvalidAnimationClipTrackCount:

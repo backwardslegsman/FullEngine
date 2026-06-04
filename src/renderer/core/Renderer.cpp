@@ -507,6 +507,7 @@ RendererResult appendSkinnedShadowCasterBatches(
             SkinnedShadowDrawBatch batch;
             batch.mesh = draw.mesh;
             batch.material = draw.material;
+            batch.sectionIndex = draw.sectionIndex;
             batch.bounds = draw.bounds;
             batch.model = draw.model;
             batch.palette = draw.palette;

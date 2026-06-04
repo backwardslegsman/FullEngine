@@ -71,6 +71,17 @@ bool hasUsableNormal(const float normal[3]) noexcept
     return std::isfinite(lengthSquared) && lengthSquared >= kMinimumNormalLengthSquared;
 }
 
+bool isValidSkinnedMeshSection(
+    const SkinnedMeshSectionDesc& section,
+    const std::uint32_t indexCount) noexcept
+{
+    return section.indexCount > 0 &&
+        (section.firstIndex % 3U) == 0U &&
+        (section.indexCount % 3U) == 0U &&
+        section.firstIndex <= indexCount &&
+        section.indexCount <= indexCount - section.firstIndex;
+}
+
 void transformPoint(const float matrix[16], const float point[3], float out[3]) noexcept
 {
     out[0] = matrix[0] * point[0] + matrix[4] * point[1] + matrix[8] * point[2] + matrix[12];
@@ -198,7 +209,8 @@ bool AnimationSystem::validateSkinnedMeshDesc(const SkinnedMeshDesc& desc) const
 {
     const SkeletonRecord* skeleton = findSkeleton(desc.skeleton);
     if (skeleton == nullptr || desc.vertices == nullptr || desc.vertexCount == 0 ||
-        desc.indices == nullptr || desc.indexCount == 0 || (desc.indexCount % 3U) != 0U)
+        desc.indices == nullptr || desc.indexCount == 0 || (desc.indexCount % 3U) != 0U ||
+        (desc.sectionCount > 0 && desc.sections == nullptr))
     {
         return false;
     }
@@ -242,6 +254,14 @@ bool AnimationSystem::validateSkinnedMeshDesc(const SkinnedMeshDesc& desc) const
             return false;
         }
     }
+
+    for (std::uint32_t sectionIndex = 0; sectionIndex < desc.sectionCount; ++sectionIndex)
+    {
+        if (!isValidSkinnedMeshSection(desc.sections[sectionIndex], desc.indexCount))
+        {
+            return false;
+        }
+    }
     return true;
 }
 
@@ -256,6 +276,7 @@ void AnimationSystem::registerSkinnedMesh(const SkinnedMeshHandle handle, const 
     metadata.handle = handle;
     metadata.skeleton = desc.skeleton;
     metadata.jointCount = static_cast<std::uint32_t>(skeleton->joints.size());
+    metadata.sectionCount = desc.sectionCount > 0 ? desc.sectionCount : 1U;
     metadata.active = true;
     skinnedMeshes_.push_back(metadata);
 }
@@ -293,6 +314,7 @@ bool AnimationSystem::validateAnimatedDraws(const AnimatedDrawItem* draws, const
         if (mesh == nullptr ||
             findSkeleton(mesh->skeleton) == nullptr ||
             !isValid(draw.material) ||
+            draw.sectionIndex >= mesh->sectionCount ||
             !isFiniteArray(draw.model, 16) ||
             !isValidAabb(draw.bounds) ||
             !scene::isValidFadeDesc(draw.fade) ||

@@ -120,10 +120,26 @@ bool descriptorMatches(
     const LoadedSkinnedMeshAsset& mesh,
     const AssetSourceSkinnedMeshDescriptor& descriptor) noexcept
 {
-    return mesh.vertices.size() == descriptor.vertexCount &&
-        mesh.indices.size() == descriptor.indexCount &&
-        mesh.skeletonAssetId == descriptor.skeletonAssetId &&
-        sameBounds(mesh.localBounds, descriptor.localBounds);
+    if (mesh.vertices.size() != descriptor.vertexCount ||
+        mesh.indices.size() != descriptor.indexCount ||
+        !(mesh.skeletonAssetId == descriptor.skeletonAssetId) ||
+        !sameBounds(mesh.localBounds, descriptor.localBounds) ||
+        mesh.sections.size() != descriptor.sectionCount)
+    {
+        return false;
+    }
+
+    for (std::uint32_t index = 0; index < descriptor.sectionCount; ++index)
+    {
+        if (!(mesh.sections[index].materialAssetId == descriptor.sections[index].materialAssetId) ||
+            mesh.sections[index].firstIndex != descriptor.sections[index].firstIndex ||
+            mesh.sections[index].indexCount != descriptor.sections[index].indexCount)
+        {
+            return false;
+        }
+    }
+
+    return true;
 }
 
 bool descriptorMatches(
@@ -387,7 +403,8 @@ bool appendSkinnedMesh(
     LoadedSkinnedMeshAsset& aggregate,
     const aiMesh& mesh,
     const std::map<std::string, std::uint16_t>& jointIndices,
-    const AssimpLoadedAssetImportOptions& options)
+    const AssimpLoadedAssetImportOptions& options,
+    const AssetSourceSkinnedMeshSectionDescriptor* const sectionDescriptor)
 {
     std::vector<std::vector<std::pair<std::uint16_t, float>>> weights(mesh.mNumVertices);
     for (unsigned int boneIndex = 0; boneIndex < mesh.mNumBones; ++boneIndex)
@@ -459,13 +476,24 @@ bool appendSkinnedMesh(
         aggregate.vertices.push_back(vertex);
     }
 
-    aggregate.indices.reserve(aggregate.indices.size() + static_cast<std::size_t>(mesh.mNumFaces) * 3U);
+    const std::uint32_t firstIndex = static_cast<std::uint32_t>(aggregate.indices.size());
+    const std::uint32_t indexCount = static_cast<std::uint32_t>(mesh.mNumFaces * 3U);
+    aggregate.indices.reserve(aggregate.indices.size() + indexCount);
     for (unsigned int faceIndex = 0; faceIndex < mesh.mNumFaces; ++faceIndex)
     {
         const aiFace& face = mesh.mFaces[faceIndex];
         aggregate.indices.push_back(static_cast<std::uint16_t>(baseVertex + face.mIndices[0]));
         aggregate.indices.push_back(static_cast<std::uint16_t>(baseVertex + face.mIndices[1]));
         aggregate.indices.push_back(static_cast<std::uint16_t>(baseVertex + face.mIndices[2]));
+    }
+
+    if (sectionDescriptor != nullptr)
+    {
+        LoadedSkinnedMeshSection section;
+        section.materialAssetId = sectionDescriptor->materialAssetId;
+        section.firstIndex = firstIndex;
+        section.indexCount = indexCount;
+        aggregate.sections.push_back(section);
     }
 
     return true;
@@ -515,7 +543,7 @@ bool convertSceneSkeleton(const aiScene& scene, const AssetId id, LoadedSkeleton
 bool convertSceneSkinnedMeshes(
     const aiScene& scene,
     const AssetId id,
-    const AssetId skeletonAssetId,
+    const AssetSourceSkinnedMeshDescriptor& descriptor,
     const AssimpLoadedAssetImportOptions& options,
     LoadedSkinnedMeshAsset& mesh)
 {
@@ -532,20 +560,43 @@ bool convertSceneSkinnedMeshes(
 
     mesh = {};
     mesh.id = id;
-    mesh.skeletonAssetId = skeletonAssetId;
+    mesh.skeletonAssetId = descriptor.skeletonAssetId;
+    bool appendedAnySkinnedMesh = false;
+    std::uint32_t importedSectionIndex = 0;
     for (unsigned int meshIndex = 0; meshIndex < scene.mNumMeshes; ++meshIndex)
     {
         const aiMesh* const sourceMesh = scene.mMeshes[meshIndex];
-        if (sourceMesh == nullptr ||
-            !canConvertSkinnedMesh(*sourceMesh, options) ||
-            !canAppendMesh(mesh, *sourceMesh) ||
-            !appendSkinnedMesh(mesh, *sourceMesh, jointIndices, options))
+        if (sourceMesh == nullptr)
         {
             return false;
         }
+
+        if (sourceMesh->mNumBones == 0 || sourceMesh->mBones == nullptr)
+        {
+            continue;
+        }
+
+        if (descriptor.sectionCount > 0 && importedSectionIndex >= descriptor.sectionCount)
+        {
+            return false;
+        }
+        const AssetSourceSkinnedMeshSectionDescriptor* const sectionDescriptor =
+            descriptor.sectionCount > 0 ? &descriptor.sections[importedSectionIndex] : nullptr;
+
+        if (!canConvertSkinnedMesh(*sourceMesh, options) ||
+            !canAppendMesh(mesh, *sourceMesh) ||
+            !appendSkinnedMesh(mesh, *sourceMesh, jointIndices, options, sectionDescriptor))
+        {
+            return false;
+        }
+        appendedAnySkinnedMesh = true;
+        ++importedSectionIndex;
     }
 
-    if (mesh.vertices.empty() || mesh.indices.empty())
+    if (!appendedAnySkinnedMesh ||
+        mesh.vertices.empty() ||
+        mesh.indices.empty() ||
+        (descriptor.sectionCount > 0 && importedSectionIndex != descriptor.sectionCount))
     {
         return false;
     }
@@ -855,7 +906,7 @@ AssimpLoadedAssetImportResult importLoadedAssetPayloadWithAssimp(
         converted = convertSceneSkinnedMeshes(
             *scene,
             source.id,
-            source.descriptor.skinnedMesh.skeletonAssetId,
+            source.descriptor.skinnedMesh,
             options,
             result.payload.skinnedMesh);
         break;

@@ -13,6 +13,7 @@ struct SkinnedMeshMetadata
     SkinnedMeshHandle handle;
     SkeletonHandle skeleton;
     std::uint32_t jointCount = 0;
+    std::uint32_t sectionCount = 0;
     bool active = false;
 };
 

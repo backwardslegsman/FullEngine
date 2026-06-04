@@ -33,6 +33,7 @@ struct SkinnedShadowDrawBatch
 {
     SkinnedMeshHandle mesh;
     MaterialHandle material;
+    std::uint32_t sectionIndex = 0;
     Aabb bounds;
     const float* model = nullptr;
     SkinningPaletteDesc palette;

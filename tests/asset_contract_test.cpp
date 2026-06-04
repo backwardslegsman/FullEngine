@@ -253,6 +253,21 @@ void skeletonAndSkinnedContractValidation(int& failures)
     full_renderer::SkinnedMeshDesc desc = makeSkinnedMesh(skeleton, vertices, indices);
     expect(system.validateSkinnedMeshDesc(desc), "valid skinned mesh contract is accepted", failures);
 
+    full_renderer::SkinnedMeshSectionDesc section;
+    section.firstIndex = 0;
+    section.indexCount = 3;
+    desc.sections = &section;
+    desc.sectionCount = 1;
+    expect(system.validateSkinnedMeshDesc(desc), "valid skinned mesh section contract is accepted", failures);
+
+    section.indexCount = 2;
+    expect(!system.validateSkinnedMeshDesc(desc), "non-triangle skinned mesh section is rejected", failures);
+    section.indexCount = 3;
+    desc.sections = nullptr;
+    expect(!system.validateSkinnedMeshDesc(desc), "section count with null section pointer is rejected", failures);
+    desc.sections = &section;
+    desc.sectionCount = 0;
+
     vertices[0].colorLinear[0] = 2.0f;
     expect(!system.validateSkinnedMeshDesc(desc), "skinned vertex color outside [0,1] is rejected", failures);
     vertices[0].colorLinear[0] = 1.0f;

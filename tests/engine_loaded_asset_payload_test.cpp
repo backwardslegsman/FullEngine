@@ -159,6 +159,13 @@ full_engine::LoadedSkinnedMeshAsset skinnedMeshAsset()
     return mesh;
 }
 
+full_engine::LoadedSkinnedMeshAsset sectionedSkinnedMeshAsset()
+{
+    full_engine::LoadedSkinnedMeshAsset mesh = skinnedMeshAsset();
+    mesh.sections.push_back({asset(30), 0, 3});
+    return mesh;
+}
+
 full_engine::LoadedAnimationJointTrack animationTrack(const std::uint16_t jointIndex)
 {
     full_engine::LoadedAnimationJointTrack track;
@@ -238,6 +245,11 @@ void testValidPayloads(std::vector<std::string>& failures)
         full_engine::validateLoadedSkinnedMeshAsset(skinnedMeshAsset()) ==
             full_engine::LoadedAssetPayloadValidationResult::Success,
         "valid skinned mesh payload passes",
+        failures);
+    expect(
+        full_engine::validateLoadedSkinnedMeshAsset(sectionedSkinnedMeshAsset()) ==
+            full_engine::LoadedAssetPayloadValidationResult::Success,
+        "valid sectioned skinned mesh payload passes",
         failures);
     expect(
         full_engine::validateLoadedAnimationClipAsset(animationClipAsset()) ==
@@ -632,6 +644,38 @@ void testInvalidSkinnedMeshPayloads(std::vector<std::string>& failures)
             full_engine::LoadedAssetPayloadValidationResult::InvalidSkinnedMeshBounds,
         "skinned mesh payload rejects inverted bounds",
         failures);
+
+    mesh = sectionedSkinnedMeshAsset();
+    mesh.sections[0].materialAssetId = {};
+    expect(
+        full_engine::validateLoadedSkinnedMeshAsset(mesh) ==
+            full_engine::LoadedAssetPayloadValidationResult::InvalidSkinnedMeshSectionMaterialRef,
+        "skinned mesh payload rejects section default material id",
+        failures);
+
+    mesh = sectionedSkinnedMeshAsset();
+    mesh.sections[0].indexCount = 0;
+    expect(
+        full_engine::validateLoadedSkinnedMeshAsset(mesh) ==
+            full_engine::LoadedAssetPayloadValidationResult::InvalidSkinnedMeshSectionRange,
+        "skinned mesh payload rejects empty section range",
+        failures);
+
+    mesh = sectionedSkinnedMeshAsset();
+    mesh.sections[0].indexCount = 2;
+    expect(
+        full_engine::validateLoadedSkinnedMeshAsset(mesh) ==
+            full_engine::LoadedAssetPayloadValidationResult::InvalidSkinnedMeshSectionRange,
+        "skinned mesh payload rejects non-triangle section range",
+        failures);
+
+    mesh = sectionedSkinnedMeshAsset();
+    mesh.sections[0].firstIndex = 3;
+    expect(
+        full_engine::validateLoadedSkinnedMeshAsset(mesh) ==
+            full_engine::LoadedAssetPayloadValidationResult::InvalidSkinnedMeshSectionRange,
+        "skinned mesh payload rejects out-of-bounds section range",
+        failures);
 }
 
 void testInvalidAnimationClipPayloads(std::vector<std::string>& failures)
@@ -840,6 +884,8 @@ void testResultNames(std::vector<std::string>& failures)
         full_engine::LoadedAssetPayloadValidationResult::InvalidSkinnedMeshVertexData,
         full_engine::LoadedAssetPayloadValidationResult::InvalidSkinnedMeshWeights,
         full_engine::LoadedAssetPayloadValidationResult::InvalidSkinnedMeshBounds,
+        full_engine::LoadedAssetPayloadValidationResult::InvalidSkinnedMeshSectionMaterialRef,
+        full_engine::LoadedAssetPayloadValidationResult::InvalidSkinnedMeshSectionRange,
         full_engine::LoadedAssetPayloadValidationResult::InvalidAnimationClipSkeletonRef,
         full_engine::LoadedAssetPayloadValidationResult::InvalidAnimationClipDuration,
         full_engine::LoadedAssetPayloadValidationResult::InvalidAnimationClipTicksPerSecond,

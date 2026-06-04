@@ -89,6 +89,7 @@ private:
     {
         bgfx::VertexBufferHandle vertexBuffer = BGFX_INVALID_HANDLE;
         bgfx::IndexBufferHandle indexBuffer = BGFX_INVALID_HANDLE;
+        std::vector<SkinnedMeshSectionDesc> sections;
         std::uint64_t estimatedBytes = 0;
         bool active = false;
     };
@@ -100,6 +101,7 @@ private:
     };
     struct SkinnedMeshResource
     {
+        std::vector<SkinnedMeshSectionDesc> sections;
         std::uint64_t estimatedBytes = 0;
         bool active = false;
     };

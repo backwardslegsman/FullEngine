@@ -27,11 +27,19 @@ mesh import and raw animation clip import are available through Assimp. The
 engine asset layer can sample one loaded animation clip against a matching
 skeleton into CPU local/model/skinning palette matrices for later renderer
 submission, and renderer integration can expose those sampled matrices as a
-borrowed frame-local `SkinningPaletteDesc` view.
-Runtime playback controllers, blending, animation compression, embedded glTF
-images, tangent payloads, UV1+ sets, mip generation, compression/KTX,
-production material authoring, packed assets, async IO, and production
-packaging are still future work.
+borrowed frame-local `SkinningPaletteDesc` view. A minimal retained playback
+state can advance one clip per caller-defined instance and retain the latest
+pose/palette without owning draw submission. The sample debug UI can now run a
+tiny glTF skeletal smoke path that imports fixture payloads, uploads skeleton
+and skinned mesh resources through caller-owned renderer APIs, ticks playback,
+and submits one imported `AnimatedDrawItem`. It can also run a wolf fixture
+smoke path that aggregates the skinned meshes from a mixed glTF scene while
+skipping unskinned meshes for the skinned import mode, preserves skinned mesh
+material sections, and submits one fallback-material animated draw per section.
+Blending, animation compression, embedded glTF
+images, tangent payloads, UV1+ sets, real glTF material-to-section binding, mip
+generation, compression/KTX, production material authoring, packed assets,
+async IO, and production packaging are still future work.
 
 Future validation tools should consume authored assets, convert them to the
 renderer-facing contracts in `docs/assets.md`, and report actionable errors

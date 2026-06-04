@@ -2791,6 +2791,17 @@ SkinnedMeshHandle BgfxRenderDevice::createSkinnedMesh(const SkinnedMeshDesc& des
         resources::estimateBufferBytes(desc.indexCount, static_cast<std::uint32_t>(sizeof(std::uint16_t)));
 #endif
 
+    if (desc.sectionCount == 0)
+    {
+        SkinnedMeshSectionDesc section;
+        section.firstIndex = 0;
+        section.indexCount = desc.indexCount;
+        mesh.sections.push_back(section);
+    }
+    else
+    {
+        mesh.sections.assign(desc.sections, desc.sections + desc.sectionCount);
+    }
     mesh.active = true;
     skinnedMeshes_.push_back(mesh);
     updateLiveResourceStats();
@@ -2823,6 +2834,7 @@ void BgfxRenderDevice::destroySkinnedMesh(const SkinnedMeshHandle handle) noexce
 
     mesh->active = false;
     mesh->estimatedBytes = 0;
+    mesh->sections.clear();
     updateLiveResourceStats();
 }
 
@@ -3365,7 +3377,8 @@ RendererResult BgfxRenderDevice::submitSsao(
         bgfx::setUniform(ssaoDepthParamsUniform_, depthParams);
         bgfx::setTransform(draw.model);
         bgfx::setVertexBuffer(0, mesh->vertexBuffer);
-        bgfx::setIndexBuffer(mesh->indexBuffer);
+        const SkinnedMeshSectionDesc& section = mesh->sections[draw.sectionIndex];
+        bgfx::setIndexBuffer(mesh->indexBuffer, section.firstIndex, section.indexCount);
         bgfx::setState(kDepthCaptureState);
         bgfx::submit(kSsaoDepthViewId, ssaoDepthSkinnedProgram_);
         ++stats_.ssaoDepthPassDraws;
@@ -3685,7 +3698,8 @@ RendererResult BgfxRenderDevice::submitSceneDepthCapture(
         bgfx::setUniform(ssaoDepthParamsUniform_, depthParams);
         bgfx::setTransform(draw.model);
         bgfx::setVertexBuffer(0, mesh->vertexBuffer);
-        bgfx::setIndexBuffer(mesh->indexBuffer);
+        const SkinnedMeshSectionDesc& section = mesh->sections[draw.sectionIndex];
+        bgfx::setIndexBuffer(mesh->indexBuffer, section.firstIndex, section.indexCount);
         bgfx::setState(kDepthCaptureState);
         bgfx::submit(kDecalDepthViewId, ssaoDepthSkinnedProgram_);
     }
@@ -4332,7 +4346,8 @@ RendererResult BgfxRenderDevice::submitSelectionOutline(
         bgfx::setUniform(skinningPaletteUniform_, palette, kMaxSkinningJoints);
         bgfx::setTransform(draw.model);
         bgfx::setVertexBuffer(0, mesh->vertexBuffer);
-        bgfx::setIndexBuffer(mesh->indexBuffer);
+        const SkinnedMeshSectionDesc& section = mesh->sections[draw.sectionIndex];
+        bgfx::setIndexBuffer(mesh->indexBuffer, section.firstIndex, section.indexCount);
         bgfx::setState(kMaskDepthPrepassState);
         bgfx::submit(kSelectionMaskViewId, selectionMaskSkinnedProgram_);
     }
@@ -4429,7 +4444,8 @@ RendererResult BgfxRenderDevice::submitSelectionOutline(
         bgfx::setUniform(skinningPaletteUniform_, palette, kMaxSkinningJoints);
         bgfx::setTransform(draw.model);
         bgfx::setVertexBuffer(0, mesh->vertexBuffer);
-        bgfx::setIndexBuffer(mesh->indexBuffer);
+        const SkinnedMeshSectionDesc& section = mesh->sections[draw.sectionIndex];
+        bgfx::setIndexBuffer(mesh->indexBuffer, section.firstIndex, section.indexCount);
         bgfx::setState(kMaskState);
         bgfx::submit(kSelectionMaskViewId, selectionMaskSkinnedProgram_);
         ++stats_.selectedSkinnedMeshDraws;
@@ -5341,7 +5357,8 @@ RendererResult BgfxRenderDevice::submitInstanced(
                     bgfx::setUniform(skinningPaletteUniform_, palette, kMaxSkinningJoints);
                     bgfx::setTransform(batch.model);
                     bgfx::setVertexBuffer(0, mesh->vertexBuffer);
-                    bgfx::setIndexBuffer(mesh->indexBuffer);
+                    const SkinnedMeshSectionDesc& section = mesh->sections[batch.sectionIndex];
+                    bgfx::setIndexBuffer(mesh->indexBuffer, section.firstIndex, section.indexCount);
                     bgfx::setState(
                         BGFX_STATE_WRITE_RGB |
                         BGFX_STATE_WRITE_Z |
@@ -5489,7 +5506,8 @@ RendererResult BgfxRenderDevice::submitInstanced(
             terrainShadowsEnabled && material->desc.lit && draw.receivesShadow);
         bgfx::setTransform(draw.model);
         bgfx::setVertexBuffer(0, mesh->vertexBuffer);
-        bgfx::setIndexBuffer(mesh->indexBuffer);
+        const SkinnedMeshSectionDesc& section = mesh->sections[draw.sectionIndex];
+        bgfx::setIndexBuffer(mesh->indexBuffer, section.firstIndex, section.indexCount);
         bgfx::setState(forwardMeshStateForMaterialAndFade(material->desc, fadeState));
         bgfx::submit(kForwardViewId, skinnedForwardProgram_);
 #endif

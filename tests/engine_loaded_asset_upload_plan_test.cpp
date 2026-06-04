@@ -152,6 +152,7 @@ full_engine::LoadedSkinnedMeshAsset skinnedMeshAsset()
     mesh.localBounds.max[0] = 1.0f;
     mesh.localBounds.max[1] = 1.0f;
     mesh.localBounds.max[2] = 0.0f;
+    mesh.sections.push_back({asset(30), 0, 3});
     return mesh;
 }
 
@@ -266,6 +267,10 @@ void testValidPayloadsPlanUploadWork(std::vector<std::string>& failures)
     expect(skinned.skinnedMesh.indices.size() == 3, "skinned upload work copies index count", failures);
     expect(skinned.skinnedMesh.desc.vertices == skinned.skinnedMesh.vertices.data(), "skinned descriptor points into owned vertices", failures);
     expect(skinned.skinnedMesh.desc.indices == skinned.skinnedMesh.indices.data(), "skinned descriptor points into owned indices", failures);
+    expect(skinned.skinnedMesh.sections.size() == 1, "skinned upload work copies section count", failures);
+    expect(skinned.skinnedMesh.desc.sections == skinned.skinnedMesh.sections.data(), "skinned descriptor points into owned sections", failures);
+    expect(skinned.skinnedMesh.desc.sectionCount == 1, "skinned descriptor copies section count", failures);
+    expect(skinned.skinnedMesh.sections[0].firstIndex == 0 && skinned.skinnedMesh.sections[0].indexCount == 3, "skinned upload copies section range", failures);
     expect(skinned.skinnedMesh.vertices[0].jointIndices[1] == 1.0f, "skinned upload copies joint indices as renderer floats", failures);
     expect(skinned.skinnedMesh.vertices[0].jointWeights[1] == 0.25f, "skinned upload copies joint weights", failures);
 }

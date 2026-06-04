@@ -10,6 +10,9 @@ namespace full_engine
 /** @brief Maximum texture asset references carried by one material source descriptor. */
 constexpr std::uint32_t kMaxAssetSourceMaterialTextureRefs = 8;
 
+/** @brief Maximum material sections described by one skinned mesh source descriptor. */
+constexpr std::uint32_t kMaxAssetSourceSkinnedMeshSections = 32;
+
 /**
  * @brief Renderer-free local-space bounds for a mesh source.
  *
@@ -47,6 +50,19 @@ struct AssetSourceSkeletonDescriptor
 };
 
 /** @brief Renderer-free skinned mesh source metadata. */
+struct AssetSourceSkinnedMeshSectionDescriptor
+{
+    /** @brief Material asset expected for this imported skinned mesh section. */
+    AssetId materialAssetId = {};
+
+    /** @brief First index in the aggregate skinned index buffer. */
+    std::uint32_t firstIndex = 0;
+
+    /** @brief Number of triangle indices in this section. */
+    std::uint32_t indexCount = 0;
+};
+
+/** @brief Renderer-free skinned mesh source metadata. */
 struct AssetSourceSkinnedMeshDescriptor
 {
     /** @brief Expected vertex count. Zero is invalid. */
@@ -60,6 +76,12 @@ struct AssetSourceSkinnedMeshDescriptor
 
     /** @brief Expected mesh-local bounds in meters. */
     AssetSourceBounds localBounds = {};
+
+    /** @brief Ordered material sections expected from the imported skinned meshes. */
+    std::array<AssetSourceSkinnedMeshSectionDescriptor, kMaxAssetSourceSkinnedMeshSections> sections = {};
+
+    /** @brief Number of active material section descriptors. Zero means no section contract. */
+    std::uint32_t sectionCount = 0;
 };
 
 /** @brief Renderer-free animation clip source metadata. */
@@ -252,6 +274,9 @@ enum class AssetSourceDescriptorValidationResult
     InvalidSkinnedMeshCounts,
     InvalidSkinnedMeshSkeletonRef,
     InvalidSkinnedMeshBounds,
+    InvalidSkinnedMeshSectionCount,
+    InvalidSkinnedMeshSectionMaterialRef,
+    InvalidSkinnedMeshSectionRange,
     InvalidAnimationClipSkeletonRef,
     InvalidAnimationClipTrackCount,
     InvalidAnimationClipDuration,

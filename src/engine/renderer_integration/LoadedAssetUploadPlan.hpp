@@ -130,6 +130,9 @@ struct LoadedSkinnedMeshUploadWork
     /** @brief Owned renderer-facing 16-bit triangle indices. */
     std::vector<std::uint16_t> indices;
 
+    /** @brief Owned renderer-facing skinned mesh draw sections. */
+    std::vector<full_renderer::SkinnedMeshSectionDesc> sections;
+
     /** @brief Descriptor view pointing into `vertices` and `indices`. */
     full_renderer::SkinnedMeshDesc desc = {};
 };

@@ -1,11 +1,15 @@
 #include "full_renderer/Renderer.hpp"
 
+#include "engine/assets/AssimpLoadedAssetImporter.hpp"
 #include "engine/assets/CookedAssetManifest.hpp"
 #include "engine/assets/CookedAssetManifestJson.hpp"
 #include "engine/assets/CookedAssetManifestSummary.hpp"
 #include "engine/assets/AssetSourceCatalog.hpp"
 #include "engine/jobs/JobQueue.hpp"
+#include "engine/renderer_integration/AnimationPlaybackState.hpp"
 #include "engine/renderer_integration/ChunkTerrainHandleMap.hpp"
+#include "engine/renderer_integration/LoadedAssetUploadExecutor.hpp"
+#include "engine/renderer_integration/LoadedAssetUploadPlan.hpp"
 #include "engine/renderer_integration/TerrainAssetResolver.hpp"
 #include "engine/renderer_integration/TerrainChunkRequests.hpp"
 #include "engine/renderer_integration/TerrainDescriptorBuilder.hpp"
@@ -74,6 +78,7 @@
 #include <cstdint>
 #include <cstring>
 #include <iostream>
+#include <iterator>
 #include <memory>
 #include <string>
 #include <utility>
@@ -85,6 +90,14 @@
 
 #ifndef FULL_RENDERER_SAMPLE_DEV_ASSET_DIR
 #define FULL_RENDERER_SAMPLE_DEV_ASSET_DIR "assets/dev/sample_terrain"
+#endif
+
+#ifndef FULL_RENDERER_SAMPLE_ANIMATION_ASSET_DIR
+#define FULL_RENDERER_SAMPLE_ANIMATION_ASSET_DIR "assets/dev/sample_animation"
+#endif
+
+#ifndef FULL_RENDERER_SAMPLE_WOLF_ASSET_DIR
+#define FULL_RENDERER_SAMPLE_WOLF_ASSET_DIR "tests/fixtures/assets/33-gltf-wolf/gltf"
 #endif
 
 namespace
@@ -804,6 +817,48 @@ struct SampleDevAssetSmokeStatus
     std::size_t pendingCompletionCount = 0;
 };
 
+enum class SampleAnimationSmokeStep
+{
+    Idle,
+    ImportSkeleton,
+    ImportSkinnedMesh,
+    ImportAnimationClip,
+    UploadResources,
+    CreatePlayback,
+    TickPlayback,
+    Ready,
+    Failed,
+};
+
+struct SampleAnimationSmokeState
+{
+    bool attempted = false;
+    bool ready = false;
+    bool submitted = false;
+    SampleAnimationSmokeStep step = SampleAnimationSmokeStep::Idle;
+    full_engine::AssimpLoadedAssetImportStatus skeletonImportStatus =
+        full_engine::AssimpLoadedAssetImportStatus::InvalidArgument;
+    full_engine::AssimpLoadedAssetImportStatus skinnedMeshImportStatus =
+        full_engine::AssimpLoadedAssetImportStatus::InvalidArgument;
+    full_engine::AssimpLoadedAssetImportStatus clipImportStatus =
+        full_engine::AssimpLoadedAssetImportStatus::InvalidArgument;
+    full_engine::LoadedAssetUploadSummary uploadPlan = {};
+    full_engine::LoadedAssetUploadExecuteSummary uploadExecute = {};
+    full_engine::AnimationPlaybackAddStatus playbackAddStatus =
+        full_engine::AnimationPlaybackAddStatus::InvalidArgument;
+    full_engine::AnimationPlaybackTickStatus playbackTickStatus =
+        full_engine::AnimationPlaybackTickStatus::InvalidArgument;
+    full_engine::AnimationPlaybackSummary playbackSummary = {};
+    full_engine::LoadedSkeletonAsset skeleton = {};
+    full_engine::LoadedSkinnedMeshAsset skinnedMesh = {};
+    full_engine::LoadedAnimationClipAsset clip = {};
+    full_engine::RendererAssetHandleCatalog handles = {};
+    full_engine::AnimationPlaybackState playback = {};
+    full_renderer::SkeletonHandle skeletonHandle = {};
+    full_renderer::SkinnedMeshHandle skinnedMeshHandle = {};
+    std::vector<full_renderer::MaterialHandle> sectionMaterialHandles = {};
+};
+
 struct SampleTerrainResidencyControls
 {
     int selectedChunkX = 0;
@@ -877,9 +932,66 @@ full_engine::AssetId sampleTerrainSplatAssetId() noexcept
     return full_engine::AssetId{300000ULL};
 }
 
+full_engine::AssetId sampleAnimationSkeletonAssetId() noexcept
+{
+    return full_engine::AssetId{700000ULL};
+}
+
+full_engine::AssetId sampleAnimationSkinnedMeshAssetId() noexcept
+{
+    return full_engine::AssetId{700001ULL};
+}
+
+full_engine::AssetId sampleAnimationClipAssetId() noexcept
+{
+    return full_engine::AssetId{700002ULL};
+}
+
+full_engine::AssetId sampleWolfSkeletonAssetId() noexcept
+{
+    return full_engine::AssetId{710000ULL};
+}
+
+full_engine::AssetId sampleWolfSkinnedMeshAssetId() noexcept
+{
+    return full_engine::AssetId{710001ULL};
+}
+
+full_engine::AssetId sampleWolfClipAssetId() noexcept
+{
+    return full_engine::AssetId{710002ULL};
+}
+
+full_engine::AssetId sampleWolfSectionMaterialAssetId(const std::uint32_t sectionIndex) noexcept
+{
+    return full_engine::AssetId{710010ULL + static_cast<std::uint64_t>(sectionIndex)};
+}
+
 std::string sampleDevAssetPath(const char* const filename)
 {
     std::string path = FULL_RENDERER_SAMPLE_DEV_ASSET_DIR;
+    if (!path.empty() && path.back() != '/' && path.back() != '\\')
+    {
+        path.push_back('/');
+    }
+    path += filename;
+    return path;
+}
+
+std::string sampleWolfAssetPath(const char* const filename)
+{
+    std::string path = FULL_RENDERER_SAMPLE_WOLF_ASSET_DIR;
+    if (!path.empty() && path.back() != '/' && path.back() != '\\')
+    {
+        path.push_back('/');
+    }
+    path += filename;
+    return path;
+}
+
+std::string sampleAnimationAssetPath(const char* const filename)
+{
+    std::string path = FULL_RENDERER_SAMPLE_ANIMATION_ASSET_DIR;
     if (!path.empty() && path.back() != '/' && path.back() != '\\')
     {
         path.push_back('/');
@@ -936,6 +1048,332 @@ full_engine::AssetSourceRecord sampleTerrainAssetSource(
         break;
     }
     return record;
+}
+
+const char* sampleAnimationSmokeStepName(const SampleAnimationSmokeStep step) noexcept
+{
+    switch (step)
+    {
+    case SampleAnimationSmokeStep::Idle:
+        return "Idle";
+    case SampleAnimationSmokeStep::ImportSkeleton:
+        return "ImportSkeleton";
+    case SampleAnimationSmokeStep::ImportSkinnedMesh:
+        return "ImportSkinnedMesh";
+    case SampleAnimationSmokeStep::ImportAnimationClip:
+        return "ImportAnimationClip";
+    case SampleAnimationSmokeStep::UploadResources:
+        return "UploadResources";
+    case SampleAnimationSmokeStep::CreatePlayback:
+        return "CreatePlayback";
+    case SampleAnimationSmokeStep::TickPlayback:
+        return "TickPlayback";
+    case SampleAnimationSmokeStep::Ready:
+        return "Ready";
+    case SampleAnimationSmokeStep::Failed:
+        return "Failed";
+    }
+    return "Unknown";
+}
+
+full_engine::AssetSourceRecord sampleAnimationSkeletonSource(const std::string& uri)
+{
+    full_engine::AssetSourceRecord record;
+    record.id = sampleAnimationSkeletonAssetId();
+    record.kind = full_engine::AssetKind::Skeleton;
+    record.uri = uri;
+    record.descriptor.skeleton.jointCount = 2;
+    return record;
+}
+
+full_engine::AssetSourceRecord sampleAnimationSkinnedMeshSource(const std::string& uri)
+{
+    full_engine::AssetSourceRecord record;
+    record.id = sampleAnimationSkinnedMeshAssetId();
+    record.kind = full_engine::AssetKind::SkinnedMesh;
+    record.uri = uri;
+    record.descriptor.skinnedMesh.vertexCount = 3;
+    record.descriptor.skinnedMesh.indexCount = 3;
+    record.descriptor.skinnedMesh.skeletonAssetId = sampleAnimationSkeletonAssetId();
+    record.descriptor.skinnedMesh.localBounds.min[0] = 0.0f;
+    record.descriptor.skinnedMesh.localBounds.min[1] = 0.0f;
+    record.descriptor.skinnedMesh.localBounds.min[2] = 0.0f;
+    record.descriptor.skinnedMesh.localBounds.max[0] = 1.0f;
+    record.descriptor.skinnedMesh.localBounds.max[1] = 1.0f;
+    record.descriptor.skinnedMesh.localBounds.max[2] = 0.0f;
+    return record;
+}
+
+full_engine::AssetSourceRecord sampleAnimationClipSource(const std::string& uri)
+{
+    full_engine::AssetSourceRecord record;
+    record.id = sampleAnimationClipAssetId();
+    record.kind = full_engine::AssetKind::AnimationClip;
+    record.uri = uri;
+    record.descriptor.animationClip.skeletonAssetId = sampleAnimationSkeletonAssetId();
+    record.descriptor.animationClip.trackCount = 2;
+    record.descriptor.animationClip.durationSeconds = 1.0f;
+    record.descriptor.animationClip.ticksPerSecond = 1000.0f;
+    record.descriptor.animationClip.metadataTolerance = 0.01f;
+    return record;
+}
+
+full_engine::AssetSourceRecord sampleWolfSkeletonSource(const std::string& uri)
+{
+    full_engine::AssetSourceRecord record;
+    record.id = sampleWolfSkeletonAssetId();
+    record.kind = full_engine::AssetKind::Skeleton;
+    record.uri = uri;
+    record.descriptor.skeleton.jointCount = 49;
+    return record;
+}
+
+full_engine::AssetSourceRecord sampleWolfSkinnedMeshSource(const std::string& uri)
+{
+    full_engine::AssetSourceRecord record;
+    record.id = sampleWolfSkinnedMeshAssetId();
+    record.kind = full_engine::AssetKind::SkinnedMesh;
+    record.uri = uri;
+    record.descriptor.skinnedMesh.vertexCount = 2811;
+    record.descriptor.skinnedMesh.indexCount = 8244;
+    record.descriptor.skinnedMesh.skeletonAssetId = sampleWolfSkeletonAssetId();
+    record.descriptor.skinnedMesh.localBounds.min[0] = -0.12202499806880951f;
+    record.descriptor.skinnedMesh.localBounds.min[1] = -0.010404526256024837f;
+    record.descriptor.skinnedMesh.localBounds.min[2] = -0.6574259996414185f;
+    record.descriptor.skinnedMesh.localBounds.max[0] = 0.12202499806880951f;
+    record.descriptor.skinnedMesh.localBounds.max[1] = 0.5671653747558594f;
+    record.descriptor.skinnedMesh.localBounds.max[2] = 0.3667418360710144f;
+    const full_engine::AssetSourceSkinnedMeshSectionDescriptor sections[] = {
+        {sampleWolfSectionMaterialAssetId(0), 0U, 5316U},
+        {sampleWolfSectionMaterialAssetId(1), 5316U, 516U},
+        {sampleWolfSectionMaterialAssetId(2), 5832U, 192U},
+        {sampleWolfSectionMaterialAssetId(3), 6024U, 432U},
+        {sampleWolfSectionMaterialAssetId(4), 6456U, 1788U},
+    };
+    for (std::uint32_t sectionIndex = 0; sectionIndex < static_cast<std::uint32_t>(std::size(sections)); ++sectionIndex)
+    {
+        record.descriptor.skinnedMesh.sections[sectionIndex] = sections[sectionIndex];
+    }
+    record.descriptor.skinnedMesh.sectionCount = static_cast<std::uint32_t>(std::size(sections));
+    return record;
+}
+
+full_engine::AssetSourceRecord sampleWolfAnimationClipSource(const std::string& uri)
+{
+    full_engine::AssetSourceRecord record;
+    record.id = sampleWolfClipAssetId();
+    record.kind = full_engine::AssetKind::AnimationClip;
+    record.uri = uri;
+    record.descriptor.animationClip.skeletonAssetId = sampleWolfSkeletonAssetId();
+    record.descriptor.animationClip.trackCount = 49;
+    record.descriptor.animationClip.durationSeconds = 0.6666667f;
+    record.descriptor.animationClip.ticksPerSecond = 1000.0f;
+    record.descriptor.animationClip.metadataTolerance = 0.01f;
+    return record;
+}
+
+void destroySampleAnimationSmokeResources(
+    full_renderer::IRenderer& renderer,
+    SampleAnimationSmokeState& state) noexcept
+{
+    for (const full_renderer::MaterialHandle material : state.sectionMaterialHandles)
+    {
+        if (full_renderer::isValid(material))
+        {
+            renderer.destroyMaterial(material);
+        }
+    }
+    if (full_renderer::isValid(state.skinnedMeshHandle))
+    {
+        renderer.destroySkinnedMesh(state.skinnedMeshHandle);
+    }
+    if (full_renderer::isValid(state.skeletonHandle))
+    {
+        renderer.destroySkeleton(state.skeletonHandle);
+    }
+    state = {};
+}
+
+full_renderer::MaterialHandle createSampleAnimationSectionMaterial(
+    full_renderer::IRenderer& renderer,
+    const std::uint32_t sectionIndex)
+{
+    constexpr float kSectionColors[][4] = {
+        {0.88f, 0.34f, 0.22f, 1.0f},
+        {0.30f, 0.58f, 0.94f, 1.0f},
+        {0.38f, 0.78f, 0.38f, 1.0f},
+        {0.92f, 0.74f, 0.26f, 1.0f},
+        {0.72f, 0.40f, 0.88f, 1.0f},
+        {0.90f, 0.48f, 0.18f, 1.0f},
+    };
+    const float* const color = kSectionColors[sectionIndex % std::size(kSectionColors)];
+
+    full_renderer::MaterialDesc material;
+    material.kind = full_renderer::MaterialKind::Basic;
+    material.lit = true;
+    material.baseColorLinear[0] = color[0];
+    material.baseColorLinear[1] = color[1];
+    material.baseColorLinear[2] = color[2];
+    material.baseColorLinear[3] = color[3];
+    return renderer.createMaterial(material);
+}
+
+bool sampleAnimationUploadSucceeded(
+    const full_engine::LoadedAssetUploadExecuteResult& result) noexcept
+{
+    return result.summary.uploadedSkeletonCount + result.summary.alreadyMappedCount >= 1 &&
+        result.summary.uploadedSkinnedMeshCount >= 1 &&
+        result.summary.rendererFailedCount == 0 &&
+        result.summary.catalogRejectedCount == 0 &&
+        result.summary.missingSkeletonHandleCount == 0 &&
+        result.summary.unsupportedKindCount == 0 &&
+        result.summary.skippedUnplannedCount == 0;
+}
+
+void runSampleAnimationSmokeFromSources(
+    full_renderer::IRenderer& renderer,
+    SampleAnimationSmokeState& state,
+    const full_engine::AssetSourceRecord& skeletonSource,
+    const full_engine::AssetSourceRecord& skinnedMeshSource,
+    const full_engine::AssetSourceRecord& clipSource)
+{
+    destroySampleAnimationSmokeResources(renderer, state);
+    state.attempted = true;
+
+    state.step = SampleAnimationSmokeStep::ImportSkeleton;
+    const full_engine::AssimpLoadedAssetImportResult skeleton =
+        full_engine::importLoadedAssetPayloadWithAssimp(skeletonSource);
+    state.skeletonImportStatus = skeleton.status;
+    if (skeleton.status != full_engine::AssimpLoadedAssetImportStatus::Success)
+    {
+        state.step = SampleAnimationSmokeStep::Failed;
+        return;
+    }
+    state.skeleton = skeleton.payload.skeleton;
+
+    state.step = SampleAnimationSmokeStep::ImportSkinnedMesh;
+    const full_engine::AssimpLoadedAssetImportResult skinned =
+        full_engine::importLoadedAssetPayloadWithAssimp(skinnedMeshSource);
+    state.skinnedMeshImportStatus = skinned.status;
+    if (skinned.status != full_engine::AssimpLoadedAssetImportStatus::Success)
+    {
+        state.step = SampleAnimationSmokeStep::Failed;
+        return;
+    }
+    state.skinnedMesh = skinned.payload.skinnedMesh;
+
+    state.step = SampleAnimationSmokeStep::ImportAnimationClip;
+    const full_engine::AssimpLoadedAssetImportResult clip =
+        full_engine::importLoadedAssetPayloadWithAssimp(clipSource);
+    state.clipImportStatus = clip.status;
+    if (clip.status != full_engine::AssimpLoadedAssetImportStatus::Success)
+    {
+        state.step = SampleAnimationSmokeStep::Failed;
+        return;
+    }
+    state.clip = clip.payload.animationClip;
+
+    state.step = SampleAnimationSmokeStep::UploadResources;
+    full_engine::LoadedAssetPayload payloads[2] = {};
+    payloads[0].kind = full_engine::AssetKind::Skeleton;
+    payloads[0].skeleton = state.skeleton;
+    payloads[1].kind = full_engine::AssetKind::SkinnedMesh;
+    payloads[1].skinnedMesh = state.skinnedMesh;
+    const full_engine::LoadedAssetUploadPlan plan =
+        full_engine::buildLoadedAssetUploadPlan(payloads, 2);
+    state.uploadPlan = plan.summary;
+    const full_engine::LoadedAssetUploadExecuteResult upload =
+        full_engine::executeLoadedAssetUploadPlan(renderer, plan, state.handles);
+    state.uploadExecute = upload.summary;
+    const full_renderer::SkeletonHandle* const skeletonHandle =
+        state.handles.findSkeletonHandle(skeletonSource.id);
+    const full_renderer::SkinnedMeshHandle* const skinnedMeshHandle =
+        state.handles.findSkinnedMeshHandle(skinnedMeshSource.id);
+    if (skeletonHandle != nullptr)
+    {
+        state.skeletonHandle = *skeletonHandle;
+    }
+    if (skinnedMeshHandle != nullptr)
+    {
+        state.skinnedMeshHandle = *skinnedMeshHandle;
+    }
+    if (!sampleAnimationUploadSucceeded(upload) ||
+        skeletonHandle == nullptr ||
+        skinnedMeshHandle == nullptr)
+    {
+        state.step = SampleAnimationSmokeStep::Failed;
+        return;
+    }
+    for (std::uint32_t sectionIndex = 0;
+        sectionIndex < static_cast<std::uint32_t>(state.skinnedMesh.sections.size());
+        ++sectionIndex)
+    {
+        const full_renderer::MaterialHandle sectionMaterial =
+            createSampleAnimationSectionMaterial(renderer, sectionIndex);
+        if (!full_renderer::isValid(sectionMaterial))
+        {
+            state.step = SampleAnimationSmokeStep::Failed;
+            return;
+        }
+        state.sectionMaterialHandles.push_back(sectionMaterial);
+    }
+    state.step = SampleAnimationSmokeStep::CreatePlayback;
+    full_engine::AnimationPlaybackInstanceDesc instance;
+    instance.id = full_engine::AnimationPlaybackInstanceId{1};
+    instance.skeletonAssetId = skeletonSource.id;
+    instance.clipAssetId = clipSource.id;
+    instance.playback = full_engine::LoadedAnimationPlaybackMode::Loop;
+    instance.startTimeSeconds = 0.0f;
+    instance.speed = 1.0f;
+    instance.playing = true;
+    instance.debugPalette = true;
+    const full_engine::AnimationPlaybackAddResult add = state.playback.addInstance(instance);
+    state.playbackAddStatus = add.status;
+    if (add.status != full_engine::AnimationPlaybackAddStatus::Added)
+    {
+        state.step = SampleAnimationSmokeStep::Failed;
+        return;
+    }
+
+    state.step = SampleAnimationSmokeStep::TickPlayback;
+    const full_engine::AnimationPlaybackTickResult tick =
+        state.playback.tickInstance(instance.id, state.skeleton, state.clip, 0.0f);
+    state.playbackTickStatus = tick.status;
+    state.playbackSummary = state.playback.summary();
+    if (tick.status != full_engine::AnimationPlaybackTickStatus::Success)
+    {
+        state.step = SampleAnimationSmokeStep::Failed;
+        return;
+    }
+
+    state.ready = true;
+    state.step = SampleAnimationSmokeStep::Ready;
+}
+
+void runSampleAnimationSmoke(
+    full_renderer::IRenderer& renderer,
+    SampleAnimationSmokeState& state)
+{
+    const std::string sourcePath = sampleAnimationAssetPath("skinned_triangle_animation.gltf");
+    runSampleAnimationSmokeFromSources(
+        renderer,
+        state,
+        sampleAnimationSkeletonSource(sourcePath),
+        sampleAnimationSkinnedMeshSource(sourcePath),
+        sampleAnimationClipSource(sourcePath));
+}
+
+void runSampleWolfAnimationSmoke(
+    full_renderer::IRenderer& renderer,
+    SampleAnimationSmokeState& state)
+{
+    const std::string sourcePath = sampleWolfAssetPath("Wolf-Blender-2.82a.gltf");
+    runSampleAnimationSmokeFromSources(
+        renderer,
+        state,
+        sampleWolfSkeletonSource(sourcePath),
+        sampleWolfSkinnedMeshSource(sourcePath),
+        sampleWolfAnimationClipSource(sourcePath));
 }
 
 full_engine::AssetSourceCatalog makeSampleTerrainAssetSourceCatalog()
@@ -2078,6 +2516,8 @@ void drawTerrainDiagnosticsPanel(
     const full_engine::CookedAssetManifest& sampleTerrainManifest,
     std::vector<SampleTerrainChunkState>& sampleTerrainChunks,
     SampleTerrainResidencyControls& terrainResidencyControls,
+    SampleAnimationSmokeState& animationSmoke,
+    SampleAnimationSmokeState& wolfAnimationSmoke,
     const float terrainChunkSizeMeters,
     int terrainGridRadius,
     Vec3& cameraPosition,
@@ -3222,6 +3662,24 @@ void drawTerrainDiagnosticsPanel(
     {
         ImGui::Checkbox("Draw skeletons", &animationDebug.drawSkeletons);
         ImGui::Checkbox("Draw skinned bounds", &animationDebug.drawBounds);
+        if (ImGui::Button("Run Animation Smoke"))
+        {
+            runSampleAnimationSmoke(renderer, animationSmoke);
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Clear Animation Smoke"))
+        {
+            destroySampleAnimationSmokeResources(renderer, animationSmoke);
+        }
+        if (ImGui::Button("Run Wolf Animation Smoke"))
+        {
+            runSampleWolfAnimationSmoke(renderer, wolfAnimationSmoke);
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Clear Wolf Smoke"))
+        {
+            destroySampleAnimationSmokeResources(renderer, wolfAnimationSmoke);
+        }
         const full_renderer::RendererStats rendererStats = renderer.getStats();
         ImGui::Text("Skeletons: %u live", rendererStats.liveSkeletons);
         ImGui::Text("Skinned meshes: %u live", rendererStats.liveSkinnedMeshes);
@@ -3234,6 +3692,51 @@ void drawTerrainDiagnosticsPanel(
             "Skinned shadows: %u pass draws, %u receivers",
             rendererStats.shadowSkinnedMeshPassDraws,
             rendererStats.shadowSkinnedMeshReceivers);
+        ImGui::Text(
+            "Animation smoke: %s at %s, submitted %s",
+            animationSmoke.ready ? "Ready" : (animationSmoke.attempted ? "Failed" : "Idle"),
+            sampleAnimationSmokeStepName(animationSmoke.step),
+            animationSmoke.submitted ? "yes" : "no");
+        ImGui::Text(
+            "Smoke import: skeleton/skinned/clip %s/%s/%s",
+            full_engine::assimpLoadedAssetImportStatusName(animationSmoke.skeletonImportStatus),
+            full_engine::assimpLoadedAssetImportStatusName(animationSmoke.skinnedMeshImportStatus),
+            full_engine::assimpLoadedAssetImportStatusName(animationSmoke.clipImportStatus));
+        ImGui::Text(
+            "Smoke upload: planned %llu, uploaded skeleton/skinned %llu/%llu, failed renderer/catalog %llu/%llu",
+            static_cast<unsigned long long>(animationSmoke.uploadPlan.plannedCount),
+            static_cast<unsigned long long>(animationSmoke.uploadExecute.uploadedSkeletonCount),
+            static_cast<unsigned long long>(animationSmoke.uploadExecute.uploadedSkinnedMeshCount),
+            static_cast<unsigned long long>(animationSmoke.uploadExecute.rendererFailedCount),
+            static_cast<unsigned long long>(animationSmoke.uploadExecute.catalogRejectedCount));
+        ImGui::Text(
+            "Smoke playback: add/tick %s/%s, instances %llu, sampled %llu, failed %llu",
+            full_engine::animationPlaybackAddStatusName(animationSmoke.playbackAddStatus),
+            full_engine::animationPlaybackTickStatusName(animationSmoke.playbackTickStatus),
+            static_cast<unsigned long long>(animationSmoke.playbackSummary.instanceCount),
+            static_cast<unsigned long long>(animationSmoke.playbackSummary.sampledCount),
+            static_cast<unsigned long long>(animationSmoke.playbackSummary.failedCount));
+        ImGui::Text(
+            "Wolf smoke: %s at %s, submitted %s",
+            wolfAnimationSmoke.ready ? "Ready" : (wolfAnimationSmoke.attempted ? "Failed" : "Idle"),
+            sampleAnimationSmokeStepName(wolfAnimationSmoke.step),
+            wolfAnimationSmoke.submitted ? "yes" : "no");
+        ImGui::Text(
+            "Wolf import: skeleton/skinned/clip %s/%s/%s",
+            full_engine::assimpLoadedAssetImportStatusName(wolfAnimationSmoke.skeletonImportStatus),
+            full_engine::assimpLoadedAssetImportStatusName(wolfAnimationSmoke.skinnedMeshImportStatus),
+            full_engine::assimpLoadedAssetImportStatusName(wolfAnimationSmoke.clipImportStatus));
+        ImGui::Text(
+            "Wolf upload/playback: planned %llu, skeleton/skinned %llu/%llu, tick %s, sampled %llu",
+            static_cast<unsigned long long>(wolfAnimationSmoke.uploadPlan.plannedCount),
+            static_cast<unsigned long long>(wolfAnimationSmoke.uploadExecute.uploadedSkeletonCount),
+            static_cast<unsigned long long>(wolfAnimationSmoke.uploadExecute.uploadedSkinnedMeshCount),
+            full_engine::animationPlaybackTickStatusName(wolfAnimationSmoke.playbackTickStatus),
+            static_cast<unsigned long long>(wolfAnimationSmoke.playbackSummary.sampledCount));
+        ImGui::Text(
+            "Wolf sections: imported %llu, fallback materials %llu",
+            static_cast<unsigned long long>(wolfAnimationSmoke.skinnedMesh.sections.size()),
+            static_cast<unsigned long long>(wolfAnimationSmoke.sectionMaterialHandles.size()));
         ImGui::Text("Animation debug line vertices: %u", rendererStats.animationDebugLineVertices);
         ImGui::TextUnformatted("Sample pose palettes are generated by the app and submitted frame-locally.");
         ImGui::TextUnformatted("Shadow-map preview remains UI-only/deferred.");
@@ -4997,6 +5500,8 @@ int main(int argc, char** argv)
     std::vector<SampleTerrainChunkState> sampleTerrainChunks;
     std::vector<full_renderer::TerrainChunkHandle> terrainChunks;
     SampleTerrainResidencyControls terrainResidencyControls;
+    SampleAnimationSmokeState animationSmoke;
+    SampleAnimationSmokeState wolfAnimationSmoke;
     const int kGridRadius = static_cast<int>(validationScene.terrainGridRadius);
     terrainResidencyControls.batchRingRadius = kGridRadius;
     terrainResidencyControls.streamingLoadRadius = kGridRadius;
@@ -5992,7 +6497,49 @@ int main(int argc, char** argv)
 
         const std::uint32_t activeSkinnedDrawCount =
             static_cast<std::uint32_t>(std::clamp(sampleSkinnedDrawCount, 0, 32));
-        std::vector<full_renderer::AnimatedDrawItem> animatedDraws(activeSkinnedDrawCount);
+        if (animationSmoke.ready)
+        {
+            const full_engine::AnimationPlaybackTickResult tick =
+                animationSmoke.playback.tickInstance(
+                    full_engine::AnimationPlaybackInstanceId{1},
+                    animationSmoke.skeleton,
+                    animationSmoke.clip,
+                    deltaSeconds);
+            animationSmoke.playbackTickStatus = tick.status;
+            animationSmoke.playbackSummary = animationSmoke.playback.summary();
+            if (tick.status != full_engine::AnimationPlaybackTickStatus::Success)
+            {
+                animationSmoke.ready = false;
+                animationSmoke.step = SampleAnimationSmokeStep::Failed;
+            }
+        }
+        if (wolfAnimationSmoke.ready)
+        {
+            const full_engine::AnimationPlaybackTickResult tick =
+                wolfAnimationSmoke.playback.tickInstance(
+                    full_engine::AnimationPlaybackInstanceId{1},
+                    wolfAnimationSmoke.skeleton,
+                    wolfAnimationSmoke.clip,
+                    deltaSeconds);
+            wolfAnimationSmoke.playbackTickStatus = tick.status;
+            wolfAnimationSmoke.playbackSummary = wolfAnimationSmoke.playback.summary();
+            if (tick.status != full_engine::AnimationPlaybackTickStatus::Success)
+            {
+                wolfAnimationSmoke.ready = false;
+                wolfAnimationSmoke.step = SampleAnimationSmokeStep::Failed;
+            }
+        }
+
+        const std::uint32_t wolfSectionDrawCount =
+            wolfAnimationSmoke.ready && !wolfAnimationSmoke.sectionMaterialHandles.empty()
+            ? static_cast<std::uint32_t>(wolfAnimationSmoke.sectionMaterialHandles.size())
+            : (wolfAnimationSmoke.ready ? 1U : 0U);
+        std::vector<full_renderer::AnimatedDrawItem> animatedDraws;
+        animatedDraws.reserve(
+            activeSkinnedDrawCount +
+            (animationSmoke.ready ? 1U : 0U) +
+            wolfSectionDrawCount);
+        animatedDraws.resize(activeSkinnedDrawCount);
         for (std::uint32_t drawIndex = 0; drawIndex < activeSkinnedDrawCount; ++drawIndex)
         {
             const Vec3 center = {
@@ -6020,6 +6567,98 @@ int main(int argc, char** argv)
             if (fadeSkinnedStructure && drawIndex == 0U)
             {
                 animatedDraw.fade = sampleFade;
+            }
+        }
+        animationSmoke.submitted = false;
+        if (animationSmoke.ready)
+        {
+            const full_engine::AnimationPosePaletteView* const palette =
+                animationSmoke.playback.latestPaletteView(full_engine::AnimationPlaybackInstanceId{1});
+            if (palette != nullptr &&
+                full_renderer::isValid(animationSmoke.skinnedMeshHandle))
+            {
+                full_renderer::AnimatedDrawItem importedDraw;
+                importedDraw.mesh = animationSmoke.skinnedMeshHandle;
+                importedDraw.material = cubeMaterial;
+                const Vec3 center = {-1.5f, -0.95f, 8.0f};
+                makeTranslation(importedDraw.model, center);
+                importedDraw.bounds = makeBounds(
+                    center.x - 0.2f,
+                    center.y - 0.2f,
+                    center.z - 0.2f,
+                    center.x + 1.2f,
+                    center.y + 1.2f,
+                    center.z + 0.2f);
+                importedDraw.palette = palette->palette;
+                importedDraw.receivesShadow = true;
+                importedDraw.castsShadow = true;
+                importedDraw.selected = selectSkinnedMesh;
+                if (fadeSkinnedStructure)
+                {
+                    importedDraw.fade = sampleFade;
+                }
+                animatedDraws.push_back(importedDraw);
+                animationSmoke.submitted = true;
+            }
+        }
+        wolfAnimationSmoke.submitted = false;
+        if (wolfAnimationSmoke.ready)
+        {
+            const full_engine::AnimationPosePaletteView* const palette =
+                wolfAnimationSmoke.playback.latestPaletteView(full_engine::AnimationPlaybackInstanceId{1});
+            if (palette != nullptr &&
+                full_renderer::isValid(wolfAnimationSmoke.skinnedMeshHandle))
+            {
+                const Vec3 center = {1.0f, -0.95f, 13.0f};
+                const full_renderer::Aabb wolfBounds = makeBounds(
+                    center.x - 1.2f,
+                    center.y - 0.2f,
+                    center.z - 5.5f,
+                    center.x + 1.2f,
+                    center.y + 4.0f,
+                    center.z + 3.2f);
+                if (!wolfAnimationSmoke.sectionMaterialHandles.empty())
+                {
+                    for (std::uint32_t sectionIndex = 0;
+                        sectionIndex < static_cast<std::uint32_t>(wolfAnimationSmoke.sectionMaterialHandles.size());
+                        ++sectionIndex)
+                    {
+                        full_renderer::AnimatedDrawItem wolfDraw;
+                        wolfDraw.mesh = wolfAnimationSmoke.skinnedMeshHandle;
+                        wolfDraw.material = wolfAnimationSmoke.sectionMaterialHandles[sectionIndex];
+                        wolfDraw.sectionIndex = sectionIndex;
+                        makeScaleTranslation(wolfDraw.model, {8.0f, 8.0f, 8.0f}, center);
+                        wolfDraw.bounds = wolfBounds;
+                        wolfDraw.palette = palette->palette;
+                        wolfDraw.receivesShadow = true;
+                        wolfDraw.castsShadow = true;
+                        wolfDraw.selected = selectSkinnedMesh && sectionIndex == 0U;
+                        if (fadeSkinnedStructure)
+                        {
+                            wolfDraw.fade = sampleFade;
+                        }
+                        animatedDraws.push_back(wolfDraw);
+                    }
+                    wolfAnimationSmoke.submitted = true;
+                }
+                else
+                {
+                    full_renderer::AnimatedDrawItem wolfDraw;
+                    wolfDraw.mesh = wolfAnimationSmoke.skinnedMeshHandle;
+                    wolfDraw.material = cubeMaterial;
+                    makeScaleTranslation(wolfDraw.model, {8.0f, 8.0f, 8.0f}, center);
+                    wolfDraw.bounds = wolfBounds;
+                    wolfDraw.palette = palette->palette;
+                    wolfDraw.receivesShadow = true;
+                    wolfDraw.castsShadow = true;
+                    wolfDraw.selected = selectSkinnedMesh;
+                    if (fadeSkinnedStructure)
+                    {
+                        wolfDraw.fade = sampleFade;
+                    }
+                    animatedDraws.push_back(wolfDraw);
+                    wolfAnimationSmoke.submitted = true;
+                }
             }
         }
 
@@ -6356,6 +6995,8 @@ int main(int argc, char** argv)
                 sampleTerrainManifest,
                 sampleTerrainChunks,
                 terrainResidencyControls,
+                animationSmoke,
+                wolfAnimationSmoke,
                 kChunkSize,
                 kGridRadius,
                 cameraPosition,
@@ -6450,6 +7091,8 @@ int main(int argc, char** argv)
     {
         renderer->destroyTexture(texture);
     }
+    destroySampleAnimationSmokeResources(*renderer, wolfAnimationSmoke);
+    destroySampleAnimationSmokeResources(*renderer, animationSmoke);
     renderer->destroyMaterial(cubeMaterial);
     renderer->destroySkinnedMesh(sampleSkinnedMesh);
     renderer->destroySkeleton(sampleSkeleton);

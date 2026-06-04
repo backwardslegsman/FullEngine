@@ -1,7 +1,10 @@
 #include "engine/assets/AssimpLoadedAssetImporter.hpp"
+#include "engine/renderer_integration/AnimationPlaybackState.hpp"
+#include "engine/renderer_integration/LoadedAssetUploadExecutor.hpp"
 #include "engine/renderer_integration/LoadedAssetUploadPlan.hpp"
 
 #include <cstdlib>
+#include <algorithm>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -15,6 +18,116 @@
 
 namespace
 {
+class FakeRenderer final : public full_renderer::IRenderer
+{
+public:
+    full_renderer::RendererResult initialize(const full_renderer::RendererInitDesc&) override
+    {
+        return full_renderer::RendererResult::Success;
+    }
+
+    void shutdown() noexcept override {}
+
+    bool isInitialized() const noexcept override { return true; }
+
+    full_renderer::RendererResult resize(const full_renderer::RendererResizeDesc&) override
+    {
+        return full_renderer::RendererResult::Success;
+    }
+
+    full_renderer::RendererResult beginFrame(const full_renderer::FrameDesc&) override
+    {
+        return full_renderer::RendererResult::Success;
+    }
+
+    full_renderer::RendererResult submit(const full_renderer::RenderPacket&) override
+    {
+        return full_renderer::RendererResult::Success;
+    }
+
+    full_renderer::RendererResult endFrame() override
+    {
+        return full_renderer::RendererResult::Success;
+    }
+
+    full_renderer::MeshHandle createMesh(const full_renderer::MeshDesc&) override
+    {
+        return full_renderer::MeshHandle{nextMesh_++};
+    }
+
+    void destroyMesh(full_renderer::MeshHandle) noexcept override {}
+
+    full_renderer::TextureHandle createTexture(const full_renderer::TextureDesc&) override
+    {
+        return full_renderer::TextureHandle{nextTexture_++};
+    }
+
+    void destroyTexture(full_renderer::TextureHandle) noexcept override {}
+
+    full_renderer::MaterialHandle createMaterial(const full_renderer::MaterialDesc&) override
+    {
+        return full_renderer::MaterialHandle{nextMaterial_++};
+    }
+
+    void destroyMaterial(full_renderer::MaterialHandle) noexcept override {}
+
+    full_renderer::SkeletonHandle createSkeleton(const full_renderer::SkeletonDesc&) override
+    {
+        return full_renderer::SkeletonHandle{nextSkeleton_++};
+    }
+
+    void destroySkeleton(full_renderer::SkeletonHandle) noexcept override {}
+
+    full_renderer::SkinnedMeshHandle createSkinnedMesh(const full_renderer::SkinnedMeshDesc&) override
+    {
+        return full_renderer::SkinnedMeshHandle{nextSkinnedMesh_++};
+    }
+
+    void destroySkinnedMesh(full_renderer::SkinnedMeshHandle) noexcept override {}
+
+    full_renderer::TerrainChunkHandle createTerrainChunk(const full_renderer::TerrainChunkDesc&) override
+    {
+        return full_renderer::TerrainChunkHandle{1};
+    }
+
+    full_renderer::RendererResult updateTerrainChunk(
+        full_renderer::TerrainChunkHandle,
+        const full_renderer::TerrainChunkDesc&) override
+    {
+        return full_renderer::RendererResult::Success;
+    }
+
+    void destroyTerrainChunk(full_renderer::TerrainChunkHandle) noexcept override {}
+
+    std::uint32_t copyTerrainDebugInfo(full_renderer::TerrainChunkDebugInfo*, std::uint32_t) const noexcept override
+    {
+        return 0;
+    }
+
+    std::uint32_t copyTerrainBatchDebugInfo(full_renderer::TerrainBatchDebugInfo*, std::uint32_t) const noexcept override
+    {
+        return 0;
+    }
+
+    std::uint32_t copyTerrainShadowCasterDebugInfo(
+        full_renderer::TerrainChunkDebugInfo*,
+        std::uint32_t) const noexcept override
+    {
+        return 0;
+    }
+
+    full_renderer::TerrainStats getTerrainStats() const noexcept override { return {}; }
+
+    full_renderer::RendererStats getStats() const noexcept override { return {}; }
+
+private:
+    std::uint32_t nextMesh_ = 1;
+    std::uint32_t nextTexture_ = 1;
+    std::uint32_t nextMaterial_ = 1;
+    std::uint32_t nextSkeleton_ = 1;
+    std::uint32_t nextSkinnedMesh_ = 1;
+};
+
 void expect(const bool condition, const char* const message, std::vector<std::string>& failures)
 {
     if (!condition)
@@ -109,6 +222,19 @@ full_engine::AssetSourceDescriptor skinnedMeshDescriptor(
     descriptor.skinnedMesh.localBounds.max[1] = 1.0f;
     descriptor.skinnedMesh.localBounds.max[2] = 0.0f;
     return descriptor;
+}
+
+void addSkinnedSection(
+    full_engine::AssetSourceDescriptor& descriptor,
+    const std::uint32_t index,
+    const std::uint64_t materialId,
+    const std::uint32_t firstIndex,
+    const std::uint32_t indexCount)
+{
+    descriptor.skinnedMesh.sections[index].materialAssetId = asset(materialId);
+    descriptor.skinnedMesh.sections[index].firstIndex = firstIndex;
+    descriptor.skinnedMesh.sections[index].indexCount = indexCount;
+    descriptor.skinnedMesh.sectionCount = (std::max)(descriptor.skinnedMesh.sectionCount, index + 1U);
 }
 
 full_engine::AssetSourceDescriptor animationClipDescriptor(
@@ -359,6 +485,7 @@ void testSkeletalImport(std::vector<std::string>& failures)
     expect(skinned.payload.skinnedMesh.skeletonAssetId == asset(7), "skinned import preserves skeleton asset id", failures);
     expect(skinned.payload.skinnedMesh.vertices.size() == 3, "skinned import copies vertices", failures);
     expect(skinned.payload.skinnedMesh.indices.size() == 3, "skinned import copies indices", failures);
+    expect(skinned.payload.skinnedMesh.sections.empty(), "skinned import keeps sections optional by default", failures);
     expect(skinned.payload.skinnedMesh.vertices[1].jointIndices[0] == 1, "skinned import maps child joint index", failures);
     expect(skinned.payload.skinnedMesh.vertices[2].jointWeights[0] == 0.5f, "skinned import copies first blended weight", failures);
     expect(skinned.payload.skinnedMesh.vertices[2].jointWeights[1] == 0.5f, "skinned import copies second blended weight", failures);
@@ -534,6 +661,33 @@ void testWolfSkeletalAnimationSmoke(std::vector<std::string>& failures)
     const full_engine::AssimpLoadedAssetImportResult skeletonResult =
         full_engine::importLoadedAssetPayloadWithAssimp(skeleton);
     expect(skeletonResult.status == full_engine::AssimpLoadedAssetImportStatus::Success, "wolf gltf imports skeleton structurally", failures);
+    expect(skeletonResult.payload.skeleton.joints.size() == 49, "wolf skeleton imports expected joint count", failures);
+
+    full_engine::AssetSourceRecord skinned = skinnedMeshSource(path);
+    skinned.descriptor = skinnedMeshDescriptor(2811, 8244, 7, 0.12202499806880951f);
+    skinned.descriptor.skinnedMesh.localBounds.min[0] = -0.12202499806880951f;
+    skinned.descriptor.skinnedMesh.localBounds.min[1] = -0.010404526256024837f;
+    skinned.descriptor.skinnedMesh.localBounds.min[2] = -0.6574259996414185f;
+    skinned.descriptor.skinnedMesh.localBounds.max[0] = 0.12202499806880951f;
+    skinned.descriptor.skinnedMesh.localBounds.max[1] = 0.5671653747558594f;
+    skinned.descriptor.skinnedMesh.localBounds.max[2] = 0.3667418360710144f;
+    addSkinnedSection(skinned.descriptor, 0, 710010, 0, 5316);
+    addSkinnedSection(skinned.descriptor, 1, 710011, 5316, 516);
+    addSkinnedSection(skinned.descriptor, 2, 710012, 5832, 192);
+    addSkinnedSection(skinned.descriptor, 3, 710013, 6024, 432);
+    addSkinnedSection(skinned.descriptor, 4, 710014, 6456, 1788);
+    const full_engine::AssimpLoadedAssetImportResult skinnedResult =
+        full_engine::importLoadedAssetPayloadWithAssimp(skinned);
+    expect(skinnedResult.status == full_engine::AssimpLoadedAssetImportStatus::Success, "wolf gltf imports aggregate skinned mesh", failures);
+    expect(skinnedResult.payload.skinnedMesh.vertices.size() == 2811, "wolf skinned import aggregates skinned vertices only", failures);
+    expect(skinnedResult.payload.skinnedMesh.indices.size() == 8244, "wolf skinned import aggregates skinned indices only", failures);
+    expect(skinnedResult.payload.skinnedMesh.skeletonAssetId == asset(7), "wolf skinned import preserves skeleton reference", failures);
+    expect(skinnedResult.payload.skinnedMesh.sections.size() == 5, "wolf skinned import preserves material section count", failures);
+    expect(skinnedResult.payload.skinnedMesh.sections[0].materialAssetId == asset(710010), "wolf first section preserves material asset id", failures);
+    expect(skinnedResult.payload.skinnedMesh.sections[1].firstIndex == 5316 && skinnedResult.payload.skinnedMesh.sections[1].indexCount == 516, "wolf second section preserves index range", failures);
+    expect(skinnedResult.payload.skinnedMesh.sections[4].firstIndex == 6456 && skinnedResult.payload.skinnedMesh.sections[4].indexCount == 1788, "wolf final section preserves index range", failures);
+    expect(skinnedResult.payload.skinnedMesh.localBounds.min[2] < -0.65f, "wolf skinned import computes aggregate min bounds", failures);
+    expect(skinnedResult.payload.skinnedMesh.localBounds.max[1] > 0.56f, "wolf skinned import computes aggregate max bounds", failures);
 
     full_engine::AssetSourceRecord clip = animationClipSource(path);
     clip.descriptor = animationClipDescriptor(49, 0.6666667f, 1000.0f, 7, 0.01f);
@@ -541,6 +695,43 @@ void testWolfSkeletalAnimationSmoke(std::vector<std::string>& failures)
         full_engine::importLoadedAssetPayloadWithAssimp(clip);
     expect(clipResult.status == full_engine::AssimpLoadedAssetImportStatus::Success, "wolf gltf imports first animation structurally", failures);
     expect(clipResult.payload.animationClip.tracks.size() == 49, "wolf animation maps one track per joint", failures);
+
+    const full_engine::LoadedAssetPayload payloads[] = {
+        skeletonResult.payload,
+        skinnedResult.payload,
+    };
+    const full_engine::LoadedAssetUploadPlan plan =
+        full_engine::buildLoadedAssetUploadPlan(payloads, 2);
+    expect(plan.summary.plannedCount == 2, "wolf skeletal payloads plan upload work", failures);
+
+    FakeRenderer renderer;
+    full_engine::RendererAssetHandleCatalog handles;
+    const full_engine::LoadedAssetUploadExecuteResult upload =
+        full_engine::executeLoadedAssetUploadPlan(renderer, plan, handles);
+    expect(upload.summary.uploadedSkeletonCount == 1, "wolf skeleton uploads through fake renderer", failures);
+    expect(upload.summary.uploadedSkinnedMeshCount == 1, "wolf skinned mesh uploads through fake renderer", failures);
+    expect(handles.findSkeletonHandle(asset(7)) != nullptr, "wolf skeleton handle is cataloged", failures);
+    expect(handles.findSkinnedMeshHandle(asset(8)) != nullptr, "wolf skinned mesh handle is cataloged", failures);
+
+    full_engine::AnimationPlaybackState playback;
+    full_engine::AnimationPlaybackInstanceDesc instance;
+    instance.id = full_engine::AnimationPlaybackInstanceId{1};
+    instance.skeletonAssetId = asset(7);
+    instance.clipAssetId = asset(9);
+    instance.playback = full_engine::LoadedAnimationPlaybackMode::Loop;
+    instance.playing = true;
+    const full_engine::AnimationPlaybackAddResult add = playback.addInstance(instance);
+    expect(add.status == full_engine::AnimationPlaybackAddStatus::Added, "wolf playback instance is retained", failures);
+    const full_engine::AnimationPlaybackTickResult tick =
+        playback.tickInstance(instance.id, skeletonResult.payload.skeleton, clipResult.payload.animationClip, 0.1f);
+    expect(tick.status == full_engine::AnimationPlaybackTickStatus::Success, "wolf animation samples through playback state", failures);
+    const full_engine::AnimationPosePaletteView* const palette = playback.latestPaletteView(instance.id);
+    expect(palette != nullptr, "wolf playback exposes palette view", failures);
+    if (palette != nullptr)
+    {
+        expect(palette->jointCount == 49, "wolf palette preserves joint count", failures);
+        expect(palette->palette.matrixCount == 49, "wolf palette has one skinning matrix per joint", failures);
+    }
 }
 
 void testStatusNames(std::vector<std::string>& failures)

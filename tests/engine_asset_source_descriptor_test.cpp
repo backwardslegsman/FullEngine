@@ -81,6 +81,15 @@ full_engine::AssetSourceDescriptor skinnedMeshDescriptor()
     return descriptor;
 }
 
+full_engine::AssetSourceDescriptor sectionedSkinnedMeshDescriptor()
+{
+    full_engine::AssetSourceDescriptor descriptor = skinnedMeshDescriptor();
+    descriptor.skinnedMesh.sections[0] = {asset(300), 0, 3};
+    descriptor.skinnedMesh.sections[1] = {asset(301), 3, 3};
+    descriptor.skinnedMesh.sectionCount = 2;
+    return descriptor;
+}
+
 full_engine::AssetSourceDescriptor animationClipDescriptor()
 {
     full_engine::AssetSourceDescriptor descriptor;
@@ -118,6 +127,11 @@ void testValidDescriptors(std::vector<std::string>& failures)
         full_engine::validateAssetSourceDescriptor(full_engine::AssetKind::SkinnedMesh, skinnedMeshDescriptor()) ==
             full_engine::AssetSourceDescriptorValidationResult::Success,
         "valid skinned mesh descriptor validates",
+        failures);
+    expect(
+        full_engine::validateAssetSourceDescriptor(full_engine::AssetKind::SkinnedMesh, sectionedSkinnedMeshDescriptor()) ==
+            full_engine::AssetSourceDescriptorValidationResult::Success,
+        "valid sectioned skinned mesh descriptor validates",
         failures);
     expect(
         full_engine::validateAssetSourceDescriptor(full_engine::AssetKind::AnimationClip, animationClipDescriptor()) ==
@@ -291,6 +305,38 @@ void testInvalidSkinnedMeshDescriptors(std::vector<std::string>& failures)
             full_engine::AssetSourceDescriptorValidationResult::InvalidSkinnedMeshBounds,
         "skinned mesh descriptor rejects inverted bounds",
         failures);
+
+    descriptor = sectionedSkinnedMeshDescriptor();
+    descriptor.skinnedMesh.sectionCount = full_engine::kMaxAssetSourceSkinnedMeshSections + 1;
+    expect(
+        full_engine::validateAssetSourceDescriptor(full_engine::AssetKind::SkinnedMesh, descriptor) ==
+            full_engine::AssetSourceDescriptorValidationResult::InvalidSkinnedMeshSectionCount,
+        "skinned mesh descriptor rejects too many sections",
+        failures);
+
+    descriptor = sectionedSkinnedMeshDescriptor();
+    descriptor.skinnedMesh.sections[0].materialAssetId = {};
+    expect(
+        full_engine::validateAssetSourceDescriptor(full_engine::AssetKind::SkinnedMesh, descriptor) ==
+            full_engine::AssetSourceDescriptorValidationResult::InvalidSkinnedMeshSectionMaterialRef,
+        "skinned mesh descriptor rejects default section material id",
+        failures);
+
+    descriptor = sectionedSkinnedMeshDescriptor();
+    descriptor.skinnedMesh.sections[0].indexCount = 0;
+    expect(
+        full_engine::validateAssetSourceDescriptor(full_engine::AssetKind::SkinnedMesh, descriptor) ==
+            full_engine::AssetSourceDescriptorValidationResult::InvalidSkinnedMeshSectionRange,
+        "skinned mesh descriptor rejects empty section range",
+        failures);
+
+    descriptor = sectionedSkinnedMeshDescriptor();
+    descriptor.skinnedMesh.sections[1].firstIndex = 6;
+    expect(
+        full_engine::validateAssetSourceDescriptor(full_engine::AssetKind::SkinnedMesh, descriptor) ==
+            full_engine::AssetSourceDescriptorValidationResult::InvalidSkinnedMeshSectionRange,
+        "skinned mesh descriptor rejects out-of-bounds section range",
+        failures);
 }
 
 void testInvalidAnimationClipDescriptors(std::vector<std::string>& failures)
@@ -430,6 +476,9 @@ void testResultNames(std::vector<std::string>& failures)
         full_engine::AssetSourceDescriptorValidationResult::InvalidSkinnedMeshCounts,
         full_engine::AssetSourceDescriptorValidationResult::InvalidSkinnedMeshSkeletonRef,
         full_engine::AssetSourceDescriptorValidationResult::InvalidSkinnedMeshBounds,
+        full_engine::AssetSourceDescriptorValidationResult::InvalidSkinnedMeshSectionCount,
+        full_engine::AssetSourceDescriptorValidationResult::InvalidSkinnedMeshSectionMaterialRef,
+        full_engine::AssetSourceDescriptorValidationResult::InvalidSkinnedMeshSectionRange,
         full_engine::AssetSourceDescriptorValidationResult::InvalidAnimationClipSkeletonRef,
         full_engine::AssetSourceDescriptorValidationResult::InvalidAnimationClipTrackCount,
         full_engine::AssetSourceDescriptorValidationResult::InvalidAnimationClipDuration,

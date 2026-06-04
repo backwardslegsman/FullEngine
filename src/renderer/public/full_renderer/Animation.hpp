@@ -82,6 +82,25 @@ struct SkinnedMeshVertex
 };
 
 /**
+ * @brief One draw-range section inside a renderer-owned skinned mesh.
+ *
+ * Sections refer to ranges in the 16-bit index buffer supplied to
+ * `SkinnedMeshDesc`. They allow callers to submit the same skinned mesh with
+ * different materials by issuing one `AnimatedDrawItem` per section. Ranges
+ * are triangle-index ranges and must be non-empty, in bounds, and multiples of
+ * three. If no sections are supplied during creation, the renderer creates an
+ * implicit section covering the whole index buffer.
+ */
+struct SkinnedMeshSectionDesc
+{
+    /** @brief First index in the skinned mesh index buffer. */
+    std::uint32_t firstIndex = 0;
+
+    /** @brief Number of triangle indices in this section. */
+    std::uint32_t indexCount = 0;
+};
+
+/**
  * @brief CPU-side descriptor for creating a renderer-owned skinned mesh.
  *
  * The descriptor references an existing live `SkeletonHandle` and fixed-format
@@ -107,6 +126,12 @@ struct SkinnedMeshDesc
 
     /** @brief Number of indices referenced by `indices`; must be a non-zero multiple of three. */
     std::uint32_t indexCount = 0;
+
+    /** @brief Optional material/draw sections over `indices`; null with zero count means one implicit whole-mesh section. */
+    const SkinnedMeshSectionDesc* sections = nullptr;
+
+    /** @brief Number of section descriptors available through `sections`. */
+    std::uint32_t sectionCount = 0;
 };
 
 /**
@@ -155,6 +180,9 @@ struct AnimatedDrawItem
 
     /** @brief Renderer-owned basic material resource used for this draw. */
     MaterialHandle material;
+
+    /** @brief Skinned mesh section to draw. Defaults to the first or implicit whole-mesh section. */
+    std::uint32_t sectionIndex = 0;
 
     /** @brief Column-major local-to-world transform applied after skinning. */
     float model[16] = {};

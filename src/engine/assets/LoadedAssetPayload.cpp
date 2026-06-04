@@ -368,6 +368,10 @@ const char* loadedAssetPayloadValidationResultName(
         return "InvalidSkinnedMeshWeights";
     case LoadedAssetPayloadValidationResult::InvalidSkinnedMeshBounds:
         return "InvalidSkinnedMeshBounds";
+    case LoadedAssetPayloadValidationResult::InvalidSkinnedMeshSectionMaterialRef:
+        return "InvalidSkinnedMeshSectionMaterialRef";
+    case LoadedAssetPayloadValidationResult::InvalidSkinnedMeshSectionRange:
+        return "InvalidSkinnedMeshSectionRange";
     case LoadedAssetPayloadValidationResult::InvalidAnimationClipSkeletonRef:
         return "InvalidAnimationClipSkeletonRef";
     case LoadedAssetPayloadValidationResult::InvalidAnimationClipDuration:
@@ -614,6 +618,23 @@ LoadedAssetPayloadValidationResult validateLoadedSkinnedMeshAsset(
         if (static_cast<std::size_t>(index) >= vertexCount)
         {
             return LoadedAssetPayloadValidationResult::InvalidSkinnedMeshIndices;
+        }
+    }
+
+    const std::size_t indexCount = mesh.indices.size();
+    for (const LoadedSkinnedMeshSection& section : mesh.sections)
+    {
+        if (!isValid(section.materialAssetId))
+        {
+            return LoadedAssetPayloadValidationResult::InvalidSkinnedMeshSectionMaterialRef;
+        }
+        if (section.indexCount == 0 ||
+            (section.firstIndex % 3U) != 0U ||
+            (section.indexCount % 3U) != 0U ||
+            static_cast<std::size_t>(section.firstIndex) > indexCount ||
+            static_cast<std::size_t>(section.indexCount) > indexCount - static_cast<std::size_t>(section.firstIndex))
+        {
+            return LoadedAssetPayloadValidationResult::InvalidSkinnedMeshSectionRange;
         }
     }
 

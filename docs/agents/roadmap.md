@@ -835,6 +835,27 @@ move gameplay, streaming policy, or editor concepts into renderer internals.
   `SkinningPaletteDesc` view for frame-local animated draw submission while
   keeping mesh/material handles, bounds, playback state, and draw construction
   caller-owned.
+- Fifty-second slice is implemented: renderer integration now has a minimal
+  retained animation playback state for caller-defined single-clip instances.
+  It advances clip time, samples loaded skeleton/clip payloads, retains the
+  latest pose, and exposes a borrowed palette view while leaving blending,
+  entity ownership, draw construction, and sample UI wiring for later.
+- Fifty-third slice is implemented: the sample debug UI now has an animation
+  smoke path that imports a tiny glTF skeletal fixture, uploads skeleton and
+  skinned mesh resources through caller-owned renderer APIs, creates a retained
+  playback instance, ticks it each frame, and submits one imported
+  `AnimatedDrawItem` with a borrowed palette view.
+- Fifty-fourth slice is implemented: Assimp skinned-mesh import now handles
+  mixed glTF scenes by aggregating convertible skinned meshes while skipping
+  unskinned meshes, and the sample debug UI can run a wolf skeletal smoke that
+  imports the real wolf fixture, uploads skeleton/skinned resources, ticks
+  retained playback, and submits a scaled fallback-material `AnimatedDrawItem`.
+- Fifty-fifth slice is implemented: skinned mesh payloads, source descriptors,
+  renderer descriptors, upload planning, and animated draw submission now carry
+  optional material sections. The wolf smoke imports deterministic section
+  ranges from the mixed glTF scene and submits one animated draw per section
+  with smoke-owned fallback materials while sharing one skinned mesh, skeleton,
+  and palette.
 - Initial sample integration is in place: the debug UI can run the
   manifest-aware streaming coordinator once or continuously from camera
   position, display readiness/load/staging/streaming queue counters, and keep

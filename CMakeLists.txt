@@ -144,6 +144,8 @@ add_library(full_engine STATIC
     src/engine/core/Engine.hpp
     src/engine/jobs/JobQueue.cpp
     src/engine/jobs/JobQueue.hpp
+    src/engine/renderer_integration/AnimationPlaybackState.cpp
+    src/engine/renderer_integration/AnimationPlaybackState.hpp
     src/engine/renderer_integration/AnimationPosePalette.cpp
     src/engine/renderer_integration/AnimationPosePalette.hpp
     src/engine/renderer_integration/ChunkTerrainHandleMap.cpp
@@ -1228,10 +1230,14 @@ if(FULL_RENDERER_BUILD_SAMPLE)
     )
     file(TO_CMAKE_PATH "${FULL_RENDERER_SHADER_OUTPUT_DIR}" FULL_RENDERER_SAMPLE_SHADER_DIR)
     file(TO_CMAKE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/assets/dev/sample_terrain" FULL_RENDERER_SAMPLE_DEV_ASSET_DIR)
+    file(TO_CMAKE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/assets/dev/sample_animation" FULL_RENDERER_SAMPLE_ANIMATION_ASSET_DIR)
+    file(TO_CMAKE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/assets/33-gltf-wolf/gltf" FULL_RENDERER_SAMPLE_WOLF_ASSET_DIR)
     target_compile_definitions(full_renderer_sample
         PRIVATE
             FULL_RENDERER_SAMPLE_SHADER_DIR="${FULL_RENDERER_SAMPLE_SHADER_DIR}"
             FULL_RENDERER_SAMPLE_DEV_ASSET_DIR="${FULL_RENDERER_SAMPLE_DEV_ASSET_DIR}"
+            FULL_RENDERER_SAMPLE_ANIMATION_ASSET_DIR="${FULL_RENDERER_SAMPLE_ANIMATION_ASSET_DIR}"
+            FULL_RENDERER_SAMPLE_WOLF_ASSET_DIR="${FULL_RENDERER_SAMPLE_WOLF_ASSET_DIR}"
     )
     target_include_directories(full_renderer_sample
         PRIVATE

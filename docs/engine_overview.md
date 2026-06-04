@@ -167,6 +167,19 @@ Implemented pieces:
   CPU skinning/model matrices as a borrowed `SkinningPaletteDesc` view for
   frame-local animated draw submission without creating draw items or owning
   playback state
+- a minimal retained animation playback state that advances caller-defined
+  single-clip instances, samples loaded skeleton/clip payloads, and retains the
+  latest pose plus borrowed palette view without blending, renderer calls, or
+  draw-item construction
+- a sample/debug animation smoke path that imports a tiny glTF skeletal
+  fixture, uploads skeleton and skinned mesh resources through caller-owned
+  renderer APIs, ticks the retained playback state, and submits one imported
+  `AnimatedDrawItem` with a frame-local borrowed palette
+- a wolf sample/debug animation smoke path that exercises a real mixed-scene
+  glTF fixture by aggregating skinned meshes, skipping unskinned meshes in
+  skinned import mode, preserving imported material sections, uploading
+  fallback-material resources per section, and submitting multiple section
+  draws that share one skinned mesh, skeleton, and palette
 - a dev-only loaded asset importer that reads tiny tracked ASCII mesh,
   texture, and material fixtures into `LoadedAssetPayload` values, proving the
   first real source-file-to-payload path without adopting a production asset
@@ -194,8 +207,9 @@ Implemented pieces:
   renderer handles, renderer calls, or resource creation
 - loaded-payload upload planning that translates validated CPU mesh, texture,
   material, skeleton, and skinned mesh payloads into owned renderer descriptor
-  work. Static mesh UV0 is uploaded now; skinned mesh UV0 remains CPU-payload
-  data until the public skinned vertex/shader contract grows UV support.
+  work, including optional skinned mesh section ranges. Static mesh UV0 is
+  uploaded now; skinned mesh UV0 remains CPU-payload data until the public
+  skinned vertex/shader contract grows UV support.
 - loaded-payload upload execution that consumes planned mesh/texture/material/
   skeleton/skinned mesh work through caller-owned public renderer creation
   calls, resolving named material texture asset IDs and skinned mesh skeleton

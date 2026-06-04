@@ -127,6 +127,25 @@ struct LoadedSkinnedMeshVertex
 };
 
 /**
+ * @brief One material section in a renderer-free loaded skinned mesh.
+ *
+ * Sections reference ranges in the aggregate 16-bit triangle index buffer.
+ * `materialAssetId` remains an engine asset ID; renderer handles are resolved
+ * by later renderer-integration code.
+ */
+struct LoadedSkinnedMeshSection
+{
+    /** @brief Material asset ID assigned to this section. */
+    AssetId materialAssetId = {};
+
+    /** @brief First index in `LoadedSkinnedMeshAsset::indices`. */
+    std::uint32_t firstIndex = 0;
+
+    /** @brief Number of triangle indices in this section. */
+    std::uint32_t indexCount = 0;
+};
+
+/**
  * @brief Renderer-free loaded skinned mesh payload.
  *
  * The mesh stores copied vertices and indices plus the skeleton asset ID that
@@ -146,6 +165,9 @@ struct LoadedSkinnedMeshAsset
 
     /** @brief Copied 16-bit triangle indices. Count must be a non-zero multiple of three. */
     std::vector<std::uint16_t> indices;
+
+    /** @brief Optional material sections over `indices`; empty means one implicit whole-mesh section. */
+    std::vector<LoadedSkinnedMeshSection> sections;
 
     /** @brief Mesh-local bounds in meters. */
     AssetSourceBounds localBounds = {};
@@ -351,6 +373,8 @@ enum class LoadedAssetPayloadValidationResult
     InvalidSkinnedMeshVertexData,
     InvalidSkinnedMeshWeights,
     InvalidSkinnedMeshBounds,
+    InvalidSkinnedMeshSectionMaterialRef,
+    InvalidSkinnedMeshSectionRange,
     InvalidAnimationClipSkeletonRef,
     InvalidAnimationClipDuration,
     InvalidAnimationClipTicksPerSecond,

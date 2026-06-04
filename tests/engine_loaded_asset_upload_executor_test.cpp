@@ -163,6 +163,7 @@ full_engine::LoadedAssetPayload skinnedMeshPayload(
     mesh.localBounds.max[0] = 1.0f;
     mesh.localBounds.max[1] = 1.0f;
     mesh.localBounds.max[2] = 0.0f;
+    mesh.sections.push_back({asset(30), 0, 3});
 
     full_engine::LoadedAssetPayload payload;
     payload.kind = full_engine::AssetKind::SkinnedMesh;
@@ -193,6 +194,7 @@ public:
     std::uint32_t lastTextureWidth = 0;
     std::uint32_t lastSkeletonJointCount = 0;
     full_renderer::SkeletonHandle lastSkinnedMeshSkeleton = {};
+    std::uint32_t lastSkinnedMeshSectionCount = 0;
     full_renderer::MaterialDesc lastMaterial = {};
 
     full_renderer::RendererResult initialize(const full_renderer::RendererInitDesc&) override
@@ -229,6 +231,7 @@ public:
     {
         ++skinnedMeshCreateCalls;
         lastSkinnedMeshSkeleton = desc.skeleton;
+        lastSkinnedMeshSectionCount = desc.sectionCount;
         return nextSkinnedMesh;
     }
 
@@ -395,6 +398,7 @@ void testUploadsSkeletonAndSkinnedMesh(std::vector<std::string>& failures)
     expect(renderer.skinnedMeshCreateCalls == 1, "skinned mesh upload calls renderer", failures);
     expect(renderer.lastSkeletonJointCount == 2, "skeleton upload passes descriptor", failures);
     expect(renderer.lastSkinnedMeshSkeleton.id == 401, "skinned mesh upload resolves skeleton handle", failures);
+    expect(renderer.lastSkinnedMeshSectionCount == 1, "skinned mesh upload passes section descriptors", failures);
     expect(handles.findSkeletonHandle(asset(40)) != nullptr && handles.findSkeletonHandle(asset(40))->id == 401, "skeleton upload catalogs returned handle", failures);
     expect(handles.findSkinnedMeshHandle(asset(50)) != nullptr && handles.findSkinnedMeshHandle(asset(50))->id == 501, "skinned mesh upload catalogs returned handle", failures);
 }

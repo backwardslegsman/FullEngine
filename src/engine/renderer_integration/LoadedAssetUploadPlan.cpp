@@ -210,6 +210,8 @@ void bindSkinnedMeshDesc(LoadedSkinnedMeshUploadWork& work) noexcept
     work.desc.vertexCount = static_cast<std::uint32_t>(work.vertices.size());
     work.desc.indices = work.indices.data();
     work.desc.indexCount = static_cast<std::uint32_t>(work.indices.size());
+    work.desc.sections = work.sections.empty() ? nullptr : work.sections.data();
+    work.desc.sectionCount = static_cast<std::uint32_t>(work.sections.size());
 }
 
 LoadedMeshUploadWork buildMeshWork(const LoadedMeshAsset& mesh)
@@ -256,6 +258,14 @@ LoadedSkinnedMeshUploadWork buildSkinnedMeshWork(const LoadedSkinnedMeshAsset& m
         work.vertices.push_back(toRendererVertex(vertex));
     }
     work.indices = mesh.indices;
+    work.sections.reserve(mesh.sections.size());
+    for (const LoadedSkinnedMeshSection& section : mesh.sections)
+    {
+        full_renderer::SkinnedMeshSectionDesc rendererSection;
+        rendererSection.firstIndex = section.firstIndex;
+        rendererSection.indexCount = section.indexCount;
+        work.sections.push_back(rendererSection);
+    }
     bindSkinnedMeshDesc(work);
     return work;
 }
