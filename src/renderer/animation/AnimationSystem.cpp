@@ -71,6 +71,24 @@ bool hasUsableNormal(const float normal[3]) noexcept
     return std::isfinite(lengthSquared) && lengthSquared >= kMinimumNormalLengthSquared;
 }
 
+bool hasUsableTangent(const float tangent[4]) noexcept
+{
+    constexpr float kHandednessTolerance = 0.001f;
+    if (!isFiniteArray(tangent, 4))
+    {
+        return false;
+    }
+    const float lengthSquared =
+        tangent[0] * tangent[0] +
+        tangent[1] * tangent[1] +
+        tangent[2] * tangent[2];
+    if (!std::isfinite(lengthSquared) || lengthSquared < kMinimumNormalLengthSquared)
+    {
+        return false;
+    }
+    return std::fabs(std::fabs(tangent[3]) - 1.0f) <= kHandednessTolerance;
+}
+
 bool isValidSkinnedMeshSection(
     const SkinnedMeshSectionDesc& section,
     const std::uint32_t indexCount) noexcept
@@ -220,6 +238,7 @@ bool AnimationSystem::validateSkinnedMeshDesc(const SkinnedMeshDesc& desc) const
         const SkinnedMeshVertex& vertex = desc.vertices[vertexIndex];
         if (!isFiniteArray(vertex.position, 3) ||
             !hasUsableNormal(vertex.normal) ||
+            !hasUsableTangent(vertex.tangent) ||
             !isUnitRangeColor(vertex.colorLinear, 4) ||
             !isFiniteArray(vertex.uv0, 2) ||
             !isFiniteArray(vertex.jointIndices, kMaxSkinningInfluences) ||

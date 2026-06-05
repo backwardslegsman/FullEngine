@@ -23,9 +23,10 @@
         {
           "attributes": {
             "POSITION": 0,
-            "NORMAL": 2
+            "NORMAL": 2,
+            "TEXCOORD_0": 4
           },
-          "indices": 4,
+          "indices": 6,
           "mode": 4
         }
       ]
@@ -35,9 +36,10 @@
         {
           "attributes": {
             "POSITION": 1,
-            "NORMAL": 3
+            "NORMAL": 3,
+            "TEXCOORD_0": 5
           },
-          "indices": 5,
+          "indices": 7,
           "mode": 4
         }
       ]
@@ -45,8 +47,8 @@
   ],
   "buffers": [
     {
-      "uri": "data:application/octet-stream;base64,AAAAAAAAAAAAAAAAAACAPwAAAAAAAAAAAAAAAAAAgD8AAAAAAAAAQAAAAAAAAAAAAABAQAAAAAAAAAAAAAAAQAAAgD8AAAAAAAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAABAAIAAAABAAIA",
-      "byteLength": 156
+      "uri": "data:application/octet-stream;base64,AAAAAAAAAAAAAAAAAACAPwAAAAAAAAAAAAAAAAAAgD8AAAAAAAAAQAAAAAAAAAAAAABAQAAAAAAAAAAAAAAAQAAAgD8AAAAAAAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAABAAIAAAABAAIA",
+      "byteLength": 204
     }
   ],
   "bufferViews": [
@@ -65,6 +67,12 @@
     {
       "buffer": 0,
       "byteOffset": 144,
+      "byteLength": 48,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 192,
       "byteLength": 12,
       "target": 34963
     }
@@ -105,12 +113,26 @@
     {
       "bufferView": 2,
       "byteOffset": 0,
+      "componentType": 5126,
+      "count": 3,
+      "type": "VEC2"
+    },
+    {
+      "bufferView": 2,
+      "byteOffset": 24,
+      "componentType": 5126,
+      "count": 3,
+      "type": "VEC2"
+    },
+    {
+      "bufferView": 3,
+      "byteOffset": 0,
       "componentType": 5123,
       "count": 3,
       "type": "SCALAR"
     },
     {
-      "bufferView": 2,
+      "bufferView": 3,
       "byteOffset": 6,
       "componentType": 5123,
       "count": 3,

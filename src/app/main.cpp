@@ -1234,7 +1234,7 @@ full_engine::AssetSourceRecord sampleWolfSkinnedMeshSource(const std::string& ur
     record.id = sampleWolfSkinnedMeshAssetId();
     record.kind = full_engine::AssetKind::SkinnedMesh;
     record.uri = uri;
-    record.descriptor.skinnedMesh.vertexCount = 2811;
+    record.descriptor.skinnedMesh.vertexCount = 2949;
     record.descriptor.skinnedMesh.indexCount = 8244;
     record.descriptor.skinnedMesh.skeletonAssetId = sampleWolfSkeletonAssetId();
     record.descriptor.skinnedMesh.localBounds.min[0] = -0.12202499806880951f;
@@ -1441,8 +1441,10 @@ void runSampleAnimationSmokeFromSources(
     state.skeleton = skeleton.payload.skeleton;
 
     state.step = SampleAnimationSmokeStep::ImportSkinnedMesh;
+    full_engine::AssimpLoadedAssetImportOptions skinnedMeshImportOptions;
+    skinnedMeshImportOptions.generateMissingTangents = true;
     const full_engine::AssimpLoadedAssetImportResult skinned =
-        full_engine::importLoadedAssetPayloadWithAssimp(skinnedMeshSource);
+        full_engine::importLoadedAssetPayloadWithAssimp(skinnedMeshSource, skinnedMeshImportOptions);
     state.skinnedMeshImportStatus = skinned.status;
     if (skinned.status != full_engine::AssimpLoadedAssetImportStatus::Success)
     {

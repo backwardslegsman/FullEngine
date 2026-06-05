@@ -39,6 +39,10 @@ unsigned int postProcessFlags(const AssimpLoadedAssetImportOptions& options) noe
     {
         flags |= aiProcess_GenNormals;
     }
+    if (options.generateMissingTangents)
+    {
+        flags |= aiProcess_CalcTangentSpace;
+    }
     return flags;
 }
 
@@ -304,6 +308,7 @@ bool canConvertMesh(const aiMesh& mesh, const AssimpLoadedAssetImportOptions& op
 {
     if (!mesh.HasPositions() ||
         !mesh.HasNormals() ||
+        !mesh.HasTangentsAndBitangents() ||
         (!options.defaultMissingUv0ToZero && !mesh.HasTextureCoords(0)) ||
         mesh.mNumVertices == 0 ||
         static_cast<std::size_t>(mesh.mNumVertices) > kMaxIndexedVertexCount ||
@@ -334,6 +339,22 @@ bool canConvertMesh(const aiMesh& mesh, const AssimpLoadedAssetImportOptions& op
     }
 
     return true;
+}
+
+float tangentHandedness(
+    const aiVector3D& normal,
+    const aiVector3D& tangent,
+    const aiVector3D& bitangent) noexcept
+{
+    const aiVector3D cross{
+        normal.y * tangent.z - normal.z * tangent.y,
+        normal.z * tangent.x - normal.x * tangent.z,
+        normal.x * tangent.y - normal.y * tangent.x};
+    const float dot =
+        cross.x * bitangent.x +
+        cross.y * bitangent.y +
+        cross.z * bitangent.z;
+    return dot < 0.0f ? -1.0f : 1.0f;
 }
 
 bool canConvertSkinnedMesh(const aiMesh& mesh, const AssimpLoadedAssetImportOptions& options) noexcept
@@ -369,6 +390,13 @@ void appendMesh(
         vertex.normal[0] = mesh.mNormals[index].x;
         vertex.normal[1] = mesh.mNormals[index].y;
         vertex.normal[2] = mesh.mNormals[index].z;
+        vertex.tangent[0] = mesh.mTangents[index].x;
+        vertex.tangent[1] = mesh.mTangents[index].y;
+        vertex.tangent[2] = mesh.mTangents[index].z;
+        vertex.tangent[3] = tangentHandedness(
+            mesh.mNormals[index],
+            mesh.mTangents[index],
+            mesh.mBitangents[index]);
         if (mesh.HasTextureCoords(0))
         {
             vertex.uv0[0] = mesh.mTextureCoords[0][index].x;
@@ -451,6 +479,13 @@ bool appendSkinnedMesh(
         vertex.normal[0] = mesh.mNormals[index].x;
         vertex.normal[1] = mesh.mNormals[index].y;
         vertex.normal[2] = mesh.mNormals[index].z;
+        vertex.tangent[0] = mesh.mTangents[index].x;
+        vertex.tangent[1] = mesh.mTangents[index].y;
+        vertex.tangent[2] = mesh.mTangents[index].z;
+        vertex.tangent[3] = tangentHandedness(
+            mesh.mNormals[index],
+            mesh.mTangents[index],
+            mesh.mBitangents[index]);
         if (mesh.HasTextureCoords(0))
         {
             vertex.uv0[0] = mesh.mTextureCoords[0][index].x;

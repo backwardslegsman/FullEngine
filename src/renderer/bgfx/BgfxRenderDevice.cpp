@@ -426,6 +426,7 @@ struct FullscreenVertex
     float normal[3];
     float uv0[2];
     float color[4];
+    float tangent[4];
 };
 
 struct ParticleVertex
@@ -446,12 +447,12 @@ bool allocateFullscreenQuad(bgfx::TransientVertexBuffer& vertexBuffer, const bgf
 
     bgfx::allocTransientVertexBuffer(&vertexBuffer, kVertexCount, layout);
     auto* vertices = reinterpret_cast<FullscreenVertex*>(vertexBuffer.data);
-    vertices[0] = {{-1.0f, -1.0f, 0.0f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f}, {1.0f, 1.0f, 1.0f, 1.0f}};
-    vertices[1] = {{1.0f, -1.0f, 0.0f}, {0.0f, 1.0f, 0.0f}, {1.0f, 0.0f}, {1.0f, 1.0f, 1.0f, 1.0f}};
-    vertices[2] = {{1.0f, 1.0f, 0.0f}, {0.0f, 1.0f, 0.0f}, {1.0f, 1.0f}, {1.0f, 1.0f, 1.0f, 1.0f}};
-    vertices[3] = {{-1.0f, -1.0f, 0.0f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f}, {1.0f, 1.0f, 1.0f, 1.0f}};
-    vertices[4] = {{1.0f, 1.0f, 0.0f}, {0.0f, 1.0f, 0.0f}, {1.0f, 1.0f}, {1.0f, 1.0f, 1.0f, 1.0f}};
-    vertices[5] = {{-1.0f, 1.0f, 0.0f}, {0.0f, 1.0f, 0.0f}, {0.0f, 1.0f}, {1.0f, 1.0f, 1.0f, 1.0f}};
+    vertices[0] = {{-1.0f, -1.0f, 0.0f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f}, {1.0f, 1.0f, 1.0f, 1.0f}, {1.0f, 0.0f, 0.0f, 1.0f}};
+    vertices[1] = {{1.0f, -1.0f, 0.0f}, {0.0f, 1.0f, 0.0f}, {1.0f, 0.0f}, {1.0f, 1.0f, 1.0f, 1.0f}, {1.0f, 0.0f, 0.0f, 1.0f}};
+    vertices[2] = {{1.0f, 1.0f, 0.0f}, {0.0f, 1.0f, 0.0f}, {1.0f, 1.0f}, {1.0f, 1.0f, 1.0f, 1.0f}, {1.0f, 0.0f, 0.0f, 1.0f}};
+    vertices[3] = {{-1.0f, -1.0f, 0.0f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f}, {1.0f, 1.0f, 1.0f, 1.0f}, {1.0f, 0.0f, 0.0f, 1.0f}};
+    vertices[4] = {{1.0f, 1.0f, 0.0f}, {0.0f, 1.0f, 0.0f}, {1.0f, 1.0f}, {1.0f, 1.0f, 1.0f, 1.0f}, {1.0f, 0.0f, 0.0f, 1.0f}};
+    vertices[5] = {{-1.0f, 1.0f, 0.0f}, {0.0f, 1.0f, 0.0f}, {0.0f, 1.0f}, {1.0f, 1.0f, 1.0f, 1.0f}, {1.0f, 0.0f, 0.0f, 1.0f}};
     return true;
 }
 
@@ -1773,6 +1774,7 @@ RendererResult BgfxRenderDevice::initialize(const RendererInitDesc& desc)
         .add(bgfx::Attrib::Normal, 3, bgfx::AttribType::Float)
         .add(bgfx::Attrib::TexCoord0, 2, bgfx::AttribType::Float)
         .add(bgfx::Attrib::Color0, 4, bgfx::AttribType::Float)
+        .add(bgfx::Attrib::Tangent, 4, bgfx::AttribType::Float)
         .end();
     skinnedMeshVertexLayout_
         .begin()
@@ -1782,6 +1784,7 @@ RendererResult BgfxRenderDevice::initialize(const RendererInitDesc& desc)
         .add(bgfx::Attrib::TexCoord0, 2, bgfx::AttribType::Float)
         .add(bgfx::Attrib::TexCoord1, 4, bgfx::AttribType::Float)
         .add(bgfx::Attrib::TexCoord2, 4, bgfx::AttribType::Float)
+        .add(bgfx::Attrib::Tangent, 4, bgfx::AttribType::Float)
         .end();
     particleVertexLayout_
         .begin()
@@ -3224,6 +3227,7 @@ RendererResult BgfxRenderDevice::submitSky(const EnvironmentDesc& environment)
         float normal[3];
         float uv0[2];
         float color[4];
+        float tangent[4];
     };
     static_assert(sizeof(SkyVertex) == sizeof(MeshVertex), "Sky vertex must match mesh layout.");
 
@@ -3242,7 +3246,8 @@ RendererResult BgfxRenderDevice::submitSky(const EnvironmentDesc& environment)
             {positions[index][0], positions[index][1], 0.0f},
             {0.0f, 1.0f, 0.0f},
             {0.0f, 0.0f},
-            {1.0f, 1.0f, 1.0f, 1.0f}};
+            {1.0f, 1.0f, 1.0f, 1.0f},
+            {1.0f, 0.0f, 0.0f, 1.0f}};
     }
 
     bindEnvironmentState(environment);
@@ -3439,6 +3444,7 @@ RendererResult BgfxRenderDevice::submitSsao(
         float normal[3];
         float uv0[2];
         float color[4];
+        float tangent[4];
     };
     static_assert(sizeof(FullscreenVertex) == sizeof(MeshVertex), "Fullscreen vertex must match mesh layout.");
 
@@ -3457,7 +3463,8 @@ RendererResult BgfxRenderDevice::submitSsao(
             {positions[index][0], positions[index][1], 0.0f},
             {0.0f, 1.0f, 0.0f},
             {0.0f, 0.0f},
-            {1.0f, 1.0f, 1.0f, 1.0f}};
+            {1.0f, 1.0f, 1.0f, 1.0f},
+            {1.0f, 0.0f, 0.0f, 1.0f}};
     }
 
     const float texelX = aoDimensions.width > 0 ? 1.0f / static_cast<float>(aoDimensions.width) : 0.0f;
@@ -3500,7 +3507,8 @@ RendererResult BgfxRenderDevice::submitSsao(
                 {positions[index][0], positions[index][1], 0.0f},
                 {0.0f, 1.0f, 0.0f},
                 {0.0f, 0.0f},
-                {1.0f, 1.0f, 1.0f, 1.0f}};
+                {1.0f, 1.0f, 1.0f, 1.0f},
+                {1.0f, 0.0f, 0.0f, 1.0f}};
         }
 
         const float horizontalBlurParams[4] = {texelX, texelY, plan.blurRadiusPixels, 0.0f};
@@ -3530,7 +3538,8 @@ RendererResult BgfxRenderDevice::submitSsao(
                 {positions[index][0], positions[index][1], 0.0f},
                 {0.0f, 1.0f, 0.0f},
                 {0.0f, 0.0f},
-                {1.0f, 1.0f, 1.0f, 1.0f}};
+                {1.0f, 1.0f, 1.0f, 1.0f},
+                {1.0f, 0.0f, 0.0f, 1.0f}};
         }
 
         const float verticalBlurParams[4] = {texelX, texelY, plan.blurRadiusPixels, 1.0f};
@@ -3562,7 +3571,8 @@ RendererResult BgfxRenderDevice::submitSsao(
             {positions[index][0], positions[index][1], 0.0f},
             {0.0f, 1.0f, 0.0f},
             {0.0f, 0.0f},
-            {1.0f, 1.0f, 1.0f, 1.0f}};
+            {1.0f, 1.0f, 1.0f, 1.0f},
+            {1.0f, 0.0f, 0.0f, 1.0f}};
     }
 
     const float compositeParams[4] = {0.0f, 0.0f, 0.0f, plan.debugVisualize ? 1.0f : 0.0f};
@@ -4513,6 +4523,7 @@ RendererResult BgfxRenderDevice::submitSelectionOutline(
         float normal[3];
         float uv0[2];
         float color[4];
+        float tangent[4];
     };
     static_assert(sizeof(FullscreenVertex) == sizeof(MeshVertex), "Fullscreen vertex must match mesh layout.");
 
@@ -4531,7 +4542,8 @@ RendererResult BgfxRenderDevice::submitSelectionOutline(
             {positions[index][0], positions[index][1], 0.0f},
             {0.0f, 1.0f, 0.0f},
             {0.0f, 0.0f},
-            {1.0f, 1.0f, 1.0f, 1.0f}};
+            {1.0f, 1.0f, 1.0f, 1.0f},
+            {1.0f, 0.0f, 0.0f, 1.0f}};
     }
 
     const float outlineColor[4] = {

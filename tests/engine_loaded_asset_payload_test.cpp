@@ -360,6 +360,22 @@ void testInvalidMeshPayloads(std::vector<std::string>& failures)
         failures);
 
     mesh = meshAsset();
+    mesh.vertices[0].tangent[0] = 0.0f;
+    expect(
+        full_engine::validateLoadedMeshAsset(mesh) ==
+            full_engine::LoadedAssetPayloadValidationResult::InvalidMeshVertexData,
+        "mesh payload rejects zero tangent",
+        failures);
+
+    mesh = meshAsset();
+    mesh.vertices[0].tangent[3] = 0.0f;
+    expect(
+        full_engine::validateLoadedMeshAsset(mesh) ==
+            full_engine::LoadedAssetPayloadValidationResult::InvalidMeshVertexData,
+        "mesh payload rejects invalid tangent handedness",
+        failures);
+
+    mesh = meshAsset();
     mesh.vertices[0].colorLinear[0] = 2.0f;
     expect(
         full_engine::validateLoadedMeshAsset(mesh) ==
@@ -586,6 +602,22 @@ void testInvalidSkinnedMeshPayloads(std::vector<std::string>& failures)
         full_engine::validateLoadedSkinnedMeshAsset(mesh) ==
             full_engine::LoadedAssetPayloadValidationResult::InvalidSkinnedMeshVertexData,
         "skinned mesh payload rejects zero normal",
+        failures);
+
+    mesh = skinnedMeshAsset();
+    mesh.vertices[0].tangent[2] = std::nanf("");
+    expect(
+        full_engine::validateLoadedSkinnedMeshAsset(mesh) ==
+            full_engine::LoadedAssetPayloadValidationResult::InvalidSkinnedMeshVertexData,
+        "skinned mesh payload rejects non-finite tangent",
+        failures);
+
+    mesh = skinnedMeshAsset();
+    mesh.vertices[0].tangent[3] = 0.25f;
+    expect(
+        full_engine::validateLoadedSkinnedMeshAsset(mesh) ==
+            full_engine::LoadedAssetPayloadValidationResult::InvalidSkinnedMeshVertexData,
+        "skinned mesh payload rejects invalid tangent handedness",
         failures);
 
     mesh = skinnedMeshAsset();

@@ -28,6 +28,15 @@ struct AssimpLoadedAssetImportOptions
     /** @brief Generate normals through Assimp when the source mesh omits them. */
     bool generateMissingNormals = false;
 
+    /**
+     * @brief Generate tangent-space data through Assimp when the source mesh omits tangents.
+     *
+     * Disabled by default so production imports preserve authored tangent bases
+     * and fail early when normal-map-ready mesh data is incomplete. Generation
+     * depends on valid normals and UV0 data.
+     */
+    bool generateMissingTangents = false;
+
     /** @brief Accept missing UV set 0 and fill imported `uv0` with zero. */
     bool defaultMissingUv0ToZero = false;
 
@@ -93,17 +102,19 @@ const char* assimpLoadedAssetImportStatusName(
  * `source.kind`; callers import the skeleton, skinned mesh, and animation clip
  * as separate source records even when they share a glTF file. Skinned mesh
  * imports aggregate convertible skinned meshes and skip unskinned meshes in
- * mixed scenes. Missing UV0 is
- * rejected unless
+ * mixed scenes. Missing UV0 is rejected unless
  * `AssimpLoadedAssetImportOptions::defaultMissingUv0ToZero` is explicitly set.
- * Mesh order and face order follow Assimp's post-processed scene order. Parsed
- * aggregate metadata is checked against the active source descriptor, and the
- * final payload is validated with `validateLoadedAssetPayload`.
+ * Missing tangents are rejected unless
+ * `AssimpLoadedAssetImportOptions::generateMissingTangents` is explicitly set;
+ * imported tangents use the glTF xyz plus handedness convention. Mesh order and
+ * face order follow Assimp's post-processed scene order. Parsed aggregate
+ * metadata is checked against the active source descriptor, and the final
+ * payload is validated with `validateLoadedAssetPayload`.
  *
  * The function copies all payload data by value. It performs no renderer
  * calls, renderer handle lookup, renderer resource creation, texture decoding,
- * material import, tangent import, UV1+ import, animation evaluation, async
- * scheduling, or source catalog mutation.
+ * material import, UV1+ import, animation evaluation, async scheduling, or
+ * source catalog mutation.
  */
 AssimpLoadedAssetImportResult importLoadedAssetPayloadWithAssimp(
     const AssetSourceRecord& source,

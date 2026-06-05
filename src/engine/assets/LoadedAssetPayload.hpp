@@ -20,10 +20,12 @@ constexpr std::uint32_t kMaxLoadedSkinningInfluences = 4;
  * @brief Fixed renderer-free vertex shape for loaded mesh asset data.
  *
  * Positions are mesh-local meters in the engine/renderer Y-up convention.
- * Normals are expected to be finite and non-zero. UV0 values are copied as
- * renderer-facing texture coordinates and must be finite. Colors are linear
- * RGBA in `[0, 1]`. The payload owns copied vectors and does not reference
- * importer buffers, renderer handles, renderer resources, or backend objects.
+ * Normals are expected to be finite and non-zero. Tangents use the glTF
+ * convention where xyz is the local tangent direction and w is the bitangent
+ * handedness sign. UV0 values are copied as renderer-facing texture
+ * coordinates and must be finite. Colors are linear RGBA in `[0, 1]`. The
+ * payload owns copied vectors and does not reference importer buffers,
+ * renderer handles, renderer resources, or backend objects.
  */
 struct LoadedMeshVertex
 {
@@ -38,6 +40,9 @@ struct LoadedMeshVertex
 
     /** @brief Linear RGBA vertex color. */
     float colorLinear[4] = {1.0f, 1.0f, 1.0f, 1.0f};
+
+    /** @brief Mesh-local tangent xyz plus glTF-style handedness sign in w. */
+    float tangent[4] = {1.0f, 0.0f, 0.0f, 1.0f};
 };
 
 /**
@@ -102,8 +107,10 @@ struct LoadedSkeletonAsset
  * @brief Renderer-free skinned mesh vertex payload.
  *
  * Positions and normals are mesh-local meters in the engine/renderer Y-up
- * convention. UV0 is copied from source texture coordinate set 0. Joint
- * indices and weights mirror the current four-influence renderer contract.
+ * convention. Tangents use the glTF tangent basis convention with xyz as the
+ * local tangent direction and w as handedness. UV0 is copied from source
+ * texture coordinate set 0. Joint indices and weights mirror the current
+ * four-influence renderer contract.
  */
 struct LoadedSkinnedMeshVertex
 {
@@ -124,6 +131,9 @@ struct LoadedSkinnedMeshVertex
 
     /** @brief Corresponding non-negative skinning weights. Values must sum to one. */
     float jointWeights[kMaxLoadedSkinningInfluences] = {1.0f, 0.0f, 0.0f, 0.0f};
+
+    /** @brief Mesh-local tangent xyz plus glTF-style handedness sign in w. */
+    float tangent[4] = {1.0f, 0.0f, 0.0f, 1.0f};
 };
 
 /**

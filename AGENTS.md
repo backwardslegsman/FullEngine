@@ -13,7 +13,7 @@ Prioritize correctness, maintainability, clean interfaces, deterministic behavio
 - Expose Doxygen-documented C++ interfaces for engine integration.
 - Design for open-world scale: chunking, culling, LOD, instancing, and streaming-friendly ownership.
 - Keep CPU-side systems testable without requiring a full game runtime.
-- For Phase 3 and later, prioritize the engine-readiness hardening milestones in `docs/agents/roadmap.md` before adding more visual effects.
+- For Phase 3 and later, prioritize the active engine-readiness hardening milestones in `docs/agents/roadmap.md` before adding more visual effects. Use `docs/agents/implementation_log.md` only when historical slice detail is needed.
 
 ## Global non-goals
 
@@ -135,7 +135,8 @@ At minimum, a renderer change is done when it builds, public APIs have Doxygen-c
 ## Reference docs
 
 - `docs/agents/architecture.md` — repository layers, engine boundary, and ownership model.
-- `docs/agents/roadmap.md` — phase plan and preferred first milestone.
+- `docs/agents/roadmap.md` — compact active phase plan, priorities, and next recommended slices.
+- `docs/agents/implementation_log.md` — historical completed-slice archive; avoid loading it by default.
 - `docs/agents/definition_of_done.md` — completion criteria.
 - `docs/agents/dependency_policy.md` — dependency approval rules.
 - `docs/agents/coding_style.md` — code style and maintainability rules.

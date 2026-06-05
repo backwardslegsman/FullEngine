@@ -33,6 +33,10 @@ void setVertex(
     vertex.normal[0] = 0.0f;
     vertex.normal[1] = 1.0f;
     vertex.normal[2] = 0.0f;
+    vertex.tangent[0] = 1.0f;
+    vertex.tangent[1] = 0.0f;
+    vertex.tangent[2] = 0.0f;
+    vertex.tangent[3] = 1.0f;
     vertex.uv0[0] = u;
     vertex.uv0[1] = v;
     vertex.colorLinear[0] = 0.28f + 0.10f * u;

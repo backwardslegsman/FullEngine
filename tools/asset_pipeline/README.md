@@ -8,10 +8,10 @@ layer now has two importer seams behind the same
   format is not a shipping content contract
 - an Assimp-backed static/skinned/animation glTF importer that validates source
   descriptors, aggregates static multi-mesh scenes into one renderer-free mesh
-  payload, optionally generates missing normals, requires or explicitly
-  defaults UV0, copies vertex colors, and extracts bind-pose skeletons plus
-  skinned mesh weights and raw joint transform animation tracks without
-  renderer headers or handles
+  payload, optionally generates missing normals or tangents, requires or
+  explicitly defaults UV0, copies vertex colors and glTF-style tangent
+  handedness, and extracts bind-pose skeletons plus skinned mesh weights and
+  raw joint transform animation tracks without renderer headers or handles
 - an stb-backed direct image importer that decodes texture files into tightly
   packed, single-mip RGBA8 `LoadedTextureAsset` payloads with caller-authored
   semantic/color-space metadata
@@ -31,23 +31,24 @@ borrowed frame-local `SkinningPaletteDesc` view. A minimal retained playback
 state can advance one clip per caller-defined instance and retain the latest
 pose/palette without owning draw submission. Skinned mesh UV0 is now uploaded
 into the public renderer vertex contract and forwarded to the basic material
-shader for base-color texture sampling. The sample debug UI can now run a tiny
-glTF skeletal smoke path that imports fixture payloads, uploads skeleton and
-skinned mesh resources through caller-owned renderer APIs, ticks playback, and
-submits one imported `AnimatedDrawItem`. It can also run a wolf fixture smoke
-path that aggregates the skinned meshes from a mixed glTF scene while skipping
-unskinned meshes for the skinned import mode, preserves skinned mesh material
-sections, decodes referenced texture images, uploads material payloads, and
-submits one animated draw per section using resolved material handles. The
-sample wolf smoke exposes deterministic camera focus and compact draw/material/
-palette diagnostics so visible animation failures are not inferred from only
-renderer counters. The sample queues smoke run/clear button actions during the
-debug-UI frame and executes them after `endFrame`, keeping skeleton/skinned
-resource creation and destruction outside an active renderer frame.
-Blending, animation compression, embedded glTF
-images, tangent payloads, UV1+ sets, full PBR material-section shading, mip
-generation, compression/KTX, production material authoring, packed assets,
-async IO, and production packaging are still future work.
+shader for base-color texture sampling, while static/skinned tangent data is
+validated, imported, uploaded, and retained for future normal-map shading. The
+sample debug UI can now run a tiny glTF skeletal smoke path that imports
+fixture payloads, uploads skeleton and skinned mesh resources through
+caller-owned renderer APIs, ticks playback, and submits one imported
+`AnimatedDrawItem`. It can also run a wolf fixture smoke path that aggregates
+the skinned meshes from a mixed glTF scene while skipping unskinned meshes for
+the skinned import mode, preserves skinned mesh material sections, decodes
+referenced texture images, uploads material payloads, and submits one animated
+draw per section using resolved material handles. The sample wolf smoke exposes
+deterministic camera focus and compact draw/material/palette diagnostics so
+visible animation failures are not inferred from only renderer counters. The
+sample queues smoke run/clear button actions during the debug-UI frame and
+executes them after `endFrame`, keeping skeleton/skinned resource creation and
+destruction outside an active renderer frame. Blending, animation compression,
+embedded glTF images, UV1+ sets, normal-map sampling, full PBR material-section
+shading, mip generation, compression/KTX, production material authoring, packed
+assets, async IO, and production packaging are still future work.
 
 Future validation tools should consume authored assets, convert them to the
 renderer-facing contracts in `docs/assets.md`, and report actionable errors

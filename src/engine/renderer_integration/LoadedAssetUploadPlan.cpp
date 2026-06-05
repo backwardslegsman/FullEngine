@@ -148,6 +148,10 @@ full_renderer::MeshVertex toRendererVertex(const LoadedMeshVertex& vertex) noexc
         result.position[axis] = vertex.position[axis];
         result.normal[axis] = vertex.normal[axis];
     }
+    for (int component = 0; component < 4; ++component)
+    {
+        result.tangent[component] = vertex.tangent[component];
+    }
     for (int axis = 0; axis < 2; ++axis)
     {
         result.uv0[axis] = vertex.uv0[axis];
@@ -166,6 +170,10 @@ full_renderer::SkinnedMeshVertex toRendererVertex(const LoadedSkinnedMeshVertex&
     {
         result.position[axis] = vertex.position[axis];
         result.normal[axis] = vertex.normal[axis];
+    }
+    for (int component = 0; component < 4; ++component)
+    {
+        result.tangent[component] = vertex.tangent[component];
     }
     for (int channel = 0; channel < 4; ++channel)
     {

@@ -53,11 +53,12 @@ enum class RendererResult
  * @brief Fixed Phase 1 vertex format for uploaded mesh data.
  *
  * Positions and normals are in world-model local space using meters, Y-up, and
- * right-handed coordinates. `uv0` carries the primary texture coordinate set
- * for future material sampling and must contain finite values. Colors are
- * linear RGBA values in the range `[0, 1]`. The renderer copies vertex data
- * during `createMesh`; source storage may be released or reused after that
- * call returns.
+ * right-handed coordinates. `tangent` uses the glTF tangent convention: xyz is
+ * the local tangent direction and w is the handedness sign used to reconstruct
+ * a bitangent from normal and tangent. `uv0` carries the primary texture
+ * coordinate set. Colors are linear RGBA values in the range `[0, 1]`. The
+ * renderer copies vertex data during `createMesh`; source storage may be
+ * released or reused after that call returns.
  */
 struct MeshVertex
 {
@@ -72,6 +73,15 @@ struct MeshVertex
 
     /** @brief Linear RGBA vertex color multiplied by the material color. */
     float colorLinear[4] = {1.0f, 1.0f, 1.0f, 1.0f};
+
+    /**
+     * @brief Local-space tangent basis direction and handedness sign.
+     *
+     * `xyz` must be finite and non-zero. `w` must be approximately `+1` or
+     * `-1`; shader normal-map use is deferred, but the data is validated and
+     * copied so material import can preserve the authored tangent basis.
+     */
+    float tangent[4] = {1.0f, 0.0f, 0.0f, 1.0f};
 };
 
 /**
@@ -81,8 +91,9 @@ struct MeshVertex
  * indices. Vertex and index pointers must remain valid for the duration of the
  * `createMesh` call only; the renderer copies data needed by the backend before
  * returning. `indexCount` must be a non-zero multiple of three. Positions must
- * be finite, normals must be finite and non-zero, colors must be linear values
- * in `[0, 1]`, indices must be in range, and degenerate triangles are rejected.
+ * be finite, normals and tangent xyz must be finite and non-zero, tangent w
+ * must be approximately `+1` or `-1`, colors must be linear values in `[0, 1]`,
+ * indices must be in range, and degenerate triangles are rejected.
  */
 struct MeshDesc
 {

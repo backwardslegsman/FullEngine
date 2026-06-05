@@ -228,6 +228,11 @@ void testValidPayloadsPlanUploadWork(std::vector<std::string>& failures)
     expect(mesh.mesh.desc.indexCount == 3, "mesh descriptor copies index count", failures);
     expect(mesh.mesh.vertices[1].position[0] == 1.0f, "mesh upload work copies vertex position", failures);
     expect(mesh.mesh.vertices[0].colorLinear[2] == 0.5f, "mesh upload work copies vertex color", failures);
+    expect(
+        mesh.mesh.vertices[0].tangent[0] == 1.0f &&
+            mesh.mesh.vertices[0].tangent[3] == 1.0f,
+        "mesh upload work copies tangent",
+        failures);
 
     const full_engine::LoadedAssetUploadRecord& texture = plan.records[1];
     expect(texture.status == full_engine::LoadedAssetUploadStatus::Planned, "texture upload work is planned", failures);
@@ -274,6 +279,11 @@ void testValidPayloadsPlanUploadWork(std::vector<std::string>& failures)
     expect(skinned.skinnedMesh.vertices[0].jointIndices[1] == 1.0f, "skinned upload copies joint indices as renderer floats", failures);
     expect(skinned.skinnedMesh.vertices[0].jointWeights[1] == 0.25f, "skinned upload copies joint weights", failures);
     expect(skinned.skinnedMesh.vertices[1].uv0[0] == 1.0f && skinned.skinnedMesh.vertices[1].uv0[1] == 0.0f, "skinned upload copies UV0", failures);
+    expect(
+        skinned.skinnedMesh.vertices[0].tangent[0] == 1.0f &&
+            skinned.skinnedMesh.vertices[0].tangent[3] == 1.0f,
+        "skinned upload copies tangent",
+        failures);
 }
 
 void testInvalidPayloadsReportInvalid(std::vector<std::string>& failures)

@@ -347,6 +347,14 @@ full_engine::AssimpLoadedAssetImportOptions allowMissingUv0()
 {
     full_engine::AssimpLoadedAssetImportOptions options;
     options.defaultMissingUv0ToZero = true;
+    options.generateMissingTangents = true;
+    return options;
+}
+
+full_engine::AssimpLoadedAssetImportOptions generateMissingTangents()
+{
+    full_engine::AssimpLoadedAssetImportOptions options;
+    options.generateMissingTangents = true;
     return options;
 }
 
@@ -452,7 +460,7 @@ void testValidStaticMeshImport(std::vector<std::string>& failures)
     const full_engine::AssimpLoadedAssetImportResult result =
         full_engine::importLoadedAssetPayloadWithAssimp(
             meshSource(fixturePath("static_triangle.gltf")),
-            allowMissingUv0());
+            generateMissingTangents());
     expect(result.status == full_engine::AssimpLoadedAssetImportStatus::Success, "valid gltf mesh imports", failures);
     expect(result.payload.kind == full_engine::AssetKind::Mesh, "valid gltf imports mesh payload", failures);
     expect(result.payload.mesh.id == asset(42), "imported mesh preserves asset id", failures);
@@ -461,7 +469,12 @@ void testValidStaticMeshImport(std::vector<std::string>& failures)
     expect(result.payload.mesh.indices[0] == 0 && result.payload.mesh.indices[1] == 1 && result.payload.mesh.indices[2] == 2, "imported mesh preserves indices", failures);
     expect(result.payload.mesh.localBounds.max[0] == 1.0f && result.payload.mesh.localBounds.max[1] == 1.0f, "imported mesh computes bounds", failures);
     expect(result.payload.mesh.vertices[0].normal[2] == 1.0f, "imported mesh copies normals", failures);
-    expect(result.payload.mesh.vertices[0].uv0[0] == 0.0f && result.payload.mesh.vertices[0].uv0[1] == 0.0f, "missing UV0 can default to zero", failures);
+    const bool hasCopiedUv =
+        (result.payload.mesh.vertices[0].uv0[0] != 0.0f || result.payload.mesh.vertices[0].uv0[1] != 0.0f) ||
+        (result.payload.mesh.vertices[1].uv0[0] != 0.0f || result.payload.mesh.vertices[1].uv0[1] != 0.0f) ||
+        (result.payload.mesh.vertices[2].uv0[0] != 0.0f || result.payload.mesh.vertices[2].uv0[1] != 0.0f);
+    expect(hasCopiedUv, "imported mesh copies UV0", failures);
+    expect(result.payload.mesh.vertices[0].tangent[0] == 1.0f && result.payload.mesh.vertices[0].tangent[3] == 1.0f, "imported mesh copies authored tangent", failures);
     expect(result.payload.mesh.vertices[0].colorLinear[0] == 1.0f && result.payload.mesh.vertices[0].colorLinear[3] == 1.0f, "imported mesh defaults vertex colors", failures);
     expect(
         full_engine::validateLoadedAssetPayload(result.payload) ==
@@ -494,7 +507,7 @@ void testGeneratedNormals(std::vector<std::string>& failures)
 
     full_engine::AssimpLoadedAssetImportOptions options;
     options.generateMissingNormals = true;
-    options.defaultMissingUv0ToZero = true;
+    options.generateMissingTangents = true;
     const full_engine::AssimpLoadedAssetImportResult generated =
         full_engine::importLoadedAssetPayloadWithAssimp(
             meshSource(fixturePath("no_normals.gltf")),
@@ -502,6 +515,23 @@ void testGeneratedNormals(std::vector<std::string>& failures)
     expect(generated.status == full_engine::AssimpLoadedAssetImportStatus::Success, "missing normals can be generated", failures);
     expect(generated.payload.mesh.vertices.size() == 3, "generated-normal import keeps vertices", failures);
     expect(generated.payload.mesh.vertices[0].normal[2] > 0.0f, "generated normals point along triangle normal", failures);
+    expect(generated.payload.mesh.vertices[0].tangent[0] != 0.0f, "generated tangent data is copied", failures);
+}
+
+void testTangentPolicy(std::vector<std::string>& failures)
+{
+    const full_engine::AssimpLoadedAssetImportResult strict =
+        full_engine::importLoadedAssetPayloadWithAssimp(
+            meshSource(fixturePath("static_triangle_missing_tangent.gltf")));
+    expect(strict.status == full_engine::AssimpLoadedAssetImportStatus::UnsupportedScene, "missing tangents fail by default", failures);
+
+    const full_engine::AssimpLoadedAssetImportResult generated =
+        full_engine::importLoadedAssetPayloadWithAssimp(
+            meshSource(fixturePath("static_triangle_missing_tangent.gltf")),
+            generateMissingTangents());
+    expect(generated.status == full_engine::AssimpLoadedAssetImportStatus::Success, "missing tangents can be generated", failures);
+    expect(generated.payload.mesh.vertices[0].tangent[0] != 0.0f, "generated tangent xyz is non-zero", failures);
+    expect(std::fabs(generated.payload.mesh.vertices[0].tangent[3]) == 1.0f, "generated tangent handedness is copied", failures);
 }
 
 void testVertexColors(std::vector<std::string>& failures)
@@ -538,7 +568,7 @@ void testSkeletalImport(std::vector<std::string>& failures)
         failures);
 
     const full_engine::AssimpLoadedAssetImportResult skinned =
-        full_engine::importLoadedAssetPayloadWithAssimp(skinnedMeshSource(path));
+        full_engine::importLoadedAssetPayloadWithAssimp(skinnedMeshSource(path), generateMissingTangents());
     expect(skinned.status == full_engine::AssimpLoadedAssetImportStatus::Success, "valid gltf skinned mesh imports", failures);
     expect(skinned.payload.kind == full_engine::AssetKind::SkinnedMesh, "skinned import sets payload kind", failures);
     expect(skinned.payload.skinnedMesh.id == asset(8), "skinned import preserves mesh asset id", failures);
@@ -550,6 +580,7 @@ void testSkeletalImport(std::vector<std::string>& failures)
     expect(skinned.payload.skinnedMesh.vertices[2].jointWeights[0] == 0.5f, "skinned import copies first blended weight", failures);
     expect(skinned.payload.skinnedMesh.vertices[2].jointWeights[1] == 0.5f, "skinned import copies second blended weight", failures);
     expect(skinned.payload.skinnedMesh.vertices[1].uv0[0] == 1.0f, "skinned import copies uv0", failures);
+    expect(skinned.payload.skinnedMesh.vertices[0].tangent[3] == 1.0f, "skinned import copies tangent handedness", failures);
     expect(skinned.payload.skinnedMesh.localBounds.max[0] == 1.0f, "skinned import computes bounds", failures);
     expect(
         full_engine::validateLoadedAssetPayload(skinned.payload) ==
@@ -576,7 +607,7 @@ void testSampleAnimationSmokeFixture(std::vector<std::string>& failures)
     expect(skeleton.status == full_engine::AssimpLoadedAssetImportStatus::Success, "sample animation smoke imports skeleton", failures);
 
     const full_engine::AssimpLoadedAssetImportResult skinned =
-        full_engine::importLoadedAssetPayloadWithAssimp(skinnedMeshSource(path));
+        full_engine::importLoadedAssetPayloadWithAssimp(skinnedMeshSource(path), generateMissingTangents());
     expect(skinned.status == full_engine::AssimpLoadedAssetImportStatus::Success, "sample animation smoke imports skinned mesh", failures);
 
     const full_engine::AssimpLoadedAssetImportResult clip =
@@ -624,12 +655,14 @@ void testSkeletalUvPolicy(std::vector<std::string>& failures)
             skinnedMeshSource(fixturePath("skinned_triangle_missing_uv.gltf")));
     expect(strict.status == full_engine::AssimpLoadedAssetImportStatus::UnsupportedScene, "missing skinned uv fails by default", failures);
 
-    const full_engine::AssimpLoadedAssetImportResult fallback =
+    const full_engine::AssimpLoadedAssetImportResult generatedTangents =
         full_engine::importLoadedAssetPayloadWithAssimp(
             skinnedMeshSource(fixturePath("skinned_triangle_missing_uv.gltf")),
             allowMissingUv0());
-    expect(fallback.status == full_engine::AssimpLoadedAssetImportStatus::Success, "missing skinned uv can default to zero", failures);
-    expect(fallback.payload.skinnedMesh.vertices[1].uv0[0] == 0.0f, "defaulted skinned uv0 is zero", failures);
+    expect(
+        generatedTangents.status == full_engine::AssimpLoadedAssetImportStatus::UnsupportedScene,
+        "missing skinned uv cannot generate tangent-ready import data",
+        failures);
 }
 
 void testAnimationImport(std::vector<std::string>& failures)
@@ -715,13 +748,13 @@ void testFailures(std::vector<std::string>& failures)
     full_engine::AssetSourceRecord skinnedVertexMismatch = skinnedMeshSource(fixturePath("skinned_triangle.gltf"));
     skinnedVertexMismatch.descriptor = skinnedMeshDescriptor(4, 3, 7);
     const full_engine::AssimpLoadedAssetImportResult skinnedVertexDescriptorMismatch =
-        full_engine::importLoadedAssetPayloadWithAssimp(skinnedVertexMismatch);
+        full_engine::importLoadedAssetPayloadWithAssimp(skinnedVertexMismatch, generateMissingTangents());
     expect(skinnedVertexDescriptorMismatch.status == full_engine::AssimpLoadedAssetImportStatus::DescriptorMismatch, "skinned vertex-count mismatch is reported", failures);
 
     full_engine::AssetSourceRecord skinnedBoundsMismatch = skinnedMeshSource(fixturePath("skinned_triangle.gltf"));
     skinnedBoundsMismatch.descriptor = skinnedMeshDescriptor(3, 3, 7, 2.0f);
     const full_engine::AssimpLoadedAssetImportResult skinnedBoundsDescriptorMismatch =
-        full_engine::importLoadedAssetPayloadWithAssimp(skinnedBoundsMismatch);
+        full_engine::importLoadedAssetPayloadWithAssimp(skinnedBoundsMismatch, generateMissingTangents());
     expect(skinnedBoundsDescriptorMismatch.status == full_engine::AssimpLoadedAssetImportStatus::DescriptorMismatch, "skinned bounds mismatch is reported", failures);
 
     full_engine::AssetSourceRecord animationTrackMismatch = animationClipSource(fixturePath("skinned_triangle_animation.gltf"));
@@ -776,7 +809,7 @@ void testWolfSkeletalAnimationSmoke(std::vector<std::string>& failures)
     expect(skeletonResult.payload.skeleton.joints.size() == 49, "wolf skeleton imports expected joint count", failures);
 
     full_engine::AssetSourceRecord skinned = skinnedMeshSource(path);
-    skinned.descriptor = skinnedMeshDescriptor(2811, 8244, 7, 0.12202499806880951f);
+    skinned.descriptor = skinnedMeshDescriptor(2949, 8244, 7, 0.12202499806880951f);
     skinned.descriptor.skinnedMesh.localBounds.min[0] = -0.12202499806880951f;
     skinned.descriptor.skinnedMesh.localBounds.min[1] = -0.010404526256024837f;
     skinned.descriptor.skinnedMesh.localBounds.min[2] = -0.6574259996414185f;
@@ -789,9 +822,9 @@ void testWolfSkeletalAnimationSmoke(std::vector<std::string>& failures)
     addSkinnedSection(skinned.descriptor, 3, 710013, 6024, 432);
     addSkinnedSection(skinned.descriptor, 4, 710014, 6456, 1788);
     const full_engine::AssimpLoadedAssetImportResult skinnedResult =
-        full_engine::importLoadedAssetPayloadWithAssimp(skinned);
+        full_engine::importLoadedAssetPayloadWithAssimp(skinned, generateMissingTangents());
     expect(skinnedResult.status == full_engine::AssimpLoadedAssetImportStatus::Success, "wolf gltf imports aggregate skinned mesh", failures);
-    expect(skinnedResult.payload.skinnedMesh.vertices.size() == 2811, "wolf skinned import aggregates skinned vertices only", failures);
+    expect(skinnedResult.payload.skinnedMesh.vertices.size() == 2949, "wolf skinned import aggregates skinned vertices only", failures);
     expect(skinnedResult.payload.skinnedMesh.indices.size() == 8244, "wolf skinned import aggregates skinned indices only", failures);
     expect(skinnedResult.payload.skinnedMesh.skeletonAssetId == asset(7), "wolf skinned import preserves skeleton reference", failures);
     expect(skinnedResult.payload.skinnedMesh.sections.size() == 5, "wolf skinned import preserves material section count", failures);
@@ -949,6 +982,7 @@ int main()
     testValidStaticMeshImport(failures);
     testMultiMeshImport(failures);
     testGeneratedNormals(failures);
+    testTangentPolicy(failures);
     testVertexColors(failures);
     testSkeletalImport(failures);
     testSampleAnimationSmokeFixture(failures);

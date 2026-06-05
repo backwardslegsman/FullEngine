@@ -62,6 +62,25 @@ bool isNonZeroNormal(const float normal[3]) noexcept
     return lengthSquared > kEpsilon;
 }
 
+bool isValidTangent(const float tangent[4]) noexcept
+{
+    constexpr float kEpsilon = 1.0e-8f;
+    constexpr float kHandednessTolerance = 0.001f;
+    if (!isFinite4(tangent))
+    {
+        return false;
+    }
+
+    const float lengthSquared =
+        tangent[0] * tangent[0] + tangent[1] * tangent[1] + tangent[2] * tangent[2];
+    if (!std::isfinite(lengthSquared) || lengthSquared <= kEpsilon)
+    {
+        return false;
+    }
+
+    return std::fabs(std::fabs(tangent[3]) - 1.0f) <= kHandednessTolerance;
+}
+
 bool isColorInRange(const float color[4]) noexcept
 {
     for (int channel = 0; channel < 4; ++channel)
@@ -419,6 +438,7 @@ LoadedAssetPayloadValidationResult validateLoadedMeshAsset(
         if (!isFinite3(vertex.position) ||
             !isFinite3(vertex.normal) ||
             !isNonZeroNormal(vertex.normal) ||
+            !isValidTangent(vertex.tangent) ||
             !isFinite2(vertex.uv0) ||
             !isFinite4(vertex.colorLinear) ||
             !isColorInRange(vertex.colorLinear))
@@ -598,6 +618,7 @@ LoadedAssetPayloadValidationResult validateLoadedSkinnedMeshAsset(
         if (!isFinite3(vertex.position) ||
             !isFinite3(vertex.normal) ||
             !isNonZeroNormal(vertex.normal) ||
+            !isValidTangent(vertex.tangent) ||
             !isFinite2(vertex.uv0) ||
             !isFinite4(vertex.colorLinear) ||
             !isColorInRange(vertex.colorLinear) ||

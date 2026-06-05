@@ -61,8 +61,11 @@ struct SkeletonDesc
  * portable shader input and must be integer-valued indices into the owning
  * skeleton. `jointWeights` must be finite, non-negative, and sum to one within
  * renderer validation tolerance. `uv0` contains primary texture coordinates
- * copied from source UV set 0. Colors are linear RGBA values in `[0, 1]`;
- * normals and UV values must be finite, and normals must be non-zero.
+ * copied from source UV set 0. `tangent` uses the glTF tangent convention: xyz
+ * is the mesh-local tangent direction and w is the handedness sign used to
+ * reconstruct a bitangent. Colors are linear RGBA values in `[0, 1]`; normals,
+ * UV values, and tangents must be finite, and normals/tangent xyz must be
+ * non-zero.
  */
 struct SkinnedMeshVertex
 {
@@ -83,6 +86,15 @@ struct SkinnedMeshVertex
 
     /** @brief Corresponding skinning weights; expected to sum to one. */
     float jointWeights[kMaxSkinningInfluences] = {1.0f, 0.0f, 0.0f, 0.0f};
+
+    /**
+     * @brief Mesh-local tangent basis direction and handedness sign.
+     *
+     * `xyz` must be finite and non-zero. `w` must be approximately `+1` or
+     * `-1`. The renderer validates and stores the data now; normal-map shader
+     * sampling is added in a later material-fidelity slice.
+     */
+    float tangent[4] = {1.0f, 0.0f, 0.0f, 1.0f};
 };
 
 /**
@@ -112,7 +124,8 @@ struct SkinnedMeshSectionDesc
  * returning. The skeleton metadata must remain live while skinned meshes and
  * animated submissions referencing it are used. Vertex data is validated using
  * the skinned asset contract; invalid joint indices, non-normalized weights,
- * non-finite positions, zero normals, and out-of-range colors are rejected.
+ * non-finite positions, zero normals, invalid tangent basis values, and
+ * out-of-range colors are rejected.
  */
 struct SkinnedMeshDesc
 {

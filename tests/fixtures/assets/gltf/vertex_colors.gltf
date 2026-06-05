@@ -21,9 +21,10 @@
           "attributes": {
             "POSITION": 0,
             "NORMAL": 1,
-            "COLOR_0": 2
+            "COLOR_0": 2,
+            "TEXCOORD_0": 3
           },
-          "indices": 3,
+          "indices": 4,
           "mode": 4
         }
       ]
@@ -31,8 +32,8 @@
   ],
   "buffers": [
     {
-      "uri": "data:application/octet-stream;base64,AAAAAAAAAAAAAAAAAACAPwAAAAAAAAAAAAAAAAAAgD8AAAAAAAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AACAPwAAAAAAAAAAAACAPwAAAAAAAIA/AAAAAAAAgD8AAAAAAAAAAAAAgD8AAAA/AAABAAIA",
-      "byteLength": 126
+      "uri": "data:application/octet-stream;base64,AAAAAAAAAAAAAAAAAACAPwAAAAAAAAAAAAAAAAAAgD8AAAAAAAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AACAPwAAAAAAAAAAAACAPwAAAAAAAIA/AAAAAAAAgD8AAAAAAAAAAAAAgD8AAAA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAABAAIA",
+      "byteLength": 150
     }
   ],
   "bufferViews": [
@@ -57,6 +58,12 @@
     {
       "buffer": 0,
       "byteOffset": 120,
+      "byteLength": 24,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 144,
       "byteLength": 6,
       "target": 34963
     }
@@ -87,6 +94,13 @@
     },
     {
       "bufferView": 3,
+      "byteOffset": 0,
+      "componentType": 5126,
+      "count": 3,
+      "type": "VEC2"
+    },
+    {
+      "bufferView": 4,
       "byteOffset": 0,
       "componentType": 5123,
       "count": 3,

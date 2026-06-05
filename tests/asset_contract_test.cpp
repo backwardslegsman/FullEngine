@@ -210,6 +210,20 @@ void meshContractValidation(int& failures)
         failures);
     vertices[0].normal[1] = 1.0f;
 
+    vertices[0].tangent[0] = 0.0f;
+    expect(
+        full_renderer::resources::validateMeshAssetContract(desc) == full_renderer::RendererResult::InvalidDescriptor,
+        "zero mesh tangent is rejected",
+        failures);
+    vertices[0].tangent[0] = 1.0f;
+
+    vertices[0].tangent[3] = 0.0f;
+    expect(
+        full_renderer::resources::validateMeshAssetContract(desc) == full_renderer::RendererResult::InvalidDescriptor,
+        "invalid mesh tangent handedness is rejected",
+        failures);
+    vertices[0].tangent[3] = 1.0f;
+
     vertices[2].position[0] = 2.0f;
     vertices[2].position[1] = 0.0f;
     expect(full_renderer::resources::meshHasDegenerateTriangles(desc), "degenerate triangle is detected", failures);
@@ -276,6 +290,14 @@ void skeletonAndSkinnedContractValidation(int& failures)
     vertices[0].normal[1] = 0.0f;
     expect(!system.validateSkinnedMeshDesc(desc), "skinned zero normal is rejected", failures);
     vertices[0].normal[1] = 1.0f;
+
+    vertices[0].tangent[1] = std::numeric_limits<float>::infinity();
+    expect(!system.validateSkinnedMeshDesc(desc), "non-finite skinned tangent is rejected", failures);
+    vertices[0].tangent[1] = 0.0f;
+
+    vertices[0].tangent[3] = 0.0f;
+    expect(!system.validateSkinnedMeshDesc(desc), "invalid skinned tangent handedness is rejected", failures);
+    vertices[0].tangent[3] = 1.0f;
 
     vertices[0].uv0[0] = std::numeric_limits<float>::infinity();
     expect(!system.validateSkinnedMeshDesc(desc), "non-finite skinned UV0 is rejected", failures);

@@ -23,7 +23,10 @@ Documentation should describe behavior, ownership, lifetime, thread expectations
 
 When a change affects renderer readiness for an open-world engine, update the
 Phase 3 hardening milestones in `docs/agents/roadmap.md` and the relevant
-topic document. At minimum, docs should keep the following plans visible:
+topic document. Keep `roadmap.md` focused on active priorities and next steps;
+move detailed completed-slice chronology to
+`docs/agents/implementation_log.md`. At minimum, docs should keep the
+following plans visible:
 
 - correctness and pass-interaction regressions
 - resource lifetime, resize, and handle validity

@@ -1,7 +1,7 @@
 {
   "asset": {
     "version": "2.0",
-    "generator": "FullRenderer Assimp importer test"
+    "generator": "FullRenderer Assimp missing-tangent importer test"
   },
   "scene": 0,
   "scenes": [
@@ -36,30 +36,10 @@
     }
   ],
   "bufferViews": [
-    {
-      "buffer": 0,
-      "byteOffset": 0,
-      "byteLength": 36,
-      "target": 34962
-    },
-    {
-      "buffer": 0,
-      "byteOffset": 36,
-      "byteLength": 36,
-      "target": 34962
-    },
-    {
-      "buffer": 0,
-      "byteOffset": 72,
-      "byteLength": 24,
-      "target": 34962
-    },
-    {
-      "buffer": 0,
-      "byteOffset": 96,
-      "byteLength": 6,
-      "target": 34963
-    }
+    { "buffer": 0, "byteOffset": 0, "byteLength": 36, "target": 34962 },
+    { "buffer": 0, "byteOffset": 36, "byteLength": 36, "target": 34962 },
+    { "buffer": 0, "byteOffset": 72, "byteLength": 24, "target": 34962 },
+    { "buffer": 0, "byteOffset": 96, "byteLength": 6, "target": 34963 }
   ],
   "accessors": [
     {
@@ -71,26 +51,8 @@
       "min": [0.0, 0.0, 0.0],
       "max": [1.0, 1.0, 0.0]
     },
-    {
-      "bufferView": 1,
-      "byteOffset": 0,
-      "componentType": 5126,
-      "count": 3,
-      "type": "VEC3"
-    },
-    {
-      "bufferView": 2,
-      "byteOffset": 0,
-      "componentType": 5126,
-      "count": 3,
-      "type": "VEC2"
-    },
-    {
-      "bufferView": 3,
-      "byteOffset": 0,
-      "componentType": 5123,
-      "count": 3,
-      "type": "SCALAR"
-    }
+    { "bufferView": 1, "byteOffset": 0, "componentType": 5126, "count": 3, "type": "VEC3" },
+    { "bufferView": 2, "byteOffset": 0, "componentType": 5126, "count": 3, "type": "VEC2" },
+    { "bufferView": 3, "byteOffset": 0, "componentType": 5123, "count": 3, "type": "SCALAR" }
   ]
 }

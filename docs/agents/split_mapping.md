@@ -41,7 +41,8 @@ This file records how the previous monolithic guidance is distributed across sma
 ## Long-form reference docs
 
 - `docs/agents/architecture.md` — full architecture and layering guidance.
-- `docs/agents/roadmap.md` — phase plan, first milestone, and Phase 3 hardening/readiness milestones.
+- `docs/agents/roadmap.md` — compact active phase plan, hardening/readiness milestones, and next recommended slices.
+- `docs/agents/implementation_log.md` — historical completed-slice archive kept out of default context.
 - `docs/agents/definition_of_done.md` — detailed completion checklists.
 - `docs/agents/dependency_policy.md` — dependency acceptance criteria.
 - `docs/agents/coding_style.md` — style, public API comments, error handling, logging, threading, and lifetime rules.

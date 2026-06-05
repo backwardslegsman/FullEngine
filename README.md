@@ -89,8 +89,9 @@ ctest --test-dir out\build\tests-debug --output-on-failure -C Debug
 - `docs/renderer_overview.md` explains the renderer foundation and readiness.
 - `docs/engine_overview.md` explains the current engine boundary.
 - `docs/engine_integration.md` shows how an engine consumes the renderer.
-- `docs/agents/roadmap.md` tracks renderer phases and the engine expansion
-  track.
+- `docs/agents/roadmap.md` tracks active renderer priorities and the engine
+  expansion track; `docs/agents/implementation_log.md` preserves detailed
+  historical slice notes.
 
 ## GitHub workflow
 

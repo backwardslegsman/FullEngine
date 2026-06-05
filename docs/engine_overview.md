@@ -153,11 +153,12 @@ Implemented pieces:
   mesh/material/texture source descriptors, plus request-order lookup
   diagnostics for mapping missing load intent to those source records
 - renderer-free loaded asset payloads for mesh, texture, material, skeleton,
-  skinned mesh, and animation clip data, including mesh/skinned UV0, named
-  material texture slots, skeleton hierarchy/bind matrices, four-influence
-  skinning data, and raw joint transform key tracks, giving future importers a
-  copied CPU data contract before renderer upload, handle creation, async IO,
-  playback state, or renderer-resource ownership
+  skinned mesh, and animation clip data, including mesh/skinned UV0 and
+  glTF-style tangent basis data, named material texture slots, skeleton
+  hierarchy/bind matrices, four-influence skinning data, and raw joint
+  transform key tracks, giving future importers a copied CPU data contract
+  before renderer upload, handle creation, async IO, playback state, or
+  renderer-resource ownership
 - renderer-free CPU animation clip sampling that evaluates one
   `LoadedAnimationClipAsset` against a matching `LoadedSkeletonAsset` into
   owned local joint matrices, model joint matrices, and final skinning palette
@@ -193,11 +194,12 @@ Implemented pieces:
 - an Assimp-backed loaded asset importer that reads static and skinned glTF
   mesh files into renderer-free `LoadedAssetPayload` contracts, aggregating
   static multi-mesh scenes in deterministic order, optionally generating
-  missing normals, requiring or explicitly defaulting UV0, copying vertex
-  colors, extracting bind-pose skeletons, skinned mesh weights, and raw
-  animation clip tracks, and validating source descriptors and payload data
-  while leaving tangents, UV1+, runtime animation playback/blending, async IO, and
-  renderer-resource creation to later slices
+  missing normals or tangents, requiring or explicitly defaulting UV0, copying
+  vertex colors and glTF-style tangent handedness, extracting bind-pose
+  skeletons, skinned mesh weights, and raw animation clip tracks, and
+  validating source descriptors and payload data while leaving UV1+, runtime
+  animation playback/blending, async IO, and renderer-resource creation to
+  later slices
 - an stb-backed direct texture image importer that reads image files into the
   renderer-free `LoadedTextureAsset` contract as tightly packed single-mip
   RGBA8 bytes, validating source descriptors and payload data while leaving
@@ -214,8 +216,8 @@ Implemented pieces:
   renderer handles, renderer calls, or resource creation
 - loaded-payload upload planning that translates validated CPU mesh, texture,
   material, skeleton, and skinned mesh payloads into owned renderer descriptor
-  work, including optional skinned mesh section ranges and UV0 for static and
-  skinned vertices.
+  work, including optional skinned mesh section ranges plus UV0 and tangents
+  for static and skinned vertices.
 - loaded-payload upload execution that consumes planned mesh/texture/material/
   skeleton/skinned mesh work through caller-owned public renderer creation
   calls, resolving named material texture asset IDs and skinned mesh skeleton
@@ -223,9 +225,11 @@ Implemented pieces:
   handles
 - a first material/UV rendering smoke in the bgfx mesh path: static and
   instanced mesh shaders pass UV0 to the forward fragment shader, the skinned
-  forward shader now passes imported UV0 as well, basic materials sample an
-  optional base-color texture with white fallback, and dev-imported textured
-  assets can now affect visible mesh and skinned mesh shading
+  forward shader now passes imported UV0 as well, static/skinned renderer
+  vertex layouts retain imported tangents for future normal-map shading, basic
+  materials sample an optional base-color texture with white fallback, and
+  dev-imported textured assets can now affect visible mesh and skinned mesh
+  shading
 - a dev manifest asset-load callback that resolves retained source metadata,
   imports tiny dev mesh/texture/material files, executes caller-owned renderer
   uploads, and publishes handle completions through the existing retained
@@ -443,7 +447,8 @@ Still future work:
 - production terrain streaming policy and editor-owned residency controls
 - real engine-owned mesh/material/texture creation and lifetime policy
 - production material import/rendering policy beyond the current basic
-  base-color texture smoke and terrain-splat descriptor bridge
+  base-color texture smoke, tangent transport, and terrain-splat descriptor
+  bridge
 - renderer descriptor conversion for non-terrain draws and cameras
 - scene/entity ownership, gameplay simulation, persistence, and editor tooling
 
