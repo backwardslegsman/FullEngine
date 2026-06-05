@@ -10,8 +10,18 @@
 
 namespace full_engine
 {
-/** @brief Maximum joints accepted by the first renderer-free skeleton payload contract. */
-constexpr std::uint32_t kMaxLoadedSkeletonJoints = 64;
+/**
+ * @brief Maximum joints accepted by renderer-free skeleton and animation payload contracts.
+ *
+ * This CPU/import limit is intentionally larger than the current renderer
+ * skinning palette limit so FBX characterization can retain high-joint
+ * skeleton and clip data. Renderer upload planning still reports payloads that
+ * exceed the public renderer skinning contract as unsupported.
+ */
+constexpr std::uint32_t kMaxLoadedSkeletonJoints = 512;
+
+/** @brief Maximum joint tracks accepted by renderer-free animation clip payloads. */
+constexpr std::uint32_t kMaxLoadedAnimationJoints = kMaxLoadedSkeletonJoints;
 
 /** @brief Fixed number of joint influences carried by one loaded skinned vertex. */
 constexpr std::uint32_t kMaxLoadedSkinningInfluences = 4;
@@ -456,7 +466,7 @@ LoadedAssetPayloadValidationResult validateLoadedAnimationClipAsset(
  * @brief Validates the active slot of a loaded asset payload.
  *
  * Inactive slots are ignored. Supported active kinds are Mesh, Texture,
- * Material, Skeleton, and SkinnedMesh.
+ * Material, Skeleton, SkinnedMesh, and AnimationClip.
  */
 LoadedAssetPayloadValidationResult validateLoadedAssetPayload(
     const LoadedAssetPayload& payload) noexcept;

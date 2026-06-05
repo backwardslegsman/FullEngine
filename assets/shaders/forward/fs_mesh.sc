@@ -1,8 +1,9 @@
-$input v_normal, v_color0, v_texcoord0, v_shadowcoord, v_shadowcoord1, v_shadowcoord2, v_shadowcoord3, v_viewdepth
+$input v_normal, v_tangent, v_color0, v_texcoord0, v_shadowcoord, v_shadowcoord1, v_shadowcoord2, v_shadowcoord3, v_viewdepth
 
 #include <bgfx_shader.sh>
 
 SAMPLER2D(s_basicBaseColor, 0);
+SAMPLER2D(s_basicNormal, 1);
 SAMPLER2D(s_shadowMap0, 5);
 SAMPLER2D(s_shadowMap1, 6);
 SAMPLER2D(s_shadowMap2, 7);
@@ -304,6 +305,22 @@ vec3 applyWeatherWetness(vec3 color)
     return color * (1.0 - amount * darkening);
 }
 
+vec3 unpackBasicNormal(vec3 encodedNormal)
+{
+    return normalize(encodedNormal * 2.0 - vec3_splat(1.0));
+}
+
+vec3 applyBasicNormalMap(vec3 geometricNormal, vec4 tangentBasis, vec2 uv)
+{
+    vec3 tangent = normalize(tangentBasis.xyz - geometricNormal * dot(geometricNormal, tangentBasis.xyz));
+    vec3 bitangent = normalize(cross(geometricNormal, tangent) * tangentBasis.w);
+    vec3 tangentNormal = unpackBasicNormal(texture2D(s_basicNormal, uv).rgb);
+    return normalize(
+        tangent * tangentNormal.x +
+        bitangent * tangentNormal.y +
+        geometricNormal * tangentNormal.z);
+}
+
 float dither4x4Threshold(vec2 position)
 {
     vec2 pixel = floor(position - floor(position * 0.25) * 4.0);
@@ -343,7 +360,7 @@ float dither4x4Threshold(vec2 position)
 
 void main()
 {
-    vec3 normal = normalize(v_normal);
+    vec3 normal = applyBasicNormalMap(normalize(v_normal), v_tangent, v_texcoord0);
     vec3 lightDirection = normalize(u_lightDirIntensity.xyz);
     float litFlag = step(0.0, u_materialColor.w);
     float alpha = abs(u_materialColor.w);

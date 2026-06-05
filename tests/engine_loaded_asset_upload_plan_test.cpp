@@ -114,6 +114,18 @@ full_engine::LoadedSkeletonAsset skeletonAsset()
     return skeleton;
 }
 
+full_engine::LoadedSkeletonAsset skeletonAssetWithJointCount(const std::uint32_t jointCount)
+{
+    full_engine::LoadedSkeletonAsset skeleton;
+    skeleton.id = asset(140);
+    skeleton.joints.reserve(jointCount);
+    for (std::uint32_t index = 0; index < jointCount; ++index)
+    {
+        skeleton.joints.push_back(joint(index == 0 ? -1 : static_cast<std::int32_t>(index - 1U)));
+    }
+    return skeleton;
+}
+
 full_engine::LoadedSkinnedMeshVertex skinnedVertex(const float x, const float y, const float z) noexcept
 {
     full_engine::LoadedSkinnedMeshVertex result;
@@ -326,23 +338,50 @@ void testUnsupportedRendererContract(std::vector<std::string>& failures)
     full_engine::LoadedAssetPayload texture = texturePayload(
         full_engine::AssetSourceTextureSemantic::Color,
         full_engine::AssetSourceTextureColorSpace::Linear);
+    full_engine::LoadedAssetPayload largeSkeleton;
+    largeSkeleton.kind = full_engine::AssetKind::Skeleton;
+    largeSkeleton.skeleton = skeletonAssetWithJointCount(full_renderer::kMaxSkinningJoints + 1U);
+    full_engine::LoadedAssetPayload highJointSkinned = skinnedMeshPayload();
+    highJointSkinned.skinnedMesh.vertices[0].jointIndices[0] =
+        static_cast<std::uint16_t>(full_renderer::kMaxSkinningJoints);
+    highJointSkinned.skinnedMesh.vertices[0].jointIndices[1] = 0;
+    highJointSkinned.skinnedMesh.vertices[0].jointWeights[0] = 1.0f;
+    highJointSkinned.skinnedMesh.vertices[0].jointWeights[1] = 0.0f;
 
     expect(
         full_engine::validateLoadedAssetPayload(texture) ==
             full_engine::LoadedAssetPayloadValidationResult::Success,
         "renderer-contract test payload is asset-valid",
         failures);
+    expect(
+        full_engine::validateLoadedAssetPayload(largeSkeleton) ==
+            full_engine::LoadedAssetPayloadValidationResult::Success,
+        "large CPU skeleton remains asset-valid before renderer planning",
+        failures);
+    expect(
+        full_engine::validateLoadedAssetPayload(highJointSkinned) ==
+            full_engine::LoadedAssetPayloadValidationResult::Success,
+        "CPU skinned mesh with high joint index remains asset-valid before renderer planning",
+        failures);
 
-    const full_engine::LoadedAssetPayload payloads[] = {texture};
+    const full_engine::LoadedAssetPayload payloads[] = {texture, largeSkeleton, highJointSkinned};
     const full_engine::LoadedAssetUploadPlan plan =
-        full_engine::buildLoadedAssetUploadPlan(payloads, 1);
+        full_engine::buildLoadedAssetUploadPlan(payloads, 3);
 
-    expect(plan.records.size() == 1, "unsupported renderer contract payload produces record", failures);
+    expect(plan.records.size() == 3, "unsupported renderer contract payloads produce records", failures);
     expect(
         plan.records[0].status == full_engine::LoadedAssetUploadStatus::UnsupportedRendererContract,
         "asset-valid but renderer-invalid texture reports unsupported contract",
         failures);
-    expect(plan.summary.unsupportedRendererContractCount == 1, "unsupported renderer contract summary is counted", failures);
+    expect(
+        plan.records[1].status == full_engine::LoadedAssetUploadStatus::UnsupportedRendererContract,
+        "asset-valid but renderer-too-large skeleton reports unsupported contract",
+        failures);
+    expect(
+        plan.records[2].status == full_engine::LoadedAssetUploadStatus::UnsupportedRendererContract,
+        "asset-valid but renderer-too-high skinned joint index reports unsupported contract",
+        failures);
+    expect(plan.summary.unsupportedRendererContractCount == 3, "unsupported renderer contract summary is counted", failures);
 }
 
 void testOrderAndInactiveSlots(std::vector<std::string>& failures)

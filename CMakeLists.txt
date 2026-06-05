@@ -132,8 +132,14 @@ add_library(full_engine STATIC
     src/engine/assets/LoadedAssetImporter.hpp
     src/engine/assets/AssimpLoadedAssetImporter.cpp
     src/engine/assets/AssimpLoadedAssetImporter.hpp
+    src/engine/assets/AssimpRigidNodeSceneImporter.cpp
+    src/engine/assets/AssimpRigidNodeSceneImporter.hpp
+    src/engine/assets/AssimpSceneProbe.cpp
+    src/engine/assets/AssimpSceneProbe.hpp
     src/engine/assets/GltfMaterialAssetImporter.cpp
     src/engine/assets/GltfMaterialAssetImporter.hpp
+    src/engine/assets/GltfMaterialSlotAudit.cpp
+    src/engine/assets/GltfMaterialSlotAudit.hpp
     src/engine/assets/LoadedTextureImageImporter.cpp
     src/engine/assets/LoadedTextureImageImporter.hpp
     src/engine/assets/TerrainAssetCatalog.cpp
@@ -156,6 +162,10 @@ add_library(full_engine STATIC
     src/engine/renderer_integration/LoadedAssetUploadExecutor.hpp
     src/engine/renderer_integration/LoadedAssetUploadPlan.cpp
     src/engine/renderer_integration/LoadedAssetUploadPlan.hpp
+    src/engine/renderer_integration/LoadedMeshUploadDiagnostics.cpp
+    src/engine/renderer_integration/LoadedMeshUploadDiagnostics.hpp
+    src/engine/renderer_integration/RigidNodeAttachmentDrawBuilder.cpp
+    src/engine/renderer_integration/RigidNodeAttachmentDrawBuilder.hpp
     src/engine/renderer_integration/RenderSpace.cpp
     src/engine/renderer_integration/RenderSpace.hpp
     src/engine/renderer_integration/RendererHost.cpp
@@ -1232,12 +1242,14 @@ if(FULL_RENDERER_BUILD_SAMPLE)
     file(TO_CMAKE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/assets/dev/sample_terrain" FULL_RENDERER_SAMPLE_DEV_ASSET_DIR)
     file(TO_CMAKE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/assets/dev/sample_animation" FULL_RENDERER_SAMPLE_ANIMATION_ASSET_DIR)
     file(TO_CMAKE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/assets/33-gltf-wolf/gltf" FULL_RENDERER_SAMPLE_WOLF_ASSET_DIR)
+    file(TO_CMAKE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/assets/pkg_e_knight_anim/pkg_e_knight_anim/Exports/FBX" FULL_RENDERER_SAMPLE_KNIGHT_ASSET_DIR)
     target_compile_definitions(full_renderer_sample
         PRIVATE
             FULL_RENDERER_SAMPLE_SHADER_DIR="${FULL_RENDERER_SAMPLE_SHADER_DIR}"
             FULL_RENDERER_SAMPLE_DEV_ASSET_DIR="${FULL_RENDERER_SAMPLE_DEV_ASSET_DIR}"
             FULL_RENDERER_SAMPLE_ANIMATION_ASSET_DIR="${FULL_RENDERER_SAMPLE_ANIMATION_ASSET_DIR}"
             FULL_RENDERER_SAMPLE_WOLF_ASSET_DIR="${FULL_RENDERER_SAMPLE_WOLF_ASSET_DIR}"
+            FULL_RENDERER_SAMPLE_KNIGHT_ASSET_DIR="${FULL_RENDERER_SAMPLE_KNIGHT_ASSET_DIR}"
     )
     target_include_directories(full_renderer_sample
         PRIVATE

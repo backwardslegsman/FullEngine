@@ -10,6 +10,7 @@
 #include <fstream>
 #include <limits>
 #include <map>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -223,6 +224,96 @@ bool collectBones(const aiScene& scene, std::map<std::string, aiMatrix4x4>& bone
     return !bones.empty() && bones.size() <= kMaxLoadedSkeletonJoints;
 }
 
+void setIdentity(float target[16]) noexcept
+{
+    for (int index = 0; index < 16; ++index)
+    {
+        target[index] = 0.0f;
+    }
+    target[0] = 1.0f;
+    target[5] = 1.0f;
+    target[10] = 1.0f;
+    target[15] = 1.0f;
+}
+
+void collectAnimationChannelNames(
+    const aiScene& scene,
+    const AssimpLoadedAssetImportOptions& options,
+    std::set<std::string>& names)
+{
+    if (scene.mAnimations == nullptr || options.animationIndex >= scene.mNumAnimations)
+    {
+        return;
+    }
+
+    const aiAnimation* const animation = scene.mAnimations[options.animationIndex];
+    if (animation == nullptr || animation->mChannels == nullptr)
+    {
+        return;
+    }
+
+    for (unsigned int channelIndex = 0; channelIndex < animation->mNumChannels; ++channelIndex)
+    {
+        const aiNodeAnim* const channel = animation->mChannels[channelIndex];
+        if (channel != nullptr && channel->mNodeName.length > 0)
+        {
+            names.emplace(channel->mNodeName.C_Str());
+        }
+    }
+}
+
+void collectAnimatedNodeAncestors(
+    const aiNode* node,
+    std::set<std::string>& selectedNames)
+{
+    while (node != nullptr && node->mName.length > 0)
+    {
+        selectedNames.emplace(node->mName.C_Str());
+        node = node->mParent;
+    }
+}
+
+void collectAnimatedSceneNodeNames(
+    const aiNode& node,
+    const std::set<std::string>& animationChannelNames,
+    std::set<std::string>& selectedNames)
+{
+    if (animationChannelNames.find(node.mName.C_Str()) != animationChannelNames.end())
+    {
+        collectAnimatedNodeAncestors(&node, selectedNames);
+    }
+
+    for (unsigned int childIndex = 0; childIndex < node.mNumChildren; ++childIndex)
+    {
+        if (node.mChildren[childIndex] != nullptr)
+        {
+            collectAnimatedSceneNodeNames(*node.mChildren[childIndex], animationChannelNames, selectedNames);
+        }
+    }
+}
+
+void collectSelectedSceneNodes(
+    const aiNode& node,
+    const std::set<std::string>& selectedNames,
+    std::set<std::string>& visitedNames,
+    std::vector<const aiNode*>& nodes)
+{
+    const std::string name = node.mName.C_Str();
+    if (selectedNames.find(name) != selectedNames.end() &&
+        visitedNames.emplace(name).second)
+    {
+        nodes.push_back(&node);
+    }
+
+    for (unsigned int childIndex = 0; childIndex < node.mNumChildren; ++childIndex)
+    {
+        if (node.mChildren[childIndex] != nullptr)
+        {
+            collectSelectedSceneNodes(*node.mChildren[childIndex], selectedNames, visitedNames, nodes);
+        }
+    }
+}
+
 void collectSkeletonNodes(
     const aiNode& node,
     const std::map<std::string, aiMatrix4x4>& bones,
@@ -302,6 +393,89 @@ bool buildSkeletonJointIndex(
     }
 
     return rootCount == 1;
+}
+
+bool buildAnimatedSceneNodeJointIndex(
+    const aiScene& scene,
+    const AssimpLoadedAssetImportOptions& options,
+    std::map<std::string, std::uint16_t>& jointIndices,
+    LoadedSkeletonAsset* skeleton)
+{
+    if (scene.mRootNode == nullptr || scene.mAnimations == nullptr || options.animationIndex >= scene.mNumAnimations)
+    {
+        return false;
+    }
+
+    std::set<std::string> animationChannelNames;
+    collectAnimationChannelNames(scene, options, animationChannelNames);
+    if (animationChannelNames.empty())
+    {
+        return false;
+    }
+
+    std::set<std::string> selectedNames;
+    collectAnimatedSceneNodeNames(*scene.mRootNode, animationChannelNames, selectedNames);
+    if (selectedNames.empty() || selectedNames.size() > kMaxLoadedSkeletonJoints)
+    {
+        return false;
+    }
+
+    std::vector<const aiNode*> nodes;
+    std::set<std::string> visitedNames;
+    collectSelectedSceneNodes(*scene.mRootNode, selectedNames, visitedNames, nodes);
+    if (nodes.empty() || nodes.size() != selectedNames.size())
+    {
+        return false;
+    }
+
+    std::uint32_t rootCount = 0;
+    for (const aiNode* const node : nodes)
+    {
+        const std::string name = node->mName.C_Str();
+        LoadedSkeletonJoint joint;
+        joint.name = name;
+        setIdentity(joint.inverseBindPose);
+        copyMatrixColumnMajor(node->mTransformation, joint.referenceTransform);
+
+        joint.parentIndex = -1;
+        if (node->mParent != nullptr)
+        {
+            const auto parent = jointIndices.find(node->mParent->mName.C_Str());
+            if (parent != jointIndices.end())
+            {
+                joint.parentIndex = parent->second;
+            }
+        }
+        if (joint.parentIndex < 0)
+        {
+            ++rootCount;
+        }
+
+        const std::uint16_t index = static_cast<std::uint16_t>(jointIndices.size());
+        jointIndices.emplace(name, index);
+        if (skeleton != nullptr)
+        {
+            skeleton->joints.push_back(joint);
+        }
+    }
+
+    return rootCount == 1;
+}
+
+bool buildJointIndex(
+    const aiScene& scene,
+    const AssimpLoadedAssetImportOptions& options,
+    std::map<std::string, std::uint16_t>& jointIndices,
+    LoadedSkeletonAsset* skeleton)
+{
+    switch (options.skeletonSourceMode)
+    {
+    case AssimpSkeletonSourceMode::MeshBones:
+        return buildSkeletonJointIndex(scene, jointIndices, skeleton);
+    case AssimpSkeletonSourceMode::AnimatedSceneNodes:
+        return buildAnimatedSceneNodeJointIndex(scene, options, jointIndices, skeleton);
+    }
+    return false;
 }
 
 bool canConvertMesh(const aiMesh& mesh, const AssimpLoadedAssetImportOptions& options) noexcept
@@ -567,12 +741,16 @@ bool convertSceneMeshes(
     return true;
 }
 
-bool convertSceneSkeleton(const aiScene& scene, const AssetId id, LoadedSkeletonAsset& skeleton)
+bool convertSceneSkeleton(
+    const aiScene& scene,
+    const AssetId id,
+    const AssimpLoadedAssetImportOptions& options,
+    LoadedSkeletonAsset& skeleton)
 {
     skeleton = {};
     skeleton.id = id;
     std::map<std::string, std::uint16_t> jointIndices;
-    return buildSkeletonJointIndex(scene, jointIndices, &skeleton);
+    return buildJointIndex(scene, options, jointIndices, &skeleton);
 }
 
 bool convertSceneSkinnedMeshes(
@@ -802,7 +980,7 @@ bool convertSceneAnimationClip(
     }
 
     std::map<std::string, std::uint16_t> jointIndices;
-    if (!buildSkeletonJointIndex(scene, jointIndices, nullptr))
+    if (!buildJointIndex(scene, options, jointIndices, nullptr))
     {
         return false;
     }
@@ -935,7 +1113,7 @@ AssimpLoadedAssetImportResult importLoadedAssetPayloadWithAssimp(
         converted = convertSceneMeshes(*scene, source.id, options, result.payload.mesh);
         break;
     case AssetKind::Skeleton:
-        converted = convertSceneSkeleton(*scene, source.id, result.payload.skeleton);
+        converted = convertSceneSkeleton(*scene, source.id, options, result.payload.skeleton);
         break;
     case AssetKind::SkinnedMesh:
         converted = convertSceneSkinnedMeshes(

@@ -351,15 +351,23 @@ struct TerrainMaterialDesc
  * Zero texture handles are valid deterministic fallbacks. Non-zero handles
  * must refer to live renderer-owned textures when `createMaterial` is called
  * and while the material can be submitted. The first basic mesh shader path
- * samples `baseColor` with mesh UV0; the other slots are copied for future
- * shader work.
+ * samples `baseColor` and `normal` with mesh UV0; the other slots are copied
+ * for future shader work.
  */
 struct BasicMaterialTextureDesc
 {
     /** @brief Optional base-color/albedo texture. */
     TextureHandle baseColor;
 
-    /** @brief Optional tangent-space normal map. */
+    /**
+     * @brief Optional tangent-space normal map for basic forward materials.
+     *
+     * The static, instanced, and skinned basic forward shaders sample this
+     * texture with UV0 and the uploaded glTF-style tangent basis. Non-zero
+     * handles must reference live textures created with `TextureSemantic::NormalMap`
+     * and `TextureColorSpace::EncodedNormal`. A zero handle uses a flat normal
+     * fallback.
+     */
     TextureHandle normal;
 
     /** @brief Optional packed metallic/roughness texture. */
@@ -378,8 +386,8 @@ struct BasicMaterialTextureDesc
  * Colors are linear RGBA values in `[0, 1]`. The current material model is a
  * deliberately small Phase 1 surface color plus an optional directional-light
  * response. The basic mesh shader multiplies vertex color, base color, and the
- * optional base-color texture sampled with UV0. Descriptor data is copied
- * during `createMaterial`.
+ * optional base-color and normal textures sampled with UV0. Descriptor data is
+ * copied during `createMaterial`.
  */
 struct MaterialDesc
 {

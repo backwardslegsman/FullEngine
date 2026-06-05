@@ -199,6 +199,19 @@ void shaderVariantKeysAreDeterministic(int& failures)
     expect((first.featureMask & full_renderer::scene::kShaderFeatureSkinned) != 0U,
         "skinned feature bit is present",
         failures);
+
+    full_renderer::MaterialDesc normalMapped;
+    normalMapped.basicTextures.normal = full_renderer::TextureHandle{42};
+    const full_renderer::scene::ShaderVariantKey normalMapKey =
+        full_renderer::scene::makeForwardShaderVariantKey(
+            normalMapped,
+            full_renderer::scene::ShaderVariantPass::ForwardStatic,
+            false,
+            false,
+            {});
+    expect((normalMapKey.featureMask & full_renderer::scene::kShaderFeatureNormalMap) != 0U,
+        "basic normal texture sets normal-map feature bit",
+        failures);
 }
 } // namespace
 

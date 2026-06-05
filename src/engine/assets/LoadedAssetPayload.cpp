@@ -685,7 +685,7 @@ LoadedAssetPayloadValidationResult validateLoadedAnimationClipAsset(
         return LoadedAssetPayloadValidationResult::InvalidAnimationClipTicksPerSecond;
     }
 
-    if (clip.tracks.empty() || clip.tracks.size() > kMaxLoadedSkeletonJoints)
+    if (clip.tracks.empty() || clip.tracks.size() > kMaxLoadedAnimationJoints)
     {
         return LoadedAssetPayloadValidationResult::InvalidAnimationClipTracks;
     }

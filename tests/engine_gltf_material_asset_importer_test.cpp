@@ -1,4 +1,5 @@
 #include "engine/assets/GltfMaterialAssetImporter.hpp"
+#include "engine/assets/GltfMaterialSlotAudit.hpp"
 #include "engine/assets/LoadedTextureImageImporter.hpp"
 
 #include <cstdlib>
@@ -37,6 +38,36 @@ full_engine::GltfMaterialAssetImportOptions options()
     result.firstMaterialId = asset(1000);
     result.firstTextureId = asset(2000);
     return result;
+}
+
+std::uint32_t countSlotRefs(
+    const full_engine::LoadedMaterialAsset& material,
+    const full_engine::AssetSourceMaterialTextureSlot slot) noexcept
+{
+    std::uint32_t count = 0;
+    for (std::uint32_t index = 0; index < material.textureRefCount; ++index)
+    {
+        if (material.textureRefs[index].slot == slot)
+        {
+            ++count;
+        }
+    }
+    return count;
+}
+
+const full_engine::AssetSourceRecord* findTextureSource(
+    const full_engine::GltfMaterialAssetImportResult& result,
+    const full_engine::AssetId id) noexcept
+{
+    for (const full_engine::AssetSourceRecord& source : result.sourceRecords)
+    {
+        if (source.kind == full_engine::AssetKind::Texture &&
+            source.id == id)
+        {
+            return &source;
+        }
+    }
+    return nullptr;
 }
 
 void testBaseColorMaterialExtraction(std::vector<std::string>& failures)
@@ -85,6 +116,124 @@ void testBaseColorMaterialExtraction(std::vector<std::string>& failures)
     const full_engine::LoadedTextureImageImportResult texture =
         full_engine::importLoadedTexturePayloadFromImageFile(result.sourceRecords[0]);
     expect(texture.status == full_engine::LoadedTextureImageImportStatus::Success, "extracted texture source imports through image importer", failures);
+}
+
+void testAllNamedMaterialTextureSlots(std::vector<std::string>& failures)
+{
+    const full_engine::GltfMaterialAssetImportResult result =
+        full_engine::importGltfMaterialAssetSources(
+            fixturePath("material_all_slots.gltf"),
+            options());
+
+    expect(result.status == full_engine::GltfMaterialAssetImportStatus::Success, "all-slot material extraction succeeds", failures);
+    expect(result.materialPayloads.size() == 1, "all-slot extraction emits one material payload", failures);
+    expect(result.summary.emittedTextureSourceCount == 3, "all-slot extraction deduplicates texture sources by uri and semantic policy", failures);
+    expect(result.summary.emittedMaterialPayloadCount == 1, "all-slot extraction emits one material payload count", failures);
+    if (result.materialPayloads.empty())
+    {
+        return;
+    }
+
+    const full_engine::LoadedMaterialAsset& material = result.materialPayloads[0].material;
+    expect(material.textureRefCount == 5, "all-slot material payload has five named texture refs", failures);
+    expect(countSlotRefs(material, full_engine::AssetSourceMaterialTextureSlot::BaseColor) == 1, "base-color slot ref is present", failures);
+    expect(countSlotRefs(material, full_engine::AssetSourceMaterialTextureSlot::Normal) == 1, "normal slot ref is present", failures);
+    expect(countSlotRefs(material, full_engine::AssetSourceMaterialTextureSlot::MetallicRoughness) == 1, "metallic-roughness slot ref is present", failures);
+    expect(countSlotRefs(material, full_engine::AssetSourceMaterialTextureSlot::Occlusion) == 1, "occlusion slot ref is present", failures);
+    expect(countSlotRefs(material, full_engine::AssetSourceMaterialTextureSlot::Emissive) == 1, "emissive slot ref is present", failures);
+
+    for (std::uint32_t index = 0; index < material.textureRefCount; ++index)
+    {
+        const full_engine::AssetSourceMaterialTextureRef& ref = material.textureRefs[index];
+        const full_engine::AssetSourceRecord* const source = findTextureSource(result, ref.id);
+        expect(source != nullptr, "each all-slot material ref has a texture source", failures);
+        if (source == nullptr)
+        {
+            continue;
+        }
+
+        if (ref.slot == full_engine::AssetSourceMaterialTextureSlot::Normal)
+        {
+            expect(source->descriptor.texture.semantic == full_engine::AssetSourceTextureSemantic::NormalMap, "normal slot source uses normal-map semantic", failures);
+            expect(source->descriptor.texture.colorSpace == full_engine::AssetSourceTextureColorSpace::EncodedNormal, "normal slot source uses encoded-normal color space", failures);
+        }
+        else if (ref.slot == full_engine::AssetSourceMaterialTextureSlot::MetallicRoughness ||
+            ref.slot == full_engine::AssetSourceMaterialTextureSlot::Occlusion)
+        {
+            expect(source->descriptor.texture.semantic == full_engine::AssetSourceTextureSemantic::LinearData, "linear data slot source uses linear-data semantic", failures);
+            expect(source->descriptor.texture.colorSpace == full_engine::AssetSourceTextureColorSpace::Linear, "linear data slot source uses linear color space", failures);
+        }
+        else
+        {
+            expect(source->descriptor.texture.semantic == full_engine::AssetSourceTextureSemantic::Color, "color slot source uses color semantic", failures);
+            expect(source->descriptor.texture.colorSpace == full_engine::AssetSourceTextureColorSpace::Srgb, "color slot source uses srgb color space", failures);
+        }
+    }
+}
+
+void testAllNamedMaterialTextureSlotAudit(std::vector<std::string>& failures)
+{
+    const full_engine::GltfMaterialAssetImportResult result =
+        full_engine::importGltfMaterialAssetSources(
+            fixturePath("material_all_slots.gltf"),
+            options());
+    std::vector<full_engine::LoadedAssetPayload> texturePayloads;
+    std::vector<full_engine::AssetId> resolvedTextureIds;
+    for (const full_engine::AssetSourceRecord& source : result.sourceRecords)
+    {
+        if (source.kind != full_engine::AssetKind::Texture)
+        {
+            continue;
+        }
+        const full_engine::LoadedTextureImageImportResult texture =
+            full_engine::importLoadedTexturePayloadFromImageFile(source);
+        if (texture.status == full_engine::LoadedTextureImageImportStatus::Success)
+        {
+            texturePayloads.push_back(texture.payload);
+            resolvedTextureIds.push_back(source.id);
+        }
+    }
+
+    const full_engine::GltfMaterialSlotAudit audit =
+        full_engine::auditGltfMaterialSlots(
+            fixturePath("material_all_slots.gltf"),
+            options(),
+            &result,
+            texturePayloads.data(),
+            texturePayloads.size(),
+            resolvedTextureIds.data(),
+            resolvedTextureIds.size());
+
+    expect(audit.importStatus == full_engine::GltfMaterialAssetImportStatus::Success, "all-slot audit keeps import status", failures);
+    expect(audit.records.size() == 1, "all-slot audit reports one material", failures);
+    for (std::size_t slotIndex = 0; slotIndex < full_engine::kGltfMaterialSlotAuditSlotCount; ++slotIndex)
+    {
+        expect(audit.slots[slotIndex].rawTextureKeyCount == 1, "all-slot audit sees raw texture key", failures);
+        expect(audit.slots[slotIndex].extractedRefCount == 1, "all-slot audit sees extracted ref", failures);
+        expect(audit.slots[slotIndex].emittedTextureSourceCount == 1, "all-slot audit sees emitted texture source by slot", failures);
+        expect(audit.slots[slotIndex].importedTexturePayloadCount == 1, "all-slot audit sees imported payload by slot", failures);
+        expect(audit.slots[slotIndex].resolvedTextureRefCount == 1, "all-slot audit sees resolved texture ref by slot", failures);
+    }
+    expect(audit.slots[0].shaderActiveRefCount == 1, "base-color audit is shader-active", failures);
+    expect(audit.slots[1].shaderActiveRefCount == 1, "normal audit is shader-active", failures);
+    expect(audit.slots[2].shaderActiveRefCount == 0, "metallic-roughness audit is not shader-active yet", failures);
+    expect(std::string(full_engine::gltfMaterialSlotAuditSlotName(0)) == "BaseColor", "audit slot name helper covers base color", failures);
+    expect(std::string(full_engine::gltfMaterialSlotAuditSlotName(99)) == "Unknown", "audit slot name helper covers unknown", failures);
+}
+
+void testMissingTextureSlotAudit(std::vector<std::string>& failures)
+{
+    const full_engine::GltfMaterialSlotAudit audit =
+        full_engine::auditGltfMaterialSlots(
+            fixturePath("material_missing_image.gltf"),
+            options());
+
+    expect(audit.importStatus == full_engine::GltfMaterialAssetImportStatus::Success, "missing-image audit preserves extraction status", failures);
+    expect(!audit.records.empty(), "missing-image audit reports raw material record", failures);
+    expect(audit.slots[0].rawTextureKeyCount == 1, "missing-image audit sees authored base-color key", failures);
+    expect(audit.slots[0].extractedRefCount == 0, "missing-image audit reports no extracted base-color ref", failures);
+    expect(audit.slots[0].importedTexturePayloadCount == 0, "missing-image audit reports no imported base-color payload", failures);
+    expect(audit.slots[0].resolvedTextureRefCount == 0, "missing-image audit reports no resolved base-color ref", failures);
 }
 
 void testPreserveMaterialIndexIds(std::vector<std::string>& failures)
@@ -187,6 +336,9 @@ int main()
 {
     std::vector<std::string> failures;
     testBaseColorMaterialExtraction(failures);
+    testAllNamedMaterialTextureSlots(failures);
+    testAllNamedMaterialTextureSlotAudit(failures);
+    testMissingTextureSlotAudit(failures);
     testPreserveMaterialIndexIds(failures);
     testMaterialWithoutTexture(failures);
     testTextureInfoFailureIsDiagnostic(failures);

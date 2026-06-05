@@ -5,6 +5,22 @@
 
 namespace full_engine
 {
+/** @brief Selects how Assimp scene data is mapped to loaded skeleton joints. */
+enum class AssimpSkeletonSourceMode
+{
+    /** @brief Build skeletons from `aiMesh::mBones`; preserves existing glTF/skinned behavior. */
+    MeshBones,
+
+    /**
+     * @brief Build skeletons from scene nodes targeted by animation channels.
+     *
+     * This mode is intended for FBX characterization/import paths where Assimp
+     * exposes animated scene nodes but no mesh skin bones. Imported inverse bind
+     * poses are identity matrices because skin bind data is not available.
+     */
+    AnimatedSceneNodes,
+};
+
 /**
  * @brief Options for importing mesh payloads through Assimp.
  *
@@ -54,6 +70,9 @@ struct AssimpLoadedAssetImportOptions
 
     /** @brief Accept missing scale keys and synthesize one identity scale key. */
     bool allowMissingScaleKeys = true;
+
+    /** @brief Source used when importing skeletons and animation clip joint maps. */
+    AssimpSkeletonSourceMode skeletonSourceMode = AssimpSkeletonSourceMode::MeshBones;
 };
 
 /** @brief Result status for importing one asset source through Assimp. */
@@ -110,6 +129,12 @@ const char* assimpLoadedAssetImportStatusName(
  * face order follow Assimp's post-processed scene order. Parsed aggregate
  * metadata is checked against the active source descriptor, and the final
  * payload is validated with `validateLoadedAssetPayload`.
+ *
+ * `AssimpSkeletonSourceMode::AnimatedSceneNodes` is an opt-in FBX-oriented
+ * path for Skeleton and AnimationClip imports only. It derives joint order from
+ * animated scene nodes and required ancestors, and uses identity inverse bind
+ * poses. That data is useful for CPU animation characterization but is not
+ * sufficient for skinned mesh rendering without real weights and bind poses.
  *
  * The function copies all payload data by value. It performs no renderer
  * calls, renderer handle lookup, renderer resource creation, texture decoding,

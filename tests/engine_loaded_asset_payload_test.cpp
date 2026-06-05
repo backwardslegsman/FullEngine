@@ -219,6 +219,33 @@ full_engine::LoadedAnimationClipAsset animationClipAsset()
     return clip;
 }
 
+full_engine::LoadedSkeletonAsset skeletonAssetWithJointCount(const std::uint32_t jointCount)
+{
+    full_engine::LoadedSkeletonAsset skeleton;
+    skeleton.id = asset(140);
+    skeleton.joints.reserve(jointCount);
+    for (std::uint32_t index = 0; index < jointCount; ++index)
+    {
+        skeleton.joints.push_back(joint(index == 0 ? -1 : static_cast<std::int32_t>(index - 1U), ""));
+    }
+    return skeleton;
+}
+
+full_engine::LoadedAnimationClipAsset animationClipAssetWithTrackCount(const std::uint32_t trackCount)
+{
+    full_engine::LoadedAnimationClipAsset clip;
+    clip.id = asset(160);
+    clip.skeletonAssetId = asset(140);
+    clip.durationSeconds = 1.0f;
+    clip.ticksPerSecond = 30.0f;
+    clip.tracks.reserve(trackCount);
+    for (std::uint32_t index = 0; index < trackCount; ++index)
+    {
+        clip.tracks.push_back(animationTrack(static_cast<std::uint16_t>(index)));
+    }
+    return clip;
+}
+
 void testValidPayloads(std::vector<std::string>& failures)
 {
     expect(
@@ -255,6 +282,22 @@ void testValidPayloads(std::vector<std::string>& failures)
         full_engine::validateLoadedAnimationClipAsset(animationClipAsset()) ==
             full_engine::LoadedAssetPayloadValidationResult::Success,
         "valid animation clip payload passes",
+        failures);
+}
+
+void testExpandedCpuAnimationCapacity(std::vector<std::string>& failures)
+{
+    expect(
+        full_engine::validateLoadedSkeletonAsset(
+            skeletonAssetWithJointCount(full_engine::kMaxLoadedSkeletonJoints)) ==
+            full_engine::LoadedAssetPayloadValidationResult::Success,
+        "asset-layer skeleton payload accepts expanded CPU joint capacity",
+        failures);
+    expect(
+        full_engine::validateLoadedAnimationClipAsset(
+            animationClipAssetWithTrackCount(full_engine::kMaxLoadedAnimationJoints)) ==
+            full_engine::LoadedAssetPayloadValidationResult::Success,
+        "asset-layer animation payload accepts expanded CPU track capacity",
         failures);
 }
 
@@ -941,6 +984,7 @@ int main()
     std::vector<std::string> failures;
 
     testValidPayloads(failures);
+    testExpandedCpuAnimationCapacity(failures);
     testDefaultIdsFail(failures);
     testInvalidMeshPayloads(failures);
     testInvalidTexturePayloads(failures);

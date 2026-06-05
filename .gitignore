@@ -27,6 +27,10 @@ CMakeUserPresets.json
 imgui.ini
 *.log
 
+# Large local validation assets
+/tests/fixtures/assets/main_sponza/
+/tests/fixtures/assets/pkg_e_knight_anim/
+
 # Compiled artifacts
 *.obj
 *.o

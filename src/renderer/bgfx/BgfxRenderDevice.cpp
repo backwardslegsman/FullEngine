@@ -1803,6 +1803,7 @@ RendererResult BgfxRenderDevice::initialize(const RendererInitDesc& desc)
     lightColorUniform_ = bgfx::createUniform("u_lightColor", bgfx::UniformType::Vec4);
     materialColorUniform_ = bgfx::createUniform("u_materialColor", bgfx::UniformType::Vec4);
     basicBaseColorSampler_ = bgfx::createUniform("s_basicBaseColor", bgfx::UniformType::Sampler);
+    basicNormalSampler_ = bgfx::createUniform("s_basicNormal", bgfx::UniformType::Sampler);
     terrainLayerColorUniform_ = bgfx::createUniform("u_terrainLayerColors", bgfx::UniformType::Vec4, kMaxTerrainMaterialLayers);
     terrainParamsUniform_ = bgfx::createUniform("u_terrainParams", bgfx::UniformType::Vec4);
     shadowViewProjUniform_ = bgfx::createUniform("u_shadowViewProj", bgfx::UniformType::Mat4, kMaxDirectionalShadowCascades);
@@ -1893,6 +1894,7 @@ RendererResult BgfxRenderDevice::initialize(const RendererInitDesc& desc)
         !isValidUniform(lightColorUniform_) ||
         !isValidUniform(materialColorUniform_) ||
         !isValidUniform(basicBaseColorSampler_) ||
+        !isValidUniform(basicNormalSampler_) ||
         !isValidUniform(terrainLayerColorUniform_) ||
         !isValidUniform(terrainParamsUniform_) ||
         !isValidUniform(shadowViewProjUniform_) ||
@@ -2621,6 +2623,12 @@ void BgfxRenderDevice::shutdown() noexcept
             basicBaseColorSampler_ = BGFX_INVALID_HANDLE;
         }
 
+        if (bgfx::isValid(basicNormalSampler_))
+        {
+            bgfx::destroy(basicNormalSampler_);
+            basicNormalSampler_ = BGFX_INVALID_HANDLE;
+        }
+
         if (bgfx::isValid(lightColorUniform_))
         {
             bgfx::destroy(lightColorUniform_);
@@ -2927,6 +2935,17 @@ MaterialHandle BgfxRenderDevice::createMaterial(const MaterialDesc& desc)
                 return {};
             }
         }
+
+        if (isValid(desc.basicTextures.normal))
+        {
+            const TextureResource* normalTexture = resolveTexture(desc.basicTextures.normal, false);
+            if (normalTexture == nullptr ||
+                normalTexture->semantic != TextureSemantic::NormalMap ||
+                normalTexture->colorSpace != TextureColorSpace::EncodedNormal)
+            {
+                return {};
+            }
+        }
     }
     else if (desc.kind == MaterialKind::TerrainSplat)
     {
@@ -3098,6 +3117,19 @@ void BgfxRenderDevice::bindBasicMaterialTextureState(const MaterialDesc& materia
         0,
         basicBaseColorSampler_,
         baseColorTexture != nullptr ? baseColorTexture->texture : fallbackWhiteTexture_);
+
+    const TextureResource* normalTexture = isValid(material.basicTextures.normal) ?
+        resolveTexture(material.basicTextures.normal, true) :
+        nullptr;
+    if (normalTexture == nullptr)
+    {
+        ++stats_.fallbackMaterialTextureCount;
+    }
+
+    bgfx::setTexture(
+        1,
+        basicNormalSampler_,
+        normalTexture != nullptr ? normalTexture->texture : fallbackNormalTexture_);
 #else
     (void)material;
 #endif

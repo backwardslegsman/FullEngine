@@ -82,6 +82,14 @@ full_renderer::TextureDesc validTextureDesc()
     return desc;
 }
 
+full_renderer::TextureDesc validNormalTextureDesc()
+{
+    full_renderer::TextureDesc desc = validTextureDesc();
+    desc.semantic = full_renderer::TextureSemantic::NormalMap;
+    desc.colorSpace = full_renderer::TextureColorSpace::EncodedNormal;
+    return desc;
+}
+
 full_renderer::MaterialDesc validTerrainMaterialDesc(const full_renderer::TextureHandle texture)
 {
     full_renderer::MaterialDesc desc;
@@ -461,6 +469,7 @@ public:
         }
 
         textures_.push_back(true);
+        textureDescs_.push_back(desc);
         stats_.liveTextures = countLive(textures_);
         return {static_cast<std::uint32_t>(textures_.size())};
     }
@@ -482,6 +491,24 @@ public:
         if (!initialized_)
         {
             return {};
+        }
+
+        if (desc.kind == full_renderer::MaterialKind::Basic &&
+            full_renderer::isValid(desc.basicTextures.normal))
+        {
+            if (!isLiveHandle(desc.basicTextures.normal.id, textures_) ||
+                desc.basicTextures.normal.id > textureDescs_.size())
+            {
+                return {};
+            }
+
+            const full_renderer::TextureDesc& normalTexture =
+                textureDescs_[desc.basicTextures.normal.id - 1U];
+            if (normalTexture.semantic != full_renderer::TextureSemantic::NormalMap ||
+                normalTexture.colorSpace != full_renderer::TextureColorSpace::EncodedNormal)
+            {
+                return {};
+            }
         }
 
         if (failNextMaterialAllocation_)
@@ -1292,6 +1319,7 @@ private:
     std::vector<bool> skinnedMeshes_;
     std::vector<bool> textures_;
     std::vector<bool> materials_;
+    std::vector<full_renderer::TextureDesc> textureDescs_;
     std::vector<full_renderer::MaterialDesc> materialDescs_;
     std::uint32_t partialCreateCleanupCount_ = 0;
     std::uint32_t debugLineSubmissions_ = 0;
@@ -1928,6 +1956,34 @@ void resourceDescriptorsAreValidated(int& failures)
 
     const full_renderer::TextureHandle texture = renderer->createTexture(validTextureDesc());
     expect(full_renderer::isValid(texture), "valid texture creation succeeds", failures);
+
+    const full_renderer::TextureHandle normalTexture = renderer->createTexture(validNormalTextureDesc());
+    expect(full_renderer::isValid(normalTexture), "valid normal texture creation succeeds", failures);
+
+    full_renderer::MaterialDesc basicMaterial = validMaterialDesc();
+    expect(full_renderer::isValid(renderer->createMaterial(basicMaterial)),
+        "basic material accepts missing normal texture fallback",
+        failures);
+
+    basicMaterial.basicTextures.normal = normalTexture;
+    expect(full_renderer::isValid(renderer->createMaterial(basicMaterial)),
+        "basic material accepts encoded-normal normal texture",
+        failures);
+
+    basicMaterial = validMaterialDesc();
+    basicMaterial.basicTextures.normal = texture;
+    expect(!full_renderer::isValid(renderer->createMaterial(basicMaterial)),
+        "basic material rejects color texture in normal slot",
+        failures);
+
+    full_renderer::TextureHandle staleNormalTexture = renderer->createTexture(validNormalTextureDesc());
+    expect(full_renderer::isValid(staleNormalTexture), "stale normal source texture is created", failures);
+    renderer->destroyTexture(staleNormalTexture);
+    basicMaterial = validMaterialDesc();
+    basicMaterial.basicTextures.normal = staleNormalTexture;
+    expect(!full_renderer::isValid(renderer->createMaterial(basicMaterial)),
+        "basic material rejects stale normal texture handle",
+        failures);
 
     full_renderer::MaterialDesc fallbackTerrainMaterial = validTerrainMaterialDesc({});
     expect(full_renderer::isValid(renderer->createMaterial(fallbackTerrainMaterial)),

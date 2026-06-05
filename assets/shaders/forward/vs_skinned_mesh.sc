@@ -1,5 +1,5 @@
 $input a_position, a_normal, a_tangent, a_color0, a_texcoord0, a_texcoord1, a_texcoord2
-$output v_normal, v_color0, v_texcoord0, v_shadowcoord, v_shadowcoord1, v_shadowcoord2, v_shadowcoord3, v_viewdepth
+$output v_normal, v_tangent, v_color0, v_texcoord0, v_shadowcoord, v_shadowcoord1, v_shadowcoord2, v_shadowcoord3, v_viewdepth
 
 #include <bgfx_shader.sh>
 
@@ -15,6 +15,7 @@ void main()
 {
     vec4 localPosition = vec4(a_position, 1.0);
     vec4 localNormal = vec4(a_normal, 0.0);
+    vec4 localTangent = vec4(a_tangent.xyz, 0.0);
 
     int joint0 = skinIndex(a_texcoord1.x);
     int joint1 = skinIndex(a_texcoord1.y);
@@ -31,11 +32,17 @@ void main()
         mul(u_skinningPalette[joint1], localNormal).xyz * a_texcoord2.y +
         mul(u_skinningPalette[joint2], localNormal).xyz * a_texcoord2.z +
         mul(u_skinningPalette[joint3], localNormal).xyz * a_texcoord2.w;
+    vec3 skinnedTangent =
+        mul(u_skinningPalette[joint0], localTangent).xyz * a_texcoord2.x +
+        mul(u_skinningPalette[joint1], localTangent).xyz * a_texcoord2.y +
+        mul(u_skinningPalette[joint2], localTangent).xyz * a_texcoord2.z +
+        mul(u_skinningPalette[joint3], localTangent).xyz * a_texcoord2.w;
 
     vec4 worldPosition = mul(u_model[0], skinnedPosition);
     vec4 viewPosition = mul(u_view, worldPosition);
     gl_Position = mul(u_viewProj, worldPosition);
     v_normal = normalize(mul(u_model[0], vec4(normalize(skinnedNormal), 0.0)).xyz);
+    v_tangent = vec4(normalize(mul(u_model[0], vec4(normalize(skinnedTangent), 0.0)).xyz), a_tangent.w);
     v_color0 = a_color0;
     v_texcoord0 = a_texcoord0;
     v_shadowcoord = mul(u_shadowViewProj[0], worldPosition);

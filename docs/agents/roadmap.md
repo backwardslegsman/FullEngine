@@ -20,8 +20,12 @@ The renderer is suitable for serious prototype integration and validation
 scenes, but it is not yet production-ready for a large open-world engine.
 The most important current proof is the asset/animation path:
 
-- Assimp imports static meshes, skeletons, skinned meshes, material section
-  metadata, and animation clips from glTF into renderer-free CPU payloads.
+- Assimp imports static meshes, mesh-bone skeletons, skinned meshes, material
+  section metadata, and animation clips from glTF into renderer-free CPU
+  payloads. It also has an opt-in FBX characterization path that can import
+  skeleton and animation clip payloads from animated scene nodes when no mesh
+  skin bones/weights are available, plus a rigid node-attached prototype that
+  imports static mesh pieces driven by those sampled node transforms.
 - stb imports direct image files into single-mip RGBA8 CPU texture payloads.
 - Loaded payloads can plan and execute renderer uploads for mesh, texture,
   material, skeleton, and skinned mesh resources through caller-owned renderer
@@ -31,10 +35,15 @@ The most important current proof is the asset/animation path:
 - The debug-ui sample has a manually verified wolf smoke: real wolf glTF
   skeleton, skinned mesh sections, animation clip, extracted materials,
   decoded textures, uploaded renderer resources, section draws, UV0 texture
-  sampling, tangent payload/import/upload coverage, and deterministic
-  focus/diagnostics. Smoke run/clear actions are deferred until after
-  `endFrame` so skeleton/skinned resource lifecycle calls obey the public
-  no-active-frame contract.
+  sampling, tangent payload/import/upload coverage, basic normal-map sampling,
+  material slot resolution diagnostics for raw/extracted/imported/resolved
+  base-color/normal/metallic-roughness/occlusion/emissive refs, and
+  deterministic focus/diagnostics. Current wolf material limits are authored
+  fixture limits: the glTF declares base-color texture keys only for some
+  materials and no normal or metallic-roughness texture keys. Smoke run/clear
+  actions are deferred until after `endFrame` so
+  skeleton/skinned resource lifecycle calls obey the public no-active-frame
+  contract.
 
 The terrain/streaming path is also well advanced:
 
@@ -50,10 +59,15 @@ The terrain/streaming path is also well advanced:
 ## Active Priorities
 
 1. **Asset pipeline fidelity**
-   - Add normal-map sampling for skinned/static basic materials using the
-     carried tangent basis and named `Normal` material texture slot.
-   - Expand glTF material handling toward useful PBR fields while keeping
-     renderer APIs stable and tested.
+   - Expand glTF material handling toward useful PBR fields now that
+     base-color and normal-map slots can affect basic shading.
+   - Keep renderer APIs stable and tested while adding material fidelity.
+   - Long-term validation target: render the Intel GPU Research Sponza scene
+     with a full PBR animated knight. Those large local assets are ignored and
+     should remain optional until packaging/asset-download policy exists.
+   - FBX support starts with Assimp characterization probes for those optional
+     assets before changing coordinate, skeleton, animation, or material import
+     policy.
 
 2. **Animation runtime readiness**
    - Add a minimal engine-owned renderable/animation instance layer only after
@@ -129,6 +143,7 @@ engine, finish or explicitly defer:
 - production asset pipeline validation for mesh units/axes/tangents, texture
   mips/compression/color space, material slots, skeleton hierarchy, weights,
   animation clips, and terrain data
+- optional full-scene PBR validation using Sponza plus an animated knight
 - real engine-owned async streaming and asset IO integration
 - renderer resource destruction/rollback policy for loader-created resources
 - shader runtime asset/package convention
@@ -162,13 +177,14 @@ an embedded library consumed through public APIs.
      and renderer vertex layouts validate/store them.
 
 2. **Normal-map shader path**
-   - Use named `Normal` material texture slots for static and skinned basic
-     materials.
-   - Keep PBR deferred; prove useful normal-map lighting first.
+   - Implemented: static, instanced, and skinned basic materials sample the
+     named `Normal` texture slot through imported tangent bases.
 
 3. **Wolf material fidelity pass**
-   - Validate base-color/normal/metallic-roughness texture slots on the wolf.
-   - Add diagnostics for material slot resolution and shader use.
+   - Implemented: the wolf smoke reports authored and resolved material slots,
+     distinguishes shader-active base-color/normal sections from future PBR
+     slots, audits raw glTF slot keys versus extractor output, and tests that
+     wolf material refs resolve through upload.
 
 4. **Animation instance/renderable seam**
    - Add a small engine-owned value layer that binds skeleton/skinned mesh/
@@ -178,3 +194,43 @@ an embedded library consumed through public APIs.
 5. **Async asset worker proof**
    - Replace the fake worker with a minimal externally owned worker/completion
      adapter using the existing retained inbox/reconcile contract.
+
+6. **FBX characterization and node animation import**
+   - Implemented as a CPU-only Assimp scene probe with optional local Sponza
+     and animated knight smoke diagnostics plus deterministic JSON report
+     formatting for ignored local outputs under `out/diagnostics`.
+   - Current optional probe results: Sponza parses as 405 static meshes with
+     UV0/tangents/material textures but exceeds the current 16-bit mesh/index
+     contract by a wide margin; the Intel knight FBX files expose animation
+     channels that match scene nodes, but no Assimp mesh bones/weights through
+     the current probe flags.
+   - Opt-in `AnimatedSceneNodes` import can now produce CPU skeleton and
+     animation clip payloads from animated scene nodes with identity inverse
+     bind poses. This is useful for animation characterization and future
+     controller work, but it is not skinning-ready without real skin weights
+     and bind-pose data.
+   - Implemented skin-data availability audit across practical Assimp flag
+     configurations. Local Knight audit result: all tested configs parse, but
+     none expose mesh bones, weights, or bind-pose offset matrices; five static
+     mesh nodes sit under/match animated node candidates. The current
+     recommendation is rigid node-attached mesh prototype or source conversion,
+     not true Assimp skin recovery.
+  - Implemented rigid node-attached import and draw building: Assimp can import
+     node-derived skeleton/clip payloads plus static mesh attachments, upload
+     those mesh payloads through existing upload planning/execution, sample the
+     clip, and build ordinary static `DrawItem`s from sampled node model
+     matrices. This is useful for Knight-style rigid animation experiments but
+     remains explicitly separate from true skinned FBX recovery.
+   - Implemented debug-ui Knight rigid smoke: when the optional ignored Knight
+     FBX is present, the sample can import the node skeleton/clip plus rigid
+     mesh attachments, upload attachment meshes, sample animation on the CPU,
+     and submit static draws driven by sampled node transforms. Run/clear
+     actions are deferred until after `endFrame`; cleanup destroys only
+     smoke-owned meshes. Filtered imported attachments are now reported with
+     source mesh/node names, upload-plan status, and mesh-contract diagnostics
+     such as degenerate triangle counts so partial visibility is explainable.
+   - Use the next visual results to choose the next FBX branch:
+     transform/unit/axis normalization if the rigid Knight is visible but
+     mis-scaled or mis-oriented, source conversion/dedicated FBX parser
+     evaluation for true skinning, 32-bit/sectioned static mesh import for
+     Sponza, or material extraction.

@@ -182,11 +182,14 @@ Implemented pieces:
   uploading referenced texture/material payloads, and submitting multiple
   section draws that share one skinned mesh, skeleton, and palette while using
   real resolved material handles. The debug UI includes a deterministic wolf
-  focus camera plus section-draw, material-resolution, bounds, palette, and
-  clip-time diagnostics for visible smoke validation. Smoke run/clear actions
-  are deferred until after `endFrame`, because skeleton and skinned mesh
-  creation/destruction follow the public renderer no-active-frame resource
-  lifecycle rule.
+  focus camera plus section-draw, material-resolution, material-slot,
+  shader-active base-color/normal, bounds, palette, and clip-time diagnostics
+  for visible smoke validation. The material-slot diagnostics compare raw glTF
+  keys with extractor refs, imported texture payloads, and resolved texture
+  handles, making the current wolf gap explicit as authored fixture data rather
+  than a normal-map shader failure. Smoke run/clear actions are deferred until
+  after `endFrame`, because skeleton and skinned mesh creation/destruction
+  follow the public renderer no-active-frame resource lifecycle rule.
 - a dev-only loaded asset importer that reads tiny tracked ASCII mesh,
   texture, and material fixtures into `LoadedAssetPayload` values, proving the
   first real source-file-to-payload path without adopting a production asset
@@ -199,7 +202,37 @@ Implemented pieces:
   skeletons, skinned mesh weights, and raw animation clip tracks, and
   validating source descriptors and payload data while leaving UV1+, runtime
   animation playback/blending, async IO, and renderer-resource creation to
-  later slices
+  later slices. The same importer also has an opt-in `AnimatedSceneNodes`
+  skeleton source mode for FBX-style files that expose animation channels on
+  scene nodes but no mesh bones/weights; that mode imports CPU skeleton and
+  animation clip payloads with identity inverse bind poses for characterization
+  and non-skinning playback experiments, not skinning-ready mesh rendering.
+- a CPU-only Assimp scene probe that characterizes optional local FBX assets
+  such as Sponza and the animated knight before changing import policy. It
+  reports Assimp scene counts, mesh attribute availability, skeleton/animation
+  metadata, bounds, root transform, and first likely blocker without converting
+  payloads or touching renderer resources. The probe also includes a skin-data
+  availability audit that runs practical Assimp flag configurations and emits
+  deterministic JSON reports for ignored local diagnostics under
+  `out/diagnostics`. Current optional probes show Sponza is blocked first by
+  the 16-bit mesh/index contract, while the Intel knight FBX files expose
+  animation channels that match scene nodes but no Assimp mesh bones, weights,
+  or bind-pose offset matrices under the tested configurations. The audit finds
+  static mesh nodes under/matching animated node candidates, so the likely
+  Assimp-only branch is rigid node-attached mesh animation or source conversion
+  rather than true skin recovery. A first rigid node-attached prototype now
+  imports the node-derived skeleton/clip plus static mesh attachments, uploads
+  those meshes through the existing loaded-payload upload path, samples the clip,
+  and builds ordinary static `DrawItem`s from sampled node model matrices. This
+  proves the useful Assimp-only branch without treating identity inverse bind
+  poses as recovered skinning data. The debug-ui sample can run an optional
+  Knight rigid smoke against the ignored local FBX: it imports attachments,
+  uploads smoke-owned meshes, samples the clip directly on the CPU each frame,
+  appends ordinary static draws, exposes import/upload/sample/draw diagnostics,
+  and destroys only those smoke-owned meshes on clear/shutdown. When imported
+  attachments are filtered before upload, the sample records bounded source
+  mesh/node diagnostics plus upload-plan and renderer mesh-contract reasons
+  instead of silently hiding why only part of the asset rendered.
 - an stb-backed direct texture image importer that reads image files into the
   renderer-free `LoadedTextureAsset` contract as tightly packed single-mip
   RGBA8 bytes, validating source descriptors and payload data while leaving
@@ -223,13 +256,11 @@ Implemented pieces:
   calls, resolving named material texture asset IDs and skinned mesh skeleton
   asset IDs through `RendererAssetHandleCatalog` before recording successful
   handles
-- a first material/UV rendering smoke in the bgfx mesh path: static and
-  instanced mesh shaders pass UV0 to the forward fragment shader, the skinned
-  forward shader now passes imported UV0 as well, static/skinned renderer
-  vertex layouts retain imported tangents for future normal-map shading, basic
-  materials sample an optional base-color texture with white fallback, and
-  dev-imported textured assets can now affect visible mesh and skinned mesh
-  shading
+- a first material/UV/normal rendering smoke in the bgfx mesh path: static,
+  instanced, and skinned mesh shaders pass UV0 plus imported tangent bases to
+  the forward fragment shader, basic materials sample optional base-color and
+  normal textures with white/flat fallbacks, and dev-imported textured assets
+  can now affect visible mesh and skinned mesh shading
 - a dev manifest asset-load callback that resolves retained source metadata,
   imports tiny dev mesh/texture/material files, executes caller-owned renderer
   uploads, and publishes handle completions through the existing retained
@@ -447,8 +478,7 @@ Still future work:
 - production terrain streaming policy and editor-owned residency controls
 - real engine-owned mesh/material/texture creation and lifetime policy
 - production material import/rendering policy beyond the current basic
-  base-color texture smoke, tangent transport, and terrain-splat descriptor
-  bridge
+  base-color/normal texture smoke and terrain-splat descriptor bridge
 - renderer descriptor conversion for non-terrain draws and cameras
 - scene/entity ownership, gameplay simulation, persistence, and editor tooling
 

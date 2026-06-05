@@ -1,0 +1,102 @@
+{
+  "asset": {
+    "version": "2.0",
+    "generator": "FullRenderer rigid node importer test"
+  },
+  "scene": 0,
+  "scenes": [
+    {
+      "nodes": [0]
+    }
+  ],
+  "nodes": [
+    {
+      "name": "Root",
+      "mesh": 0,
+      "children": [1]
+    },
+    {
+      "name": "Child",
+      "mesh": 1
+    }
+  ],
+  "meshes": [
+    {
+      "name": "RootMesh",
+      "primitives": [
+        {
+          "attributes": {
+            "POSITION": 0,
+            "NORMAL": 1,
+            "TEXCOORD_0": 2
+          },
+          "indices": 4,
+          "mode": 4
+        }
+      ]
+    },
+    {
+      "name": "ChildMesh",
+      "primitives": [
+        {
+          "attributes": {
+            "POSITION": 0,
+            "NORMAL": 1,
+            "TEXCOORD_0": 2
+          },
+          "indices": 4,
+          "mode": 4
+        }
+      ]
+    }
+  ],
+  "animations": [
+    {
+      "name": "rigid_clip",
+      "channels": [
+        { "sampler": 0, "target": { "node": 0, "path": "translation" } },
+        { "sampler": 2, "target": { "node": 0, "path": "rotation" } },
+        { "sampler": 3, "target": { "node": 0, "path": "scale" } },
+        { "sampler": 1, "target": { "node": 1, "path": "translation" } },
+        { "sampler": 2, "target": { "node": 1, "path": "rotation" } },
+        { "sampler": 3, "target": { "node": 1, "path": "scale" } }
+      ],
+      "samplers": [
+        { "input": 5, "interpolation": "LINEAR", "output": 6 },
+        { "input": 5, "interpolation": "LINEAR", "output": 7 },
+        { "input": 5, "interpolation": "LINEAR", "output": 8 },
+        { "input": 5, "interpolation": "LINEAR", "output": 9 }
+      ]
+    }
+  ],
+  "buffers": [
+    {
+      "uri": "data:application/octet-stream;base64,AAAAAAAAAAAAAAAAAACAPwAAAAAAAAAAAAAAAAAAgD8AAAAAAAAAAAAAAEAAAAAAAACAPwAAAEAAAAAAAAAAAAAAQEAAAAAAAAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AACAPwAAAAAAAAAAAACAPwAAgD8AAAAAAAAAAAAAgD8AAIA/AAAAAAAAAAAAAIA/AACAPwAAAAAAAAAAAACAPwAAgD8AAAAAAAAAAAAAgD8AAIA/AAAAAAAAAAAAAIA/AAABAAIAAwAEAAUAAAAAAAAAgD8AAAAAAAAAAAAAAAAAAIA/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQAAAAAAAAAAAAAAAAAAAAAAAAIA/AAAAAAAAAAAAAAAAAACAPwAAgD8AAIA/AACAPwAAgD8AAIA/AACAPw==",
+      "byteLength": 412
+    }
+  ],
+  "bufferViews": [
+    { "buffer": 0, "byteOffset": 0, "byteLength": 72, "target": 34962 },
+    { "buffer": 0, "byteOffset": 72, "byteLength": 72, "target": 34962 },
+    { "buffer": 0, "byteOffset": 144, "byteLength": 48, "target": 34962 },
+    { "buffer": 0, "byteOffset": 192, "byteLength": 96, "target": 34962 },
+    { "buffer": 0, "byteOffset": 288, "byteLength": 12, "target": 34963 },
+    { "buffer": 0, "byteOffset": 300, "byteLength": 8 },
+    { "buffer": 0, "byteOffset": 308, "byteLength": 24 },
+    { "buffer": 0, "byteOffset": 332, "byteLength": 24 },
+    { "buffer": 0, "byteOffset": 356, "byteLength": 32 },
+    { "buffer": 0, "byteOffset": 388, "byteLength": 24 }
+  ],
+  "accessors": [
+    { "bufferView": 0, "byteOffset": 0, "componentType": 5126, "count": 6, "type": "VEC3", "min": [0.0, 0.0, 0.0], "max": [1.0, 3.0, 0.0] },
+    { "bufferView": 1, "byteOffset": 0, "componentType": 5126, "count": 6, "type": "VEC3" },
+    { "bufferView": 2, "byteOffset": 0, "componentType": 5126, "count": 6, "type": "VEC2" },
+    { "bufferView": 3, "byteOffset": 0, "componentType": 5126, "count": 6, "type": "VEC4" },
+    { "bufferView": 4, "byteOffset": 0, "componentType": 5123, "count": 6, "type": "SCALAR" },
+    { "bufferView": 5, "byteOffset": 0, "componentType": 5126, "count": 2, "type": "SCALAR", "min": [0.0], "max": [1.0] },
+    { "bufferView": 6, "byteOffset": 0, "componentType": 5126, "count": 2, "type": "VEC3" },
+    { "bufferView": 7, "byteOffset": 0, "componentType": 5126, "count": 2, "type": "VEC3" },
+    { "bufferView": 8, "byteOffset": 0, "componentType": 5126, "count": 2, "type": "VEC4" },
+    { "bufferView": 9, "byteOffset": 0, "componentType": 5126, "count": 2, "type": "VEC3" }
+  ]
+}

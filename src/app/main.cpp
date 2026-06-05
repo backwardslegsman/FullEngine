@@ -1,7 +1,10 @@
 #include "full_renderer/Renderer.hpp"
 
 #include "engine/assets/AssimpLoadedAssetImporter.hpp"
+#include "engine/assets/AssimpRigidNodeSceneImporter.hpp"
 #include "engine/assets/GltfMaterialAssetImporter.hpp"
+#include "engine/assets/GltfMaterialSlotAudit.hpp"
+#include "engine/assets/LoadedAnimationSampler.hpp"
 #include "engine/assets/LoadedTextureImageImporter.hpp"
 #include "engine/assets/CookedAssetManifest.hpp"
 #include "engine/assets/CookedAssetManifestJson.hpp"
@@ -12,6 +15,8 @@
 #include "engine/renderer_integration/ChunkTerrainHandleMap.hpp"
 #include "engine/renderer_integration/LoadedAssetUploadExecutor.hpp"
 #include "engine/renderer_integration/LoadedAssetUploadPlan.hpp"
+#include "engine/renderer_integration/LoadedMeshUploadDiagnostics.hpp"
+#include "engine/renderer_integration/RigidNodeAttachmentDrawBuilder.hpp"
 #include "engine/renderer_integration/TerrainAssetResolver.hpp"
 #include "engine/renderer_integration/TerrainChunkRequests.hpp"
 #include "engine/renderer_integration/TerrainDescriptorBuilder.hpp"
@@ -100,6 +105,10 @@
 
 #ifndef FULL_RENDERER_SAMPLE_WOLF_ASSET_DIR
 #define FULL_RENDERER_SAMPLE_WOLF_ASSET_DIR "tests/fixtures/assets/33-gltf-wolf/gltf"
+#endif
+
+#ifndef FULL_RENDERER_SAMPLE_KNIGHT_ASSET_DIR
+#define FULL_RENDERER_SAMPLE_KNIGHT_ASSET_DIR "tests/fixtures/assets/pkg_e_knight_anim/pkg_e_knight_anim/Exports/FBX"
 #endif
 
 namespace
@@ -436,6 +445,22 @@ full_renderer::Aabb makeCubeBounds(const Vec3 center, const Vec3 scale)
         center.z + scale.z);
 }
 
+full_renderer::Aabb emptyBounds() noexcept
+{
+    return makeBounds(0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f);
+}
+
+full_renderer::Aabb mergeBounds(const full_renderer::Aabb& lhs, const full_renderer::Aabb& rhs) noexcept
+{
+    return makeBounds(
+        std::min(lhs.min[0], rhs.min[0]),
+        std::min(lhs.min[1], rhs.min[1]),
+        std::min(lhs.min[2], rhs.min[2]),
+        std::max(lhs.max[0], rhs.max[0]),
+        std::max(lhs.max[1], rhs.max[1]),
+        std::max(lhs.max[2], rhs.max[2]));
+}
+
 Vec3 sampleWolfSmokeCenter() noexcept
 {
     return {1.0f, -0.95f, 13.0f};
@@ -476,6 +501,36 @@ void focusSampleWolfSmokeCamera(
     cameraFovYRadians = 45.0f * 3.1415926535f / 180.0f;
     cameraNearMeters = 0.1f;
     cameraFarMeters = 100.0f;
+}
+
+Vec3 sampleKnightRigidSmokeCenter() noexcept
+{
+    return {-5.0f, -0.95f, 16.0f};
+}
+
+Vec3 sampleKnightRigidSmokeScale() noexcept
+{
+    return {0.025f, 0.025f, 0.025f};
+}
+
+void makeSampleKnightRigidSmokeModel(float out[16]) noexcept
+{
+    makeScaleTranslation(out, sampleKnightRigidSmokeScale(), sampleKnightRigidSmokeCenter());
+}
+
+void focusSampleKnightRigidSmokeCamera(
+    Vec3& cameraPosition,
+    Vec3& cameraTarget,
+    float& cameraFovYRadians,
+    float& cameraNearMeters,
+    float& cameraFarMeters) noexcept
+{
+    const Vec3 center = sampleKnightRigidSmokeCenter();
+    cameraPosition = {center.x + 3.0f, center.y + 2.8f, center.z - 8.5f};
+    cameraTarget = {center.x, center.y + 1.35f, center.z};
+    cameraFovYRadians = 45.0f * 3.1415926535f / 180.0f;
+    cameraNearMeters = 0.1f;
+    cameraFarMeters = 160.0f;
 }
 
 full_renderer::MeshHandle createTerrainMesh(
@@ -883,6 +938,41 @@ enum class SampleAnimationSmokeAction
     ClearDefault,
     RunWolf,
     ClearWolf,
+    RunKnightRigid,
+    ClearKnightRigid,
+};
+
+enum class SampleKnightRigidSmokeStep
+{
+    Idle,
+    ImportScene,
+    UploadMeshes,
+    SamplePose,
+    BuildDraws,
+    Ready,
+    Failed,
+};
+
+constexpr std::size_t kSampleWolfMaterialSlotCount = 5;
+
+struct SampleWolfMaterialSlotDiagnostics
+{
+    std::array<std::uint32_t, kSampleWolfMaterialSlotCount> rawTextureKeys = {};
+    std::array<std::uint32_t, kSampleWolfMaterialSlotCount> authoredRefs = {};
+    std::array<std::uint32_t, kSampleWolfMaterialSlotCount> importedTexturePayloads = {};
+    std::array<std::uint32_t, kSampleWolfMaterialSlotCount> resolvedTextureRefs = {};
+    std::uint32_t rawTextureKeyCount = 0;
+    std::uint32_t authoredRefCount = 0;
+    std::uint32_t importedTexturePayloadCount = 0;
+    std::uint32_t resolvedTextureRefCount = 0;
+    std::uint32_t missingTextureRefCount = 0;
+    std::uint32_t sectionMaterialCount = 0;
+    std::uint32_t resolvedSectionMaterialCount = 0;
+    std::uint32_t sectionBaseColorCount = 0;
+    std::uint32_t sectionNormalCount = 0;
+    std::uint32_t shaderActiveBaseColorSectionCount = 0;
+    std::uint32_t shaderActiveNormalSectionCount = 0;
+    bool fidelityReady = false;
 };
 
 struct SampleAnimationSmokeState
@@ -913,6 +1003,7 @@ struct SampleAnimationSmokeState
     std::uint32_t wolfTextureSourceCount = 0;
     std::uint32_t wolfTexturePayloadCount = 0;
     std::uint32_t wolfMaterialPayloadCount = 0;
+    SampleWolfMaterialSlotDiagnostics wolfMaterialSlots = {};
     std::uint32_t expectedSectionDrawCount = 0;
     std::uint32_t submittedSectionDrawCount = 0;
     std::uint32_t paletteJointCount = 0;
@@ -930,6 +1021,64 @@ struct SampleAnimationSmokeState
     std::vector<full_renderer::TextureHandle> ownedTextureHandles = {};
     std::vector<full_renderer::MaterialHandle> ownedMaterialHandles = {};
     std::vector<full_renderer::MaterialHandle> sectionMaterialHandles = {};
+};
+
+struct SampleKnightRigidFilteredAttachment
+{
+    full_engine::AssetId meshAssetId = {};
+    std::uint32_t sourceMeshIndex = 0;
+    std::int32_t sourceMaterialIndex = -1;
+    std::size_t vertexCount = 0;
+    std::size_t indexCount = 0;
+    full_engine::LoadedAssetUploadStatus uploadStatus =
+        full_engine::LoadedAssetUploadStatus::InvalidPayload;
+    full_engine::LoadedMeshUploadDiagnosticStatus meshStatus =
+        full_engine::LoadedMeshUploadDiagnosticStatus::InvalidLoadedPayload;
+    std::size_t degenerateTriangleCount = 0;
+    std::uint32_t firstTriangleIndex = full_engine::LoadedMeshUploadDiagnosticFailure::invalidIndex;
+    std::string sourceMeshName = {};
+    std::string sourceNodeName = {};
+};
+
+struct SampleKnightRigidSmokeState
+{
+    bool attempted = false;
+    bool ready = false;
+    bool submitted = false;
+    SampleKnightRigidSmokeStep step = SampleKnightRigidSmokeStep::Idle;
+    SampleKnightRigidSmokeStep failureStep = SampleKnightRigidSmokeStep::Idle;
+    full_engine::AssimpRigidNodeSceneImportStatus importStatus =
+        full_engine::AssimpRigidNodeSceneImportStatus::InvalidArgument;
+    full_engine::LoadedAssetPayloadValidationResult payloadValidation =
+        full_engine::LoadedAssetPayloadValidationResult::Success;
+    full_engine::AssimpRigidNodeSceneImportSummary importSummary = {};
+    full_engine::LoadedAssetUploadSummary uploadPlan = {};
+    full_engine::LoadedAssetUploadExecuteSummary uploadExecute = {};
+    full_engine::LoadedAnimationSampleStatus sampleStatus =
+        full_engine::LoadedAnimationSampleStatus::InvalidArgument;
+    full_engine::RigidNodeAttachmentDrawSummary drawSummary = {};
+    std::uint32_t jointCount = 0;
+    std::uint32_t trackCount = 0;
+    std::uint32_t importedAttachmentCount = 0;
+    std::uint32_t uploadableAttachmentCount = 0;
+    std::uint32_t filteredAttachmentCount = 0;
+    std::uint32_t attachmentCount = 0;
+    std::uint32_t skippedMeshCount = 0;
+    std::size_t invalidRendererVertexAttachmentCount = 0;
+    std::size_t invalidRendererIndexAttachmentCount = 0;
+    std::size_t degenerateAttachmentCount = 0;
+    std::size_t degenerateTriangleCount = 0;
+    float currentClipTimeSeconds = 0.0f;
+    std::uint32_t submittedDrawCount = 0;
+    full_renderer::Aabb worldBounds = {};
+    full_engine::LoadedSkeletonAsset skeleton = {};
+    full_engine::LoadedAnimationClipAsset clip = {};
+    full_engine::LoadedAnimationPose latestPose = {};
+    full_engine::RendererAssetHandleCatalog handles = {};
+    std::vector<full_engine::AssimpRigidNodeMeshAttachment> attachments = {};
+    std::vector<full_renderer::MeshHandle> ownedMeshHandles = {};
+    std::vector<SampleKnightRigidFilteredAttachment> filteredAttachments = {};
+    std::string sourcePath = {};
 };
 
 struct SampleTerrainResidencyControls
@@ -1045,6 +1194,30 @@ full_engine::AssetId sampleWolfTextureAssetIdBase() noexcept
     return full_engine::AssetId{720000ULL};
 }
 
+full_engine::AssetId sampleKnightRigidSkeletonAssetId() noexcept
+{
+    return full_engine::AssetId{730000ULL};
+}
+
+full_engine::AssetId sampleKnightRigidClipAssetId() noexcept
+{
+    return full_engine::AssetId{730001ULL};
+}
+
+full_engine::AssetId sampleKnightRigidMeshAssetIdBase() noexcept
+{
+    return full_engine::AssetId{731000ULL};
+}
+
+full_engine::GltfMaterialAssetImportOptions sampleWolfMaterialImportOptions() noexcept
+{
+    full_engine::GltfMaterialAssetImportOptions options;
+    options.firstMaterialId = sampleWolfSectionMaterialAssetId(0);
+    options.firstTextureId = sampleWolfTextureAssetIdBase();
+    options.materialIdMode = full_engine::GltfMaterialAssetIdMode::PreserveGltfMaterialIndex;
+    return options;
+}
+
 std::string sampleDevAssetPath(const char* const filename)
 {
     std::string path = FULL_RENDERER_SAMPLE_DEV_ASSET_DIR;
@@ -1070,6 +1243,17 @@ std::string sampleWolfAssetPath(const char* const filename)
 std::string sampleAnimationAssetPath(const char* const filename)
 {
     std::string path = FULL_RENDERER_SAMPLE_ANIMATION_ASSET_DIR;
+    if (!path.empty() && path.back() != '/' && path.back() != '\\')
+    {
+        path.push_back('/');
+    }
+    path += filename;
+    return path;
+}
+
+std::string sampleKnightAssetPath(const char* const filename)
+{
+    std::string path = FULL_RENDERER_SAMPLE_KNIGHT_ASSET_DIR;
     if (!path.empty() && path.back() != '/' && path.back() != '\\')
     {
         path.push_back('/');
@@ -1158,6 +1342,190 @@ const char* sampleAnimationSmokeStepName(const SampleAnimationSmokeStep step) no
     return "Unknown";
 }
 
+const char* sampleKnightRigidSmokeStepName(const SampleKnightRigidSmokeStep step) noexcept
+{
+    switch (step)
+    {
+    case SampleKnightRigidSmokeStep::Idle:
+        return "Idle";
+    case SampleKnightRigidSmokeStep::ImportScene:
+        return "ImportScene";
+    case SampleKnightRigidSmokeStep::UploadMeshes:
+        return "UploadMeshes";
+    case SampleKnightRigidSmokeStep::SamplePose:
+        return "SamplePose";
+    case SampleKnightRigidSmokeStep::BuildDraws:
+        return "BuildDraws";
+    case SampleKnightRigidSmokeStep::Ready:
+        return "Ready";
+    case SampleKnightRigidSmokeStep::Failed:
+        return "Failed";
+    }
+    return "Unknown";
+}
+
+std::size_t sampleWolfMaterialSlotIndex(const full_engine::AssetSourceMaterialTextureSlot slot) noexcept
+{
+    switch (slot)
+    {
+    case full_engine::AssetSourceMaterialTextureSlot::BaseColor:
+        return 0;
+    case full_engine::AssetSourceMaterialTextureSlot::Normal:
+        return 1;
+    case full_engine::AssetSourceMaterialTextureSlot::MetallicRoughness:
+        return 2;
+    case full_engine::AssetSourceMaterialTextureSlot::Occlusion:
+        return 3;
+    case full_engine::AssetSourceMaterialTextureSlot::Emissive:
+        return 4;
+    case full_engine::AssetSourceMaterialTextureSlot::Unknown:
+        break;
+    }
+    return kSampleWolfMaterialSlotCount;
+}
+
+const char* sampleWolfMaterialSlotLabel() noexcept
+{
+    return "base/normal/mr/occ/emissive";
+}
+
+const full_engine::LoadedMaterialAsset* findSampleMaterialPayload(
+    const std::vector<full_engine::LoadedAssetPayload>* const payloads,
+    const full_engine::AssetId id) noexcept
+{
+    if (payloads == nullptr)
+    {
+        return nullptr;
+    }
+
+    for (const full_engine::LoadedAssetPayload& payload : *payloads)
+    {
+        if (payload.kind == full_engine::AssetKind::Material &&
+            payload.material.id == id)
+        {
+            return &payload.material;
+        }
+    }
+    return nullptr;
+}
+
+SampleWolfMaterialSlotDiagnostics makeSampleWolfMaterialSlotDiagnostics(
+    const std::string& sourcePath,
+    const full_engine::LoadedSkinnedMeshAsset& skinnedMesh,
+    const std::vector<full_engine::LoadedAssetPayload>* const materialPayloads,
+    const full_engine::RendererAssetHandleCatalog& handles,
+    const std::uint32_t resolvedSectionMaterialCount) noexcept
+{
+    SampleWolfMaterialSlotDiagnostics diagnostics;
+    diagnostics.sectionMaterialCount = static_cast<std::uint32_t>(skinnedMesh.sections.size());
+    diagnostics.resolvedSectionMaterialCount = resolvedSectionMaterialCount;
+
+    std::vector<full_engine::AssetId> resolvedTextureIds;
+    if (materialPayloads != nullptr)
+    {
+        for (const full_engine::LoadedAssetPayload& payload : *materialPayloads)
+        {
+            if (payload.kind != full_engine::AssetKind::Material)
+            {
+                continue;
+            }
+            for (std::uint32_t refIndex = 0; refIndex < payload.material.textureRefCount; ++refIndex)
+            {
+                const full_engine::AssetId textureId = payload.material.textureRefs[refIndex].id;
+                const full_renderer::TextureHandle* const texture = handles.findTextureHandle(textureId);
+                if (texture != nullptr &&
+                    full_renderer::isValid(*texture) &&
+                    std::find(resolvedTextureIds.begin(), resolvedTextureIds.end(), textureId) == resolvedTextureIds.end())
+                {
+                    resolvedTextureIds.push_back(textureId);
+                }
+            }
+        }
+    }
+
+    const full_engine::GltfMaterialSlotAudit audit =
+        full_engine::auditGltfMaterialSlots(
+            sourcePath,
+            sampleWolfMaterialImportOptions(),
+            nullptr,
+            materialPayloads != nullptr ? materialPayloads->data() : nullptr,
+            materialPayloads != nullptr ? materialPayloads->size() : 0U,
+            resolvedTextureIds.data(),
+            resolvedTextureIds.size());
+    for (std::size_t slotIndex = 0; slotIndex < kSampleWolfMaterialSlotCount; ++slotIndex)
+    {
+        diagnostics.rawTextureKeys[slotIndex] = audit.slots[slotIndex].rawTextureKeyCount;
+        diagnostics.authoredRefs[slotIndex] = audit.slots[slotIndex].extractedRefCount;
+        diagnostics.importedTexturePayloads[slotIndex] = audit.slots[slotIndex].importedTexturePayloadCount;
+        diagnostics.resolvedTextureRefs[slotIndex] = audit.slots[slotIndex].resolvedTextureRefCount;
+        diagnostics.rawTextureKeyCount += diagnostics.rawTextureKeys[slotIndex];
+        diagnostics.authoredRefCount += diagnostics.authoredRefs[slotIndex];
+        diagnostics.importedTexturePayloadCount += diagnostics.importedTexturePayloads[slotIndex];
+        diagnostics.resolvedTextureRefCount += diagnostics.resolvedTextureRefs[slotIndex];
+    }
+    diagnostics.missingTextureRefCount =
+        diagnostics.authoredRefCount >= diagnostics.resolvedTextureRefCount ?
+        diagnostics.authoredRefCount - diagnostics.resolvedTextureRefCount :
+        0U;
+
+    bool allAuthoredRefsResolved = true;
+    bool allSectionsHaveMaterials = diagnostics.sectionMaterialCount == resolvedSectionMaterialCount;
+    bool allSectionsHaveBaseColor = diagnostics.sectionMaterialCount > 0;
+    allAuthoredRefsResolved = diagnostics.missingTextureRefCount == 0;
+
+    for (const full_engine::LoadedSkinnedMeshSection& section : skinnedMesh.sections)
+    {
+        const full_engine::LoadedMaterialAsset* const material =
+            findSampleMaterialPayload(materialPayloads, section.materialAssetId);
+        const full_renderer::MaterialHandle* const sectionMaterial =
+            handles.findMaterialHandle(section.materialAssetId);
+        const bool sectionMaterialResolved =
+            sectionMaterial != nullptr && full_renderer::isValid(*sectionMaterial);
+        allSectionsHaveMaterials = allSectionsHaveMaterials && sectionMaterialResolved;
+
+        bool hasBaseColor = false;
+        bool hasResolvedBaseColor = false;
+        bool hasResolvedNormal = false;
+        if (material != nullptr)
+        {
+            for (std::uint32_t refIndex = 0; refIndex < material->textureRefCount; ++refIndex)
+            {
+                const full_engine::AssetSourceMaterialTextureRef& ref = material->textureRefs[refIndex];
+                const full_renderer::TextureHandle* const texture = handles.findTextureHandle(ref.id);
+                const bool resolved = texture != nullptr && full_renderer::isValid(*texture);
+                if (ref.slot == full_engine::AssetSourceMaterialTextureSlot::BaseColor)
+                {
+                    hasBaseColor = true;
+                    hasResolvedBaseColor = resolved;
+                }
+                else if (ref.slot == full_engine::AssetSourceMaterialTextureSlot::Normal)
+                {
+                    hasResolvedNormal = resolved;
+                }
+            }
+        }
+
+        if (hasResolvedBaseColor)
+        {
+            ++diagnostics.sectionBaseColorCount;
+            ++diagnostics.shaderActiveBaseColorSectionCount;
+        }
+        if (hasResolvedNormal)
+        {
+            ++diagnostics.sectionNormalCount;
+            ++diagnostics.shaderActiveNormalSectionCount;
+        }
+        allSectionsHaveBaseColor = allSectionsHaveBaseColor && hasBaseColor && hasResolvedBaseColor;
+    }
+
+    diagnostics.fidelityReady =
+        diagnostics.sectionMaterialCount > 0 &&
+        allSectionsHaveMaterials &&
+        allSectionsHaveBaseColor &&
+        allAuthoredRefsResolved;
+    return diagnostics;
+}
+
 void failSampleAnimationSmoke(SampleAnimationSmokeState& state) noexcept
 {
     state.failureStep = state.step;
@@ -1170,6 +1538,26 @@ SampleAnimationSmokeStep sampleAnimationSmokeDisplayStep(const SampleAnimationSm
 {
     if (state.step == SampleAnimationSmokeStep::Failed &&
         state.failureStep != SampleAnimationSmokeStep::Idle)
+    {
+        return state.failureStep;
+    }
+    return state.step;
+}
+
+void failSampleKnightRigidSmoke(SampleKnightRigidSmokeState& state) noexcept
+{
+    state.failureStep = state.step;
+    state.step = SampleKnightRigidSmokeStep::Failed;
+    state.ready = false;
+    state.submitted = false;
+    state.submittedDrawCount = 0;
+}
+
+SampleKnightRigidSmokeStep sampleKnightRigidSmokeDisplayStep(
+    const SampleKnightRigidSmokeState& state) noexcept
+{
+    if (state.step == SampleKnightRigidSmokeStep::Failed &&
+        state.failureStep != SampleKnightRigidSmokeStep::Idle)
     {
         return state.failureStep;
     }
@@ -1318,6 +1706,20 @@ void destroySampleAnimationSmokeResources(
     state = {};
 }
 
+void destroySampleKnightRigidSmokeResources(
+    full_renderer::IRenderer& renderer,
+    SampleKnightRigidSmokeState& state) noexcept
+{
+    for (const full_renderer::MeshHandle mesh : state.ownedMeshHandles)
+    {
+        if (full_renderer::isValid(mesh))
+        {
+            renderer.destroyMesh(mesh);
+        }
+    }
+    state = {};
+}
+
 full_renderer::MaterialHandle createSampleAnimationSectionMaterial(
     full_renderer::IRenderer& renderer,
     const std::uint32_t sectionIndex)
@@ -1360,10 +1762,7 @@ SampleWolfMaterialPayloadResult appendWolfMaterialPayloads(
     std::vector<full_engine::LoadedAssetPayload>& outPayloads)
 {
     SampleWolfMaterialPayloadResult result;
-    full_engine::GltfMaterialAssetImportOptions options;
-    options.firstMaterialId = sampleWolfSectionMaterialAssetId(0);
-    options.firstTextureId = sampleWolfTextureAssetIdBase();
-    options.materialIdMode = full_engine::GltfMaterialAssetIdMode::PreserveGltfMaterialIndex;
+    const full_engine::GltfMaterialAssetImportOptions options = sampleWolfMaterialImportOptions();
 
     const full_engine::GltfMaterialAssetImportResult materialSources =
         full_engine::importGltfMaterialAssetSources(sourcePath, options);
@@ -1414,6 +1813,237 @@ bool sampleAnimationUploadSucceeded(
         result.summary.missingSkeletonHandleCount == 0 &&
         result.summary.unsupportedKindCount == 0 &&
         result.summary.skippedUnplannedCount == 0;
+}
+
+bool sampleKnightRigidUploadSucceeded(
+    const full_engine::LoadedAssetUploadExecuteResult& result,
+    const std::size_t attachmentCount) noexcept
+{
+    return result.summary.uploadedMeshCount + result.summary.alreadyMappedCount >= attachmentCount &&
+        result.summary.rendererFailedCount == 0 &&
+        result.summary.catalogRejectedCount == 0 &&
+        result.summary.missingTextureHandleCount == 0 &&
+        result.summary.missingSkeletonHandleCount == 0 &&
+        result.summary.unsupportedKindCount == 0 &&
+        result.summary.skippedUnplannedCount == 0;
+}
+
+void recordSampleKnightRigidFilteredAttachment(
+    SampleKnightRigidSmokeState& state,
+    const full_engine::AssimpRigidNodeMeshAttachment& attachment,
+    const full_engine::LoadedAssetUploadStatus uploadStatus,
+    const full_engine::LoadedMeshUploadDiagnostics& meshDiagnostics)
+{
+    constexpr std::size_t kMaxFilteredAttachmentRecords = 16;
+    ++state.filteredAttachmentCount;
+    if (meshDiagnostics.status == full_engine::LoadedMeshUploadDiagnosticStatus::InvalidRendererVertexData)
+    {
+        ++state.invalidRendererVertexAttachmentCount;
+    }
+    else if (meshDiagnostics.status == full_engine::LoadedMeshUploadDiagnosticStatus::InvalidRendererIndices)
+    {
+        ++state.invalidRendererIndexAttachmentCount;
+    }
+    else if (meshDiagnostics.status == full_engine::LoadedMeshUploadDiagnosticStatus::DegenerateTriangles)
+    {
+        ++state.degenerateAttachmentCount;
+    }
+    state.degenerateTriangleCount += meshDiagnostics.degenerateTriangleCount;
+
+    if (state.filteredAttachments.size() >= kMaxFilteredAttachmentRecords)
+    {
+        return;
+    }
+
+    SampleKnightRigidFilteredAttachment record;
+    record.meshAssetId = attachment.meshAssetId;
+    record.sourceMeshIndex = attachment.sourceMeshIndex;
+    record.sourceMaterialIndex = attachment.sourceMaterialIndex;
+    record.vertexCount = attachment.mesh.vertices.size();
+    record.indexCount = attachment.mesh.indices.size();
+    record.uploadStatus = uploadStatus;
+    record.meshStatus = meshDiagnostics.status;
+    record.degenerateTriangleCount = meshDiagnostics.degenerateTriangleCount;
+    record.firstTriangleIndex = meshDiagnostics.firstFailure.triangleIndex;
+    record.sourceMeshName = attachment.sourceMeshName;
+    record.sourceNodeName = attachment.sourceNodeName;
+    state.filteredAttachments.push_back(std::move(record));
+}
+
+void rememberSampleKnightRigidUploadedMeshes(
+    const full_engine::LoadedAssetUploadExecuteResult& upload,
+    SampleKnightRigidSmokeState& state)
+{
+    for (const full_engine::LoadedAssetUploadExecuteRecord& record : upload.records)
+    {
+        if (record.kind == full_engine::AssetKind::Mesh &&
+            record.status == full_engine::LoadedAssetUploadExecuteStatus::Uploaded &&
+            full_renderer::isValid(record.mesh))
+        {
+            state.ownedMeshHandles.push_back(record.mesh);
+        }
+    }
+}
+
+void updateSampleKnightRigidWorldBounds(
+    SampleKnightRigidSmokeState& state,
+    const std::vector<full_renderer::DrawItem>& draws) noexcept
+{
+    state.worldBounds = emptyBounds();
+    if (draws.empty())
+    {
+        return;
+    }
+
+    full_renderer::Aabb bounds = draws.front().bounds;
+    for (std::size_t index = 1; index < draws.size(); ++index)
+    {
+        bounds = mergeBounds(bounds, draws[index].bounds);
+    }
+    state.worldBounds = bounds;
+}
+
+full_engine::RigidNodeAttachmentDrawResult buildSampleKnightRigidSmokeDraws(
+    SampleKnightRigidSmokeState& state,
+    const full_renderer::MaterialHandle fallbackMaterial)
+{
+    float model[16] = {};
+    makeSampleKnightRigidSmokeModel(model);
+    full_engine::RigidNodeAttachmentDrawResult result =
+        full_engine::buildRigidNodeAttachmentDraws(
+            state.attachments.empty() ? nullptr : state.attachments.data(),
+            state.attachments.size(),
+            state.handles,
+            state.latestPose,
+            fallbackMaterial,
+            model);
+    state.drawSummary = result.summary;
+    updateSampleKnightRigidWorldBounds(state, result.draws);
+    return result;
+}
+
+void runSampleKnightRigidSmoke(
+    full_renderer::IRenderer& renderer,
+    SampleKnightRigidSmokeState& state,
+    const full_renderer::MaterialHandle fallbackMaterial)
+{
+    destroySampleKnightRigidSmokeResources(renderer, state);
+    state.attempted = true;
+    state.sourcePath = sampleKnightAssetPath("Knight_USD_002.fbx");
+
+    state.step = SampleKnightRigidSmokeStep::ImportScene;
+    full_engine::AssimpRigidNodeSceneImportOptions options;
+    options.path = state.sourcePath;
+    options.skeletonAssetId = sampleKnightRigidSkeletonAssetId();
+    options.animationClipAssetId = sampleKnightRigidClipAssetId();
+    options.firstMeshAssetId = sampleKnightRigidMeshAssetIdBase();
+    options.assimp.generateMissingNormals = true;
+    options.assimp.generateMissingTangents = true;
+    options.assimp.defaultMissingUv0ToZero = true;
+
+    const full_engine::AssimpRigidNodeSceneImportResult imported =
+        full_engine::importRigidNodeSceneWithAssimp(options);
+    state.importStatus = imported.status;
+    state.payloadValidation = imported.payloadValidation;
+    state.importSummary = imported.summary;
+    state.jointCount = static_cast<std::uint32_t>(imported.skeleton.joints.size());
+    state.trackCount = static_cast<std::uint32_t>(imported.animationClip.tracks.size());
+    state.importedAttachmentCount = static_cast<std::uint32_t>(imported.attachments.size());
+    state.attachmentCount = state.importedAttachmentCount;
+    state.skippedMeshCount = static_cast<std::uint32_t>(imported.summary.skippedMeshCount);
+    if (imported.status != full_engine::AssimpRigidNodeSceneImportStatus::Success ||
+        imported.attachments.empty())
+    {
+        failSampleKnightRigidSmoke(state);
+        return;
+    }
+    state.skeleton = imported.skeleton;
+    state.clip = imported.animationClip;
+
+    state.step = SampleKnightRigidSmokeStep::UploadMeshes;
+    std::vector<full_engine::LoadedAssetPayload> payloads;
+    payloads.reserve(imported.attachments.size());
+    for (const full_engine::AssimpRigidNodeMeshAttachment& attachment : imported.attachments)
+    {
+        full_engine::LoadedAssetPayload payload;
+        payload.kind = full_engine::AssetKind::Mesh;
+        payload.mesh = attachment.mesh;
+        payloads.push_back(std::move(payload));
+    }
+    const full_engine::LoadedAssetUploadPlan fullPlan =
+        full_engine::buildLoadedAssetUploadPlan(payloads.data(), payloads.size());
+    state.uploadPlan = fullPlan.summary;
+    std::vector<full_engine::LoadedAssetPayload> uploadablePayloads;
+    std::vector<full_engine::AssimpRigidNodeMeshAttachment> uploadableAttachments;
+    uploadablePayloads.reserve(fullPlan.summary.plannedCount);
+    uploadableAttachments.reserve(fullPlan.summary.plannedCount);
+    for (std::size_t index = 0; index < fullPlan.records.size(); ++index)
+    {
+        if (fullPlan.records[index].status == full_engine::LoadedAssetUploadStatus::Planned)
+        {
+            uploadablePayloads.push_back(payloads[index]);
+            uploadableAttachments.push_back(imported.attachments[index]);
+        }
+        else
+        {
+            const full_engine::LoadedMeshUploadDiagnostics meshDiagnostics =
+                full_engine::diagnoseLoadedMeshUploadContract(imported.attachments[index].mesh);
+            recordSampleKnightRigidFilteredAttachment(
+                state,
+                imported.attachments[index],
+                fullPlan.records[index].status,
+                meshDiagnostics);
+        }
+    }
+    if (uploadablePayloads.empty())
+    {
+        failSampleKnightRigidSmoke(state);
+        return;
+    }
+    state.attachments = std::move(uploadableAttachments);
+    state.uploadableAttachmentCount = static_cast<std::uint32_t>(state.attachments.size());
+    state.attachmentCount = state.uploadableAttachmentCount;
+
+    const full_engine::LoadedAssetUploadPlan executablePlan =
+        full_engine::buildLoadedAssetUploadPlan(uploadablePayloads.data(), uploadablePayloads.size());
+    const full_engine::LoadedAssetUploadExecuteResult upload =
+        full_engine::executeLoadedAssetUploadPlan(renderer, executablePlan, state.handles);
+    state.uploadExecute = upload.summary;
+    rememberSampleKnightRigidUploadedMeshes(upload, state);
+    if (!sampleKnightRigidUploadSucceeded(upload, state.attachments.size()))
+    {
+        failSampleKnightRigidSmoke(state);
+        return;
+    }
+
+    state.step = SampleKnightRigidSmokeStep::SamplePose;
+    const full_engine::LoadedAnimationSampleResult sample =
+        full_engine::sampleLoadedAnimationClip(
+            state.skeleton,
+            state.clip,
+            0.0f,
+            full_engine::LoadedAnimationPlaybackMode::Loop);
+    state.sampleStatus = sample.status;
+    if (sample.status != full_engine::LoadedAnimationSampleStatus::Success)
+    {
+        failSampleKnightRigidSmoke(state);
+        return;
+    }
+    state.latestPose = sample.pose;
+    state.currentClipTimeSeconds = sample.pose.sampledTimeSeconds;
+
+    state.step = SampleKnightRigidSmokeStep::BuildDraws;
+    const full_engine::RigidNodeAttachmentDrawResult draws =
+        buildSampleKnightRigidSmokeDraws(state, fallbackMaterial);
+    if (draws.summary.builtCount != state.attachments.size())
+    {
+        failSampleKnightRigidSmoke(state);
+        return;
+    }
+
+    state.ready = true;
+    state.failureStep = SampleKnightRigidSmokeStep::Idle;
+    state.step = SampleKnightRigidSmokeStep::Ready;
 }
 
 void runSampleAnimationSmokeFromSources(
@@ -1538,6 +2168,12 @@ void runSampleAnimationSmokeFromSources(
         state.sectionMaterialsResolved =
             state.skinnedMesh.sections.empty() ||
             state.sectionMaterialHandles.size() == state.skinnedMesh.sections.size();
+        state.wolfMaterialSlots = makeSampleWolfMaterialSlotDiagnostics(
+            state.sourcePath,
+            state.skinnedMesh,
+            additionalUploadPayloads,
+            state.handles,
+            static_cast<std::uint32_t>(state.sectionMaterialHandles.size()));
         if (!state.sectionMaterialsResolved)
         {
             failSampleAnimationSmoke(state);
@@ -1660,7 +2296,9 @@ void executeSampleAnimationSmokeAction(
     const SampleAnimationSmokeAction action,
     full_renderer::IRenderer& renderer,
     SampleAnimationSmokeState& animationSmoke,
-    SampleAnimationSmokeState& wolfAnimationSmoke)
+    SampleAnimationSmokeState& wolfAnimationSmoke,
+    SampleKnightRigidSmokeState& knightRigidSmoke,
+    const full_renderer::MaterialHandle fallbackMaterial)
 {
     // Renderer skeleton/skinned mesh resources must be created or destroyed
     // outside an active frame. The debug UI records button intent during the
@@ -1678,6 +2316,12 @@ void executeSampleAnimationSmokeAction(
         break;
     case SampleAnimationSmokeAction::ClearWolf:
         destroySampleAnimationSmokeResources(renderer, wolfAnimationSmoke);
+        break;
+    case SampleAnimationSmokeAction::RunKnightRigid:
+        runSampleKnightRigidSmoke(renderer, knightRigidSmoke, fallbackMaterial);
+        break;
+    case SampleAnimationSmokeAction::ClearKnightRigid:
+        destroySampleKnightRigidSmokeResources(renderer, knightRigidSmoke);
         break;
     case SampleAnimationSmokeAction::None:
         break;
@@ -2826,6 +3470,7 @@ void drawTerrainDiagnosticsPanel(
     SampleTerrainResidencyControls& terrainResidencyControls,
     SampleAnimationSmokeState& animationSmoke,
     SampleAnimationSmokeState& wolfAnimationSmoke,
+    SampleKnightRigidSmokeState& knightRigidSmoke,
     SampleAnimationSmokeAction& pendingAnimationSmokeAction,
     const float terrainChunkSizeMeters,
     int terrainGridRadius,
@@ -3999,6 +4644,25 @@ void drawTerrainDiagnosticsPanel(
         {
             pendingAnimationSmokeAction = SampleAnimationSmokeAction::ClearWolf;
         }
+        if (ImGui::Button("Run Knight Rigid Smoke"))
+        {
+            pendingAnimationSmokeAction = SampleAnimationSmokeAction::RunKnightRigid;
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Focus Knight Rigid Smoke"))
+        {
+            focusSampleKnightRigidSmokeCamera(
+                cameraPosition,
+                cameraTarget,
+                cameraFovYRadians,
+                cameraNearMeters,
+                cameraFarMeters);
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Clear Knight Rigid Smoke"))
+        {
+            pendingAnimationSmokeAction = SampleAnimationSmokeAction::ClearKnightRigid;
+        }
         const full_renderer::RendererStats rendererStats = renderer.getStats();
         ImGui::Text("Skeletons: %u live", rendererStats.liveSkeletons);
         ImGui::Text("Skinned meshes: %u live", rendererStats.liveSkinnedMeshes);
@@ -4077,6 +4741,46 @@ void drawTerrainDiagnosticsPanel(
             wolfAnimationSmoke.wolfMaterialImportSummary.textureInfoFailedCount,
             wolfAnimationSmoke.wolfMaterialImportSummary.sourceValidationFailedCount);
         ImGui::Text(
+            "Wolf material raw keys %s: %u/%u/%u/%u/%u",
+            sampleWolfMaterialSlotLabel(),
+            wolfAnimationSmoke.wolfMaterialSlots.rawTextureKeys[0],
+            wolfAnimationSmoke.wolfMaterialSlots.rawTextureKeys[1],
+            wolfAnimationSmoke.wolfMaterialSlots.rawTextureKeys[2],
+            wolfAnimationSmoke.wolfMaterialSlots.rawTextureKeys[3],
+            wolfAnimationSmoke.wolfMaterialSlots.rawTextureKeys[4]);
+        ImGui::Text(
+            "Wolf material extracted refs %s: %u/%u/%u/%u/%u",
+            sampleWolfMaterialSlotLabel(),
+            wolfAnimationSmoke.wolfMaterialSlots.authoredRefs[0],
+            wolfAnimationSmoke.wolfMaterialSlots.authoredRefs[1],
+            wolfAnimationSmoke.wolfMaterialSlots.authoredRefs[2],
+            wolfAnimationSmoke.wolfMaterialSlots.authoredRefs[3],
+            wolfAnimationSmoke.wolfMaterialSlots.authoredRefs[4]);
+        ImGui::Text(
+            "Wolf material imported payloads %s: %u/%u/%u/%u/%u",
+            sampleWolfMaterialSlotLabel(),
+            wolfAnimationSmoke.wolfMaterialSlots.importedTexturePayloads[0],
+            wolfAnimationSmoke.wolfMaterialSlots.importedTexturePayloads[1],
+            wolfAnimationSmoke.wolfMaterialSlots.importedTexturePayloads[2],
+            wolfAnimationSmoke.wolfMaterialSlots.importedTexturePayloads[3],
+            wolfAnimationSmoke.wolfMaterialSlots.importedTexturePayloads[4]);
+        ImGui::Text(
+            "Wolf material resolved refs %s: %u/%u/%u/%u/%u, missing refs %u",
+            sampleWolfMaterialSlotLabel(),
+            wolfAnimationSmoke.wolfMaterialSlots.resolvedTextureRefs[0],
+            wolfAnimationSmoke.wolfMaterialSlots.resolvedTextureRefs[1],
+            wolfAnimationSmoke.wolfMaterialSlots.resolvedTextureRefs[2],
+            wolfAnimationSmoke.wolfMaterialSlots.resolvedTextureRefs[3],
+            wolfAnimationSmoke.wolfMaterialSlots.resolvedTextureRefs[4],
+            wolfAnimationSmoke.wolfMaterialSlots.missingTextureRefCount);
+        ImGui::Text(
+            "Wolf material gap: %s, section base/normal %u/%u, shader-active base/normal %u/%u",
+            wolfAnimationSmoke.wolfMaterialSlots.fidelityReady ? "ready" : "blocked",
+            wolfAnimationSmoke.wolfMaterialSlots.sectionBaseColorCount,
+            wolfAnimationSmoke.wolfMaterialSlots.sectionNormalCount,
+            wolfAnimationSmoke.wolfMaterialSlots.shaderActiveBaseColorSectionCount,
+            wolfAnimationSmoke.wolfMaterialSlots.shaderActiveNormalSectionCount);
+        ImGui::Text(
             "Wolf import: skeleton/skinned/clip %s/%s/%s",
             full_engine::assimpLoadedAssetImportStatusName(wolfAnimationSmoke.skeletonImportStatus),
             full_engine::assimpLoadedAssetImportStatusName(wolfAnimationSmoke.skinnedMeshImportStatus),
@@ -4128,6 +4832,125 @@ void drawTerrainDiagnosticsPanel(
             wolfAnimationSmoke.worldBounds.max[0],
             wolfAnimationSmoke.worldBounds.max[1],
             wolfAnimationSmoke.worldBounds.max[2]);
+        ImGui::Text(
+            "Knight rigid smoke: %s at %s, submitted %s",
+            knightRigidSmoke.ready ? "Ready" : (knightRigidSmoke.attempted ? "Failed" : "Idle"),
+            sampleKnightRigidSmokeStepName(sampleKnightRigidSmokeDisplayStep(knightRigidSmoke)),
+            knightRigidSmoke.submitted ? "yes" : "no");
+        ImGui::Text(
+            "Knight source: %s",
+            knightRigidSmoke.sourcePath.empty() ? "(none)" : knightRigidSmoke.sourcePath.c_str());
+        ImGui::Text(
+            "Knight import: %s, payload %s, joints/tracks/attachments/skipped %u/%u/%u/%u",
+            full_engine::assimpRigidNodeSceneImportStatusName(knightRigidSmoke.importStatus),
+            full_engine::loadedAssetPayloadValidationResultName(knightRigidSmoke.payloadValidation),
+            knightRigidSmoke.jointCount,
+            knightRigidSmoke.trackCount,
+            knightRigidSmoke.importedAttachmentCount,
+            knightRigidSmoke.skippedMeshCount);
+        ImGui::Text(
+            "Knight attachments: imported/uploadable/filtered/submitted %u/%u/%u/%u",
+            knightRigidSmoke.importedAttachmentCount,
+            knightRigidSmoke.uploadableAttachmentCount,
+            knightRigidSmoke.filteredAttachmentCount,
+            knightRigidSmoke.submittedDrawCount);
+        ImGui::Text(
+            "Knight upload: planned/uploaded mesh %llu/%llu, mapped %llu, renderer/catalog/skipped/unsupported %llu/%llu/%llu/%llu",
+            static_cast<unsigned long long>(knightRigidSmoke.uploadPlan.plannedCount),
+            static_cast<unsigned long long>(knightRigidSmoke.uploadExecute.uploadedMeshCount),
+            static_cast<unsigned long long>(knightRigidSmoke.uploadExecute.alreadyMappedCount),
+            static_cast<unsigned long long>(knightRigidSmoke.uploadExecute.rendererFailedCount),
+            static_cast<unsigned long long>(knightRigidSmoke.uploadExecute.catalogRejectedCount),
+            static_cast<unsigned long long>(knightRigidSmoke.uploadExecute.skippedUnplannedCount),
+            static_cast<unsigned long long>(knightRigidSmoke.uploadExecute.unsupportedKindCount));
+        ImGui::Text(
+            "Knight upload plan blocks: invalid/unsupported-kind/renderer-contract %llu/%llu/%llu",
+            static_cast<unsigned long long>(knightRigidSmoke.uploadPlan.invalidPayloadCount),
+            static_cast<unsigned long long>(knightRigidSmoke.uploadPlan.unsupportedKindCount),
+            static_cast<unsigned long long>(knightRigidSmoke.uploadPlan.unsupportedRendererContractCount));
+        ImGui::Text(
+            "Knight mesh contract blocks: vertex/index/degenerate attachments %llu/%llu/%llu, degenerate tris %llu",
+            static_cast<unsigned long long>(knightRigidSmoke.invalidRendererVertexAttachmentCount),
+            static_cast<unsigned long long>(knightRigidSmoke.invalidRendererIndexAttachmentCount),
+            static_cast<unsigned long long>(knightRigidSmoke.degenerateAttachmentCount),
+            static_cast<unsigned long long>(knightRigidSmoke.degenerateTriangleCount));
+        if (!knightRigidSmoke.filteredAttachments.empty() &&
+            ImGui::BeginTable("Filtered Knight attachments", 8, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg))
+        {
+            ImGui::TableSetupColumn("Asset");
+            ImGui::TableSetupColumn("Mesh");
+            ImGui::TableSetupColumn("Material");
+            ImGui::TableSetupColumn("Verts/Idx");
+            ImGui::TableSetupColumn("Upload");
+            ImGui::TableSetupColumn("Mesh status");
+            ImGui::TableSetupColumn("Deg tris");
+            ImGui::TableSetupColumn("Node");
+            ImGui::TableHeadersRow();
+            for (const SampleKnightRigidFilteredAttachment& filtered : knightRigidSmoke.filteredAttachments)
+            {
+                ImGui::TableNextRow();
+                ImGui::TableSetColumnIndex(0);
+                ImGui::Text("%llu", static_cast<unsigned long long>(filtered.meshAssetId.value));
+                ImGui::TableSetColumnIndex(1);
+                ImGui::Text(
+                    "%u %s",
+                    filtered.sourceMeshIndex,
+                    filtered.sourceMeshName.empty() ? "" : filtered.sourceMeshName.c_str());
+                ImGui::TableSetColumnIndex(2);
+                ImGui::Text("%d", filtered.sourceMaterialIndex);
+                ImGui::TableSetColumnIndex(3);
+                ImGui::Text(
+                    "%llu/%llu",
+                    static_cast<unsigned long long>(filtered.vertexCount),
+                    static_cast<unsigned long long>(filtered.indexCount));
+                ImGui::TableSetColumnIndex(4);
+                ImGui::Text("%s", full_engine::loadedAssetUploadStatusName(filtered.uploadStatus));
+                ImGui::TableSetColumnIndex(5);
+                ImGui::Text("%s", full_engine::loadedMeshUploadDiagnosticStatusName(filtered.meshStatus));
+                ImGui::TableSetColumnIndex(6);
+                if (filtered.firstTriangleIndex != full_engine::LoadedMeshUploadDiagnosticFailure::invalidIndex)
+                {
+                    ImGui::Text(
+                        "%llu first %u",
+                        static_cast<unsigned long long>(filtered.degenerateTriangleCount),
+                        filtered.firstTriangleIndex);
+                }
+                else
+                {
+                    ImGui::Text("%llu", static_cast<unsigned long long>(filtered.degenerateTriangleCount));
+                }
+                ImGui::TableSetColumnIndex(7);
+                ImGui::TextUnformatted(filtered.sourceNodeName.empty() ? "(none)" : filtered.sourceNodeName.c_str());
+            }
+            ImGui::EndTable();
+        }
+        ImGui::Text(
+            "Knight sample/draw: sample %s, built/missing/invalid/joint %llu/%llu/%llu/%llu, submitted %u, clip %.3f s",
+            full_engine::loadedAnimationSampleStatusName(knightRigidSmoke.sampleStatus),
+            static_cast<unsigned long long>(knightRigidSmoke.drawSummary.builtCount),
+            static_cast<unsigned long long>(knightRigidSmoke.drawSummary.missingMeshHandleCount),
+            static_cast<unsigned long long>(knightRigidSmoke.drawSummary.invalidMaterialHandleCount),
+            static_cast<unsigned long long>(knightRigidSmoke.drawSummary.jointOutOfRangeCount),
+            knightRigidSmoke.submittedDrawCount,
+            knightRigidSmoke.currentClipTimeSeconds);
+        const Vec3 knightCenter = sampleKnightRigidSmokeCenter();
+        const Vec3 knightScale = sampleKnightRigidSmokeScale();
+        ImGui::Text(
+            "Knight transform: center %.2f %.2f %.2f, scale %.4f %.4f %.4f",
+            knightCenter.x,
+            knightCenter.y,
+            knightCenter.z,
+            knightScale.x,
+            knightScale.y,
+            knightScale.z);
+        ImGui::Text(
+            "Knight bounds: min %.2f %.2f %.2f, max %.2f %.2f %.2f",
+            knightRigidSmoke.worldBounds.min[0],
+            knightRigidSmoke.worldBounds.min[1],
+            knightRigidSmoke.worldBounds.min[2],
+            knightRigidSmoke.worldBounds.max[0],
+            knightRigidSmoke.worldBounds.max[1],
+            knightRigidSmoke.worldBounds.max[2]);
         ImGui::Text("Animation debug line vertices: %u", rendererStats.animationDebugLineVertices);
         ImGui::TextUnformatted("Sample pose palettes are generated by the app and submitted frame-locally.");
         ImGui::TextUnformatted("Shadow-map preview remains UI-only/deferred.");
@@ -5893,6 +6716,7 @@ int main(int argc, char** argv)
     SampleTerrainResidencyControls terrainResidencyControls;
     SampleAnimationSmokeState animationSmoke;
     SampleAnimationSmokeState wolfAnimationSmoke;
+    SampleKnightRigidSmokeState knightRigidSmoke;
     SampleAnimationSmokeAction pendingAnimationSmokeAction = SampleAnimationSmokeAction::None;
     const int kGridRadius = static_cast<int>(validationScene.terrainGridRadius);
     terrainResidencyControls.batchRingRadius = kGridRadius;
@@ -6923,9 +7747,38 @@ int main(int argc, char** argv)
                 failSampleAnimationSmoke(wolfAnimationSmoke);
             }
         }
+        if (knightRigidSmoke.ready)
+        {
+            const float durationSeconds = knightRigidSmoke.clip.durationSeconds > 0.0f ?
+                knightRigidSmoke.clip.durationSeconds :
+                1.0f;
+            knightRigidSmoke.currentClipTimeSeconds =
+                std::fmod(
+                    knightRigidSmoke.currentClipTimeSeconds + deltaSeconds,
+                    durationSeconds);
+            const full_engine::LoadedAnimationSampleResult sample =
+                full_engine::sampleLoadedAnimationClip(
+                    knightRigidSmoke.skeleton,
+                    knightRigidSmoke.clip,
+                    knightRigidSmoke.currentClipTimeSeconds,
+                    full_engine::LoadedAnimationPlaybackMode::Loop);
+            knightRigidSmoke.sampleStatus = sample.status;
+            if (sample.status == full_engine::LoadedAnimationSampleStatus::Success)
+            {
+                knightRigidSmoke.latestPose = sample.pose;
+                knightRigidSmoke.currentClipTimeSeconds = sample.pose.sampledTimeSeconds;
+            }
+            else
+            {
+                knightRigidSmoke.step = SampleKnightRigidSmokeStep::SamplePose;
+                failSampleKnightRigidSmoke(knightRigidSmoke);
+            }
+        }
 
         wolfAnimationSmoke.submitted = false;
         wolfAnimationSmoke.submittedSectionDrawCount = 0;
+        knightRigidSmoke.submitted = false;
+        knightRigidSmoke.submittedDrawCount = 0;
         const std::uint32_t wolfSectionDrawCount =
             wolfAnimationSmoke.ready &&
             wolfAnimationSmoke.sectionMaterialsResolved &&
@@ -7054,6 +7907,24 @@ int main(int argc, char** argv)
             {
                 wolfAnimationSmoke.step = SampleAnimationSmokeStep::SubmitDraw;
                 failSampleAnimationSmoke(wolfAnimationSmoke);
+            }
+        }
+        if (knightRigidSmoke.ready)
+        {
+            const full_engine::RigidNodeAttachmentDrawResult knightDraws =
+                buildSampleKnightRigidSmokeDraws(knightRigidSmoke, cubeMaterial);
+            if (knightDraws.summary.builtCount == knightRigidSmoke.attachments.size())
+            {
+                knightRigidSmoke.submittedDrawCount =
+                    static_cast<std::uint32_t>(knightDraws.draws.size());
+                knightRigidSmoke.submitted =
+                    knightRigidSmoke.submittedDrawCount == knightRigidSmoke.attachmentCount;
+                cubeDraws.insert(cubeDraws.end(), knightDraws.draws.begin(), knightDraws.draws.end());
+            }
+            else
+            {
+                knightRigidSmoke.step = SampleKnightRigidSmokeStep::BuildDraws;
+                failSampleKnightRigidSmoke(knightRigidSmoke);
             }
         }
 
@@ -7392,6 +8263,7 @@ int main(int argc, char** argv)
                 terrainResidencyControls,
                 animationSmoke,
                 wolfAnimationSmoke,
+                knightRigidSmoke,
                 pendingAnimationSmokeAction,
                 kChunkSize,
                 kGridRadius,
@@ -7432,7 +8304,9 @@ int main(int argc, char** argv)
             pendingAnimationSmokeAction,
             *renderer,
             animationSmoke,
-            wolfAnimationSmoke);
+            wolfAnimationSmoke,
+            knightRigidSmoke,
+            cubeMaterial);
         pendingAnimationSmokeAction = SampleAnimationSmokeAction::None;
 
         const full_renderer::TerrainStats terrainStats = renderer->getTerrainStats();
@@ -7495,6 +8369,7 @@ int main(int argc, char** argv)
         renderer->destroyTexture(texture);
     }
     destroySampleAnimationSmokeResources(*renderer, wolfAnimationSmoke);
+    destroySampleKnightRigidSmokeResources(*renderer, knightRigidSmoke);
     destroySampleAnimationSmokeResources(*renderer, animationSmoke);
     renderer->destroyMaterial(cubeMaterial);
     renderer->destroySkinnedMesh(sampleSkinnedMesh);

@@ -322,6 +322,7 @@ private:
     bgfx::UniformHandle lightColorUniform_ = BGFX_INVALID_HANDLE;
     bgfx::UniformHandle materialColorUniform_ = BGFX_INVALID_HANDLE;
     bgfx::UniformHandle basicBaseColorSampler_ = BGFX_INVALID_HANDLE;
+    bgfx::UniformHandle basicNormalSampler_ = BGFX_INVALID_HANDLE;
     bgfx::UniformHandle terrainLayerColorUniform_ = BGFX_INVALID_HANDLE;
     bgfx::UniformHandle terrainParamsUniform_ = BGFX_INVALID_HANDLE;
     bgfx::UniformHandle shadowViewProjUniform_ = BGFX_INVALID_HANDLE;

@@ -25,6 +25,11 @@ bool hasNormalMappedTerrainLayer(const MaterialDesc& desc) noexcept
     }
     return false;
 }
+
+bool hasBasicNormalMap(const MaterialDesc& desc) noexcept
+{
+    return desc.kind == MaterialKind::Basic && isValid(desc.basicTextures.normal);
+}
 } // namespace
 
 bool isValidMaterialKind(const MaterialKind kind) noexcept
@@ -184,7 +189,7 @@ ShaderVariantKey makeForwardShaderVariantKey(
     {
         key.featureMask |= kShaderFeatureFog;
     }
-    if (hasNormalMappedTerrainLayer(desc))
+    if (hasBasicNormalMap(desc) || hasNormalMappedTerrainLayer(desc))
     {
         key.featureMask |= kShaderFeatureNormalMap;
     }

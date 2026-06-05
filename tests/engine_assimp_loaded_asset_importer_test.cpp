@@ -1,5 +1,6 @@
 #include "engine/assets/AssimpLoadedAssetImporter.hpp"
 #include "engine/assets/GltfMaterialAssetImporter.hpp"
+#include "engine/assets/GltfMaterialSlotAudit.hpp"
 #include "engine/assets/LoadedTextureImageImporter.hpp"
 #include "engine/renderer_integration/AnimationPlaybackState.hpp"
 #include "engine/renderer_integration/LoadedAssetUploadExecutor.hpp"
@@ -12,6 +13,7 @@
 #include <fstream>
 #include <iostream>
 #include <cstdint>
+#include <sstream>
 #include <string>
 #include <vector>
 
@@ -21,6 +23,10 @@
 
 #ifndef FULL_RENDERER_SAMPLE_ANIMATION_FIXTURE_DIR
 #define FULL_RENDERER_SAMPLE_ANIMATION_FIXTURE_DIR "."
+#endif
+
+#ifndef FULL_RENDERER_TEST_OPTIONAL_ASSET_DIR
+#define FULL_RENDERER_TEST_OPTIONAL_ASSET_DIR "."
 #endif
 
 namespace
@@ -71,8 +77,9 @@ public:
 
     void destroyTexture(full_renderer::TextureHandle) noexcept override {}
 
-    full_renderer::MaterialHandle createMaterial(const full_renderer::MaterialDesc&) override
+    full_renderer::MaterialHandle createMaterial(const full_renderer::MaterialDesc& desc) override
     {
+        materialDescs.push_back(desc);
         return full_renderer::MaterialHandle{nextMaterial_++};
     }
 
@@ -127,6 +134,8 @@ public:
 
     full_renderer::RendererStats getStats() const noexcept override { return {}; }
 
+    std::vector<full_renderer::MaterialDesc> materialDescs;
+
 private:
     std::uint32_t nextMesh_ = 1;
     std::uint32_t nextTexture_ = 1;
@@ -148,9 +157,101 @@ std::string fixturePath(const char* const name)
     return std::string(FULL_RENDERER_TEST_GLTF_FIXTURE_DIR) + "/" + name;
 }
 
+std::string optionalAssetPath(const char* const relativePath)
+{
+    return std::string(FULL_RENDERER_TEST_OPTIONAL_ASSET_DIR) + "/" + relativePath;
+}
+
+void replaceAll(std::string& value, const std::string& from, const std::string& to)
+{
+    std::size_t position = 0;
+    while ((position = value.find(from, position)) != std::string::npos)
+    {
+        value.replace(position, from.size(), to);
+        position += to.size();
+    }
+}
+
+std::string writeAnimationWithoutSkinFixture(std::vector<std::string>& failures)
+{
+    std::ifstream input(fixturePath("skinned_triangle_animation.gltf"), std::ios::binary);
+    if (!input)
+    {
+        failures.emplace_back("failed to open source gltf for node-based animation import fixture");
+        return {};
+    }
+
+    std::ostringstream buffer;
+    buffer << input.rdbuf();
+    std::string content = buffer.str();
+    replaceAll(content, "\"skin\": 0", "\"extras\": { \"skinRemovedForNodeImport\": true }");
+    replaceAll(content, "\"JOINTS_0\": 3,\n            \"WEIGHTS_0\": 4", "\"COLOR_0\": 3");
+    replaceAll(content, "  \"skins\": [\n    {\n      \"skeleton\": 0,\n      \"joints\": [0, 1],\n      \"inverseBindMatrices\": 5\n    }\n  ],\n", "");
+
+    const std::filesystem::path path =
+        std::filesystem::temp_directory_path() / "full_renderer_animation_without_skin_import.gltf";
+    std::ofstream output(path, std::ios::binary);
+    if (!output)
+    {
+        failures.emplace_back("failed to write node-based animation import fixture");
+        return {};
+    }
+    output << content;
+    return path.string();
+}
+
 full_engine::AssetId asset(const std::uint64_t value) noexcept
 {
     return {value};
+}
+
+std::uint32_t countMaterialSlotRefs(
+    const full_engine::LoadedMaterialAsset& material,
+    const full_engine::AssetSourceMaterialTextureSlot slot) noexcept
+{
+    std::uint32_t count = 0;
+    for (std::uint32_t index = 0; index < material.textureRefCount; ++index)
+    {
+        if (material.textureRefs[index].slot == slot)
+        {
+            ++count;
+        }
+    }
+    return count;
+}
+
+bool materialHasResolvedSlot(
+    const full_engine::LoadedMaterialAsset& material,
+    const full_engine::AssetSourceMaterialTextureSlot slot,
+    const full_engine::RendererAssetHandleCatalog& handles) noexcept
+{
+    for (std::uint32_t index = 0; index < material.textureRefCount; ++index)
+    {
+        const full_engine::AssetSourceMaterialTextureRef& ref = material.textureRefs[index];
+        if (ref.slot != slot)
+        {
+            continue;
+        }
+
+        const full_renderer::TextureHandle* const handle = handles.findTextureHandle(ref.id);
+        return handle != nullptr && full_renderer::isValid(*handle);
+    }
+    return false;
+}
+
+const full_engine::LoadedMaterialAsset* findMaterialPayload(
+    const std::vector<full_engine::LoadedAssetPayload>& payloads,
+    const full_engine::AssetId id) noexcept
+{
+    for (const full_engine::LoadedAssetPayload& payload : payloads)
+    {
+        if (payload.kind == full_engine::AssetKind::Material &&
+            payload.material.id == id)
+        {
+            return &payload.material;
+        }
+    }
+    return nullptr;
 }
 
 full_engine::AssetSourceDescriptor meshDescriptor(
@@ -355,6 +456,13 @@ full_engine::AssimpLoadedAssetImportOptions generateMissingTangents()
 {
     full_engine::AssimpLoadedAssetImportOptions options;
     options.generateMissingTangents = true;
+    return options;
+}
+
+full_engine::AssimpLoadedAssetImportOptions animatedSceneNodes()
+{
+    full_engine::AssimpLoadedAssetImportOptions options;
+    options.skeletonSourceMode = full_engine::AssimpSkeletonSourceMode::AnimatedSceneNodes;
     return options;
 }
 
@@ -690,6 +798,75 @@ void testAnimationImport(std::vector<std::string>& failures)
         failures);
 }
 
+void testAnimatedSceneNodeSkeletonAndAnimationImport(std::vector<std::string>& failures)
+{
+    const std::string path = writeAnimationWithoutSkinFixture(failures);
+    if (path.empty())
+    {
+        return;
+    }
+
+    full_engine::AssetSourceRecord skeleton = skeletonSource(path);
+    skeleton.descriptor = skeletonDescriptor(2);
+    full_engine::AssetSourceRecord clip = animationClipSource(path);
+    clip.descriptor = animationClipDescriptor(2, 1.0f, 1000.0f);
+
+    const full_engine::AssimpLoadedAssetImportResult strictSkeleton =
+        full_engine::importLoadedAssetPayloadWithAssimp(skeleton);
+    expect(
+        strictSkeleton.status == full_engine::AssimpLoadedAssetImportStatus::UnsupportedScene,
+        "animation-without-skin skeleton rejects default mesh-bone mode",
+        failures);
+
+    const full_engine::AssimpLoadedAssetImportResult strictClip =
+        full_engine::importLoadedAssetPayloadWithAssimp(clip);
+    expect(
+        strictClip.status == full_engine::AssimpLoadedAssetImportStatus::UnsupportedScene,
+        "animation-without-skin clip rejects default mesh-bone mode",
+        failures);
+
+    const full_engine::AssimpLoadedAssetImportResult nodeSkeleton =
+        full_engine::importLoadedAssetPayloadWithAssimp(skeleton, animatedSceneNodes());
+    if (nodeSkeleton.status != full_engine::AssimpLoadedAssetImportStatus::Success)
+    {
+        failures.emplace_back(
+            std::string("animation-without-skin skeleton imports from animated scene nodes: ") +
+            full_engine::assimpLoadedAssetImportStatusName(nodeSkeleton.status));
+    }
+    if (nodeSkeleton.status == full_engine::AssimpLoadedAssetImportStatus::Success)
+    {
+        expect(nodeSkeleton.payload.skeleton.joints.size() == 2, "node skeleton imports animated nodes", failures);
+        expect(nodeSkeleton.payload.skeleton.joints[0].parentIndex == -1, "node skeleton preserves single root", failures);
+        expect(nodeSkeleton.payload.skeleton.joints[1].parentIndex == 0, "node skeleton preserves child parent", failures);
+        expect(nodeSkeleton.payload.skeleton.joints[0].inverseBindPose[0] == 1.0f, "node skeleton uses identity inverse bind pose", failures);
+        expect(
+            full_engine::validateLoadedAssetPayload(nodeSkeleton.payload) ==
+                full_engine::LoadedAssetPayloadValidationResult::Success,
+            "node skeleton payload validates",
+            failures);
+    }
+
+    const full_engine::AssimpLoadedAssetImportResult nodeClip =
+        full_engine::importLoadedAssetPayloadWithAssimp(clip, animatedSceneNodes());
+    if (nodeClip.status != full_engine::AssimpLoadedAssetImportStatus::Success)
+    {
+        failures.emplace_back(
+            std::string("animation-without-skin clip imports from animated scene nodes: ") +
+            full_engine::assimpLoadedAssetImportStatusName(nodeClip.status));
+    }
+    if (nodeClip.status == full_engine::AssimpLoadedAssetImportStatus::Success)
+    {
+        expect(nodeClip.payload.animationClip.tracks.size() == 2, "node clip imports animated joint tracks only", failures);
+        expect(nodeClip.payload.animationClip.tracks[0].jointIndex == 0, "node clip maps root animation track", failures);
+        expect(nodeClip.payload.animationClip.tracks[1].jointIndex == 1, "node clip maps child animation track", failures);
+        expect(
+            full_engine::validateLoadedAssetPayload(nodeClip.payload) ==
+                full_engine::LoadedAssetPayloadValidationResult::Success,
+            "node animation clip payload validates",
+            failures);
+    }
+}
+
 void testAnimationSingleTrackImport(std::vector<std::string>& failures)
 {
     full_engine::AssetSourceRecord source =
@@ -850,6 +1027,24 @@ void testWolfSkeletalAnimationSmoke(std::vector<std::string>& failures)
     expect(materials.status == full_engine::GltfMaterialAssetImportStatus::Success, "wolf gltf material extraction succeeds", failures);
     expect(materials.materialPayloads.size() >= 5, "wolf extracts material payloads for skinned sections", failures);
     expect(!materials.materialPayloads.empty() && materials.materialPayloads[0].material.id == asset(710010), "wolf material zero preserves section material id", failures);
+    std::uint32_t wolfBaseColorRefCount = 0;
+    std::uint32_t wolfNormalRefCount = 0;
+    std::uint32_t wolfMetallicRoughnessRefCount = 0;
+    for (const full_engine::LoadedAssetPayload& materialPayload : materials.materialPayloads)
+    {
+        wolfBaseColorRefCount += countMaterialSlotRefs(
+            materialPayload.material,
+            full_engine::AssetSourceMaterialTextureSlot::BaseColor);
+        wolfNormalRefCount += countMaterialSlotRefs(
+            materialPayload.material,
+            full_engine::AssetSourceMaterialTextureSlot::Normal);
+        wolfMetallicRoughnessRefCount += countMaterialSlotRefs(
+            materialPayload.material,
+            full_engine::AssetSourceMaterialTextureSlot::MetallicRoughness);
+    }
+    expect(wolfBaseColorRefCount > 0, "wolf materials author at least one base-color ref", failures);
+    expect(wolfNormalRefCount == 0, "wolf fixture exposes no normal-map refs through current glTF material extraction", failures);
+    expect(wolfMetallicRoughnessRefCount == 0, "wolf fixture exposes no metallic-roughness refs through current glTF material extraction", failures);
 
     std::vector<full_engine::LoadedAssetPayload> payloads;
     payloads.push_back(skeletonResult.payload);
@@ -888,9 +1083,100 @@ void testWolfSkeletalAnimationSmoke(std::vector<std::string>& failures)
     expect(upload.summary.missingTextureHandleCount == 0, "wolf material uploads resolve texture handles", failures);
     expect(handles.findSkeletonHandle(asset(7)) != nullptr, "wolf skeleton handle is cataloged", failures);
     expect(handles.findSkinnedMeshHandle(asset(8)) != nullptr, "wolf skinned mesh handle is cataloged", failures);
+    std::vector<full_engine::AssetId> resolvedWolfTextureIds;
+    for (const full_engine::LoadedAssetPayload& materialPayload : materials.materialPayloads)
+    {
+        for (std::uint32_t refIndex = 0; refIndex < materialPayload.material.textureRefCount; ++refIndex)
+        {
+            const full_engine::AssetId textureId = materialPayload.material.textureRefs[refIndex].id;
+            if (handles.findTextureHandle(textureId) != nullptr &&
+                std::find(resolvedWolfTextureIds.begin(), resolvedWolfTextureIds.end(), textureId) == resolvedWolfTextureIds.end())
+            {
+                resolvedWolfTextureIds.push_back(textureId);
+            }
+        }
+    }
+    const full_engine::GltfMaterialSlotAudit wolfAudit =
+        full_engine::auditGltfMaterialSlots(
+            path,
+            materialOptions,
+            &materials,
+            payloads.data(),
+            payloads.size(),
+            resolvedWolfTextureIds.data(),
+            resolvedWolfTextureIds.size());
+    expect(wolfAudit.importStatus == full_engine::GltfMaterialAssetImportStatus::Success, "wolf material audit preserves import status", failures);
+    expect(wolfAudit.slots[0].rawTextureKeyCount == 2, "wolf raw gltf declares two base-color texture keys", failures);
+    expect(wolfAudit.slots[0].extractedRefCount == wolfBaseColorRefCount, "wolf audit base-color extracted refs match material payloads", failures);
+    expect(wolfAudit.slots[0].resolvedTextureRefCount == wolfBaseColorRefCount, "wolf audit base-color refs resolve to handles", failures);
+    expect(wolfAudit.slots[1].rawTextureKeyCount == 0, "wolf raw gltf declares no normal texture keys", failures);
+    expect(wolfAudit.slots[2].rawTextureKeyCount == 0, "wolf raw gltf declares no metallic-roughness texture keys", failures);
+    expect(wolfAudit.slots[3].rawTextureKeyCount == 0, "wolf raw gltf declares no occlusion texture keys", failures);
+    expect(wolfAudit.slots[4].rawTextureKeyCount == 0, "wolf raw gltf declares no emissive texture keys", failures);
+    std::uint32_t resolvedWolfBaseColorRefCount = 0;
+    std::uint32_t resolvedWolfNormalRefCount = 0;
+    std::uint32_t resolvedWolfMetallicRoughnessRefCount = 0;
+    for (const full_engine::LoadedAssetPayload& materialPayload : materials.materialPayloads)
+    {
+        if (materialHasResolvedSlot(
+                materialPayload.material,
+                full_engine::AssetSourceMaterialTextureSlot::BaseColor,
+                handles))
+        {
+            ++resolvedWolfBaseColorRefCount;
+        }
+        if (materialHasResolvedSlot(
+                materialPayload.material,
+                full_engine::AssetSourceMaterialTextureSlot::Normal,
+                handles))
+        {
+            ++resolvedWolfNormalRefCount;
+        }
+        if (materialHasResolvedSlot(
+                materialPayload.material,
+                full_engine::AssetSourceMaterialTextureSlot::MetallicRoughness,
+                handles))
+        {
+            ++resolvedWolfMetallicRoughnessRefCount;
+        }
+    }
+    expect(resolvedWolfBaseColorRefCount == wolfBaseColorRefCount, "wolf authored base-color texture refs resolve to handles", failures);
+    expect(resolvedWolfNormalRefCount == wolfNormalRefCount, "wolf authored normal texture refs resolve to handles when present", failures);
+    expect(resolvedWolfMetallicRoughnessRefCount == wolfMetallicRoughnessRefCount, "wolf authored metallic-roughness texture refs resolve to handles when present", failures);
     for (const full_engine::LoadedSkinnedMeshSection& section : skinnedResult.payload.skinnedMesh.sections)
     {
-        expect(handles.findMaterialHandle(section.materialAssetId) != nullptr, "wolf section material id resolves to uploaded material handle", failures);
+        const full_renderer::MaterialHandle* const materialHandle = handles.findMaterialHandle(section.materialAssetId);
+        expect(materialHandle != nullptr, "wolf section material id resolves to uploaded material handle", failures);
+        const full_engine::LoadedMaterialAsset* const materialPayload =
+            findMaterialPayload(materials.materialPayloads, section.materialAssetId);
+        expect(materialPayload != nullptr, "wolf section material id resolves to imported material payload", failures);
+        if (materialHandle != nullptr && materialPayload != nullptr)
+        {
+            const std::uint32_t materialDescIndex = materialHandle->id > 0 ? materialHandle->id - 1U : 0U;
+            if (materialDescIndex < renderer.materialDescs.size())
+            {
+                const full_renderer::MaterialDesc& desc = renderer.materialDescs[materialDescIndex];
+                if (countMaterialSlotRefs(*materialPayload, full_engine::AssetSourceMaterialTextureSlot::BaseColor) > 0)
+                {
+                    expect(
+                        materialHasResolvedSlot(
+                            *materialPayload,
+                            full_engine::AssetSourceMaterialTextureSlot::BaseColor,
+                            handles),
+                        "wolf section material authored base-color slot resolves to texture handle",
+                        failures);
+                    expect(full_renderer::isValid(desc.basicTextures.baseColor), "wolf uploaded section material carries authored base-color handle", failures);
+                }
+                if (countMaterialSlotRefs(*materialPayload, full_engine::AssetSourceMaterialTextureSlot::Normal) > 0)
+                {
+                    expect(full_renderer::isValid(desc.basicTextures.normal), "wolf uploaded section material carries authored normal handle", failures);
+                }
+            }
+            else
+            {
+                expect(false, "wolf uploaded section material descriptor is recorded by fake renderer", failures);
+            }
+        }
     }
 
     full_engine::AnimationPlaybackState playback;
@@ -962,6 +1248,64 @@ void testWolfSkeletalAnimationSmoke(std::vector<std::string>& failures)
     }
 }
 
+void testOptionalKnightNodeBasedImportSmoke(std::vector<std::string>& failures)
+{
+    const char* const enabled = std::getenv("FULL_RENDERER_RUN_OPTIONAL_FBX_IMPORTS");
+    if (enabled == nullptr || std::string(enabled) != "1")
+    {
+        return;
+    }
+
+    const std::string path = optionalAssetPath(
+        "pkg_e_knight_anim/pkg_e_knight_anim/Exports/FBX/Knight_USD_002.fbx");
+    if (!std::filesystem::exists(path))
+    {
+        return;
+    }
+
+    full_engine::AssetSourceRecord skeleton = skeletonSource(path);
+    skeleton.descriptor = skeletonDescriptor(1);
+    const full_engine::AssimpLoadedAssetImportResult skeletonResult =
+        full_engine::importLoadedAssetPayloadWithAssimp(skeleton, animatedSceneNodes());
+    if (skeletonResult.status != full_engine::AssimpLoadedAssetImportStatus::Success &&
+        skeletonResult.status != full_engine::AssimpLoadedAssetImportStatus::DescriptorMismatch)
+    {
+        failures.emplace_back(
+            std::string("optional Knight FBX node-based skeleton conversion reaches payload validation: ") +
+            full_engine::assimpLoadedAssetImportStatusName(skeletonResult.status));
+    }
+    expect(
+        full_engine::validateLoadedAssetPayload(skeletonResult.payload) ==
+            full_engine::LoadedAssetPayloadValidationResult::Success,
+        "optional Knight FBX node-based skeleton payload validates",
+        failures);
+    expect(
+        !skeletonResult.payload.skeleton.joints.empty(),
+        "optional Knight FBX node-based skeleton has joints",
+        failures);
+
+    full_engine::AssetSourceRecord clip = animationClipSource(path);
+    clip.descriptor = animationClipDescriptor(1, 1.0f, 30.0f, 7, 0.01f);
+    const full_engine::AssimpLoadedAssetImportResult clipResult =
+        full_engine::importLoadedAssetPayloadWithAssimp(clip, animatedSceneNodes());
+    if (clipResult.status != full_engine::AssimpLoadedAssetImportStatus::Success &&
+        clipResult.status != full_engine::AssimpLoadedAssetImportStatus::DescriptorMismatch)
+    {
+        failures.emplace_back(
+            std::string("optional Knight FBX node-based animation conversion reaches payload validation: ") +
+            full_engine::assimpLoadedAssetImportStatusName(clipResult.status));
+    }
+    expect(
+        full_engine::validateLoadedAssetPayload(clipResult.payload) ==
+            full_engine::LoadedAssetPayloadValidationResult::Success,
+        "optional Knight FBX node-based animation payload validates",
+        failures);
+    expect(
+        !clipResult.payload.animationClip.tracks.empty(),
+        "optional Knight FBX node-based animation has mapped tracks",
+        failures);
+}
+
 void testStatusNames(std::vector<std::string>& failures)
 {
     expect(full_engine::assimpLoadedAssetImportStatusName(full_engine::AssimpLoadedAssetImportStatus::Success)[0] != '\0', "success status has name", failures);
@@ -988,10 +1332,12 @@ int main()
     testSampleAnimationSmokeFixture(failures);
     testSkeletalUvPolicy(failures);
     testAnimationImport(failures);
+    testAnimatedSceneNodeSkeletonAndAnimationImport(failures);
     testAnimationSingleTrackImport(failures);
     testFailures(failures);
     testUnsupportedScenes(failures);
     testWolfSkeletalAnimationSmoke(failures);
+    testOptionalKnightNodeBasedImportSmoke(failures);
     testStatusNames(failures);
 
     if (!failures.empty())

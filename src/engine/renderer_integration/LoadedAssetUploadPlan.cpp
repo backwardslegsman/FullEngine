@@ -196,6 +196,21 @@ bool countFitsUint32(const std::size_t count) noexcept
     return count <= std::numeric_limits<std::uint32_t>::max();
 }
 
+bool skinnedMeshFitsRendererJointContract(const LoadedSkinnedMeshAsset& mesh) noexcept
+{
+    for (const LoadedSkinnedMeshVertex& vertex : mesh.vertices)
+    {
+        for (std::uint32_t influence = 0; influence < kMaxLoadedSkinningInfluences; ++influence)
+        {
+            if (vertex.jointIndices[influence] >= full_renderer::kMaxSkinningJoints)
+            {
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
 void bindMeshDesc(LoadedMeshUploadWork& work) noexcept
 {
     work.desc.vertices = work.vertices.data();
@@ -367,12 +382,18 @@ LoadedAssetUploadRecord buildRecord(const LoadedAssetPayload& payload)
         record.status = LoadedAssetUploadStatus::Planned;
         break;
     case AssetKind::Skeleton:
+        if (payload.skeleton.joints.size() > full_renderer::kMaxSkinningJoints)
+        {
+            record.status = LoadedAssetUploadStatus::UnsupportedRendererContract;
+            return record;
+        }
         record.skeleton = buildSkeletonWork(payload.skeleton);
         record.status = LoadedAssetUploadStatus::Planned;
         break;
     case AssetKind::SkinnedMesh:
         if (!countFitsUint32(payload.skinnedMesh.vertices.size()) ||
-            !countFitsUint32(payload.skinnedMesh.indices.size()))
+            !countFitsUint32(payload.skinnedMesh.indices.size()) ||
+            !skinnedMeshFitsRendererJointContract(payload.skinnedMesh))
         {
             record.status = LoadedAssetUploadStatus::UnsupportedRendererContract;
             return record;
